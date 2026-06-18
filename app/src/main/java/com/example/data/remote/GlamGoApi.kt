@@ -84,6 +84,25 @@ interface GlamGoApi {
     @PATCH("customer/addresses/{id}")
     suspend fun updateAddress(@Path("id") id: Int, @Body body: Map<String, Any?>): AddressDto
 
+    // ── Cart (single-partner, multi-service) ─────────────────────────────────────
+    @GET("customer/cart")
+    suspend fun getCart(): CartResp
+
+    @POST("customer/cart")
+    suspend fun addToCart(@Body body: CartAddReq): CartResp
+
+    @PATCH("customer/cart/{id}")
+    suspend fun patchCartItem(@Path("id") id: Int, @Body body: CartItemPatchReq): CartResp
+
+    @DELETE("customer/cart/{id}")
+    suspend fun deleteCartItem(@Path("id") id: Int): CartResp
+
+    @DELETE("customer/cart")
+    suspend fun clearCart(): CartResp
+
+    @POST("customer/cart/quote")
+    suspend fun cartQuote(@Body body: CartQuoteReq): QuoteResp
+
     // ── Quote + Bookings ────────────────────────────────────────────────────────
     @POST("customer/quote")
     suspend fun quote(@Body body: QuoteReq): QuoteResp
@@ -110,9 +129,6 @@ interface GlamGoApi {
     @GET("customer/wallet/transactions")
     suspend fun walletTxns(): WalletTxnsResp
 
-    @POST("customer/wallet/add-money")
-    suspend fun addMoney(@Body body: AddMoneyReq): WalletResp
-
     // ── Reviews / Complaints / Wishlist / Coupons ───────────────────────────────
     @POST("customer/bookings/{id}/review")
     suspend fun review(@Path("id") id: Int, @Body body: ReviewReq): ReviewDto
@@ -137,13 +153,6 @@ interface GlamGoApi {
 
     @HTTP(method = "DELETE", path = "customer/wishlist", hasBody = true)
     suspend fun removeWishlist(@Body body: WishlistReq): OkResp
-
-    // ── AI assist ───────────────────────────────────────────────────────────────
-    @POST("customer/ai/chat")
-    suspend fun aiChat(@Body body: AiChatReq): AiChatResp
-
-    @GET("customer/ai/recommendations")
-    suspend fun aiRecommendations(): ServicesWrap
 
     // ── Chat (REST history) ──────────────────────────────────────────────────────
     @GET("customer/bookings/{id}/messages")

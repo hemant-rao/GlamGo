@@ -1,12 +1,14 @@
 package com.example.data
 
 import android.content.Context
-import com.example.data.remote.AddMoneyReq
 import com.example.data.remote.AddressCreateReq
-import com.example.data.remote.AiChatReq
 import com.example.data.remote.ApiClient
 import com.example.data.remote.BookingCreateReq
 import com.example.data.remote.CancelReq
+import com.example.data.remote.CartAddReq
+import com.example.data.remote.CartItemPatchReq
+import com.example.data.remote.CartQuoteReq
+import com.example.data.remote.CartResp
 import com.example.data.remote.ChatSendReq
 import com.example.data.remote.ComplaintReq
 import com.example.data.remote.KycReq
@@ -73,8 +75,9 @@ class GlamGoRepository(context: Context) {
 
     private val _chat = MutableStateFlow<List<ChatMessageEntity>>(emptyList())
 
-    private val _customerTxns = MutableStateFlow<List<WalletTransactionEntity>>(emptyList())
-    private val _partnerTxns = MutableStateFlow<List<WalletTransactionEntity>>(emptyList())
+    // single-partner cart (null = empty / not yet loaded)
+    private val _cart = MutableStateFlow<CartResp?>(null)
+    val cartFlow: StateFlow<CartResp?> = _cart.asStateFlow()
 
     // last server quote, kept so confirmAndBook can create the booking from it
     @Volatile private var lastQuoteId: String? = null
@@ -86,9 +89,6 @@ class GlamGoRepository(context: Context) {
 
     fun getMessagesFlow(bookingId: String): Flow<List<ChatMessageEntity>> =
         _chat.map { list -> list.filter { it.bookingId == bookingId } }
-
-    fun getTransactionsFlow(role: String): Flow<List<WalletTransactionEntity>> =
-        if (role == "partner") _partnerTxns else _customerTxns
 
     // ── Session / auth ─────────────────────────────────────────────────────────
     fun isAuthenticated(): Boolean =
@@ -111,14 +111,6 @@ class GlamGoRepository(context: Context) {
         return true
     }
 
-    /** Switch the active identity if we already hold a session for it. */
-    suspend fun switchRole(role: String): Boolean {
-        if (!tokenStore.hasSession(role)) return false
-        tokenStore.activeRole = role
-        hydrateForRole(role)
-        return true
-    }
-
     suspend fun logout() {
         val role = tokenStore.activeRole
         try {
@@ -133,6 +125,7 @@ class GlamGoRepository(context: Context) {
         _partnerServices.value = emptyList()
         _complaints.value = emptyList()
         _favorites.value = emptyList()
+        _cart.value = null
     }
 
     // ── Hydration ────────────────────────────────────────────────────────────
@@ -160,21 +153,19 @@ class GlamGoRepository(context: Context) {
             refreshProfile("customer")
             refreshAddresses()
             refreshBookings("customer")
-            refreshWallet("customer")
+            refreshCart()
             refreshFavorites()
             refreshComplaints()
         } else {
             refreshProfile("partner")
             refreshPartnerServices()
             refreshBookings("partner")
-            refreshWallet("partner")
         }
     }
 
     private suspend fun refreshProfile(role: String) {
         val profile = api.me().profile ?: return
-        val wallet = runCatching { api.wallet().balancePaise }.getOrDefault(0L)
-        _activeUser.value = Mappers.user(profile, role, wallet)
+        _activeUser.value = Mappers.user(profile, role, 0L)
     }
 
     suspend fun refreshAddresses() {
@@ -186,14 +177,36 @@ class GlamGoRepository(context: Context) {
         _bookings.value = items.map { Mappers.booking(it) }
     }
 
-    suspend fun refreshWallet(role: String) {
-        val balance = runCatching { api.wallet().balancePaise }.getOrNull()
-        val txns = runCatching {
-            if (role == "partner") api.earningsLedger().items else api.walletTxns().items
-        }.getOrDefault(emptyList())
-        val mapped = txns.map { Mappers.walletTxn(it, role) }
-        if (role == "partner") _partnerTxns.value = mapped else _customerTxns.value = mapped
-        if (balance != null) _activeUser.value = _activeUser.value?.copy(walletBalancePaise = balance)
+    // ── Cart (single-partner, multi-service) ───────────────────────────────────
+    suspend fun refreshCart() {
+        _cart.value = runCatching { api.getCart() }.getOrNull()
+    }
+
+    suspend fun addToCart(partnerId: String, serviceId: String) {
+        _cart.value = api.addToCart(
+            CartAddReq(partnerId = partnerId.toInt(), serviceId = serviceId.toInt(), qty = 1)
+        )
+    }
+
+    suspend fun updateCartQty(itemId: Int, qty: Int) {
+        _cart.value = api.patchCartItem(itemId, CartItemPatchReq(qty))
+    }
+
+    suspend fun removeCartItem(itemId: Int) {
+        _cart.value = api.deleteCartItem(itemId)
+    }
+
+    suspend fun clearCart() {
+        _cart.value = api.clearCart()
+    }
+
+    /** Build a single multi-line quote from the whole cart; stores quote_id so
+     *  [createBookingFromLastQuote] can place the booking request. */
+    suspend fun cartQuote(couponCode: String?, addressId: Long?) {
+        val resp = api.cartQuote(
+            CartQuoteReq(addressId = addressId?.toInt(), couponCode = couponCode?.ifBlank { null })
+        )
+        lastQuoteId = resp.quoteId
     }
 
     suspend fun refreshFavorites() {
@@ -268,6 +281,8 @@ class GlamGoRepository(context: Context) {
         val dto = api.createBooking(BookingCreateReq(qid))
         lastQuoteId = null
         refreshBookings("customer")
+        // Backend clears the checked-out cart server-side; mirror that locally.
+        refreshCart()
         return Mappers.booking(dto)
     }
 
@@ -284,11 +299,6 @@ class GlamGoRepository(context: Context) {
     suspend fun createComplaint(bookingId: String, subject: String, message: String) {
         api.createComplaint(ComplaintReq(bookingId.toIntOrNull(), subject, message))
         refreshComplaints()
-    }
-
-    suspend fun addWalletMoney(amountPaise: Long, role: String) {
-        runCatching { api.addMoney(AddMoneyReq(amountPaise)) }
-        refreshWallet(role)
     }
 
     suspend fun toggleFavorite(partnerId: String) {
@@ -382,8 +392,4 @@ class GlamGoRepository(context: Context) {
         api.partnerBookingStatus(id.toInt(), StatusReq(to = to))
         refreshBookings("partner")
     }
-
-    // ── AI ─────────────────────────────────────────────────────────────────────
-    suspend fun aiChat(message: String, history: List<Map<String, String>>): String =
-        api.aiChat(AiChatReq(message = message, history = history)).reply
 }

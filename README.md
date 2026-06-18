@@ -6,6 +6,33 @@ The entire application compiles with a luxury dark cosmic theme: `DeepPlum` (#2A
 
 ---
 
+## ⚙️ 2026-06-19 — Connector-model rebuild (current behaviour)
+
+The app was refactored to a pure **connector** marketplace. The notes below
+override any older "wallet / escrow / AI stylist / Partner Mode" descriptions
+further down this file:
+
+- **No AI assistant, no wallet/escrow.** Removed entirely. In the connector
+  model the customer pays the professional **directly** after the service — the
+  platform never holds money. Cart/booking totals are shown as an estimate only.
+- **Role chosen once at signup.** The login screen has a Customer / Partner
+  selector; that choice fixes the session identity. There is **no in-app role
+  switching / "Partner Mode" toggle** — to use the other role, log out and sign
+  in again choosing it.
+- **Role-based bottom navigation.**
+  - Customer: **Explore · Cart · Bookings · Profile**
+  - Partner: **Dashboard · Services · Requests · Account**
+- **Customer flow:** search a service → choose a professional (or open a
+  professional's profile and explore all their services) → **Add to cart**
+  (single-partner, multi-service) → **Send booking request**.
+- **Partner flow:** list services (pick from catalog + set own price) → receive
+  booking **requests** → Accept / Reject → chat opens.
+- **Phone privacy.** Phone numbers are **never shown** on profiles or cards. The
+  in-app chat (opened after a partner accepts) is the only channel — a number is
+  shared solely if a user types it into chat themselves.
+
+---
+
 ## 🌌 Core Vision & Design Philosophy
 
 Nikhat Glow steps away from standard interfaces to offer an exquisite, high-trust luxury salon experience:

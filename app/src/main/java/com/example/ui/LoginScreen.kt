@@ -23,9 +23,9 @@ import com.example.ui.theme.DeepPlum
 import com.example.ui.theme.GlamRose
 
 /**
- * OTP login. Step 1: phone → request OTP. Step 2: enter the code → verify.
- * `loginRole` is "customer" by default, or "partner" when the user taps
- * "Partner Mode" without an existing partner session.
+ * OTP login + signup. The user first chooses a role (customer or partner) — this
+ * fixes the session's identity for good (no in-app role switching). Step 1: pick
+ * role + phone → request OTP. Step 2: enter the code → verify.
  */
 @Composable
 fun GlamLoginScreen(viewModel: GlamGoViewModel) {
@@ -77,15 +77,39 @@ fun GlamLoginScreen(viewModel: GlamGoViewModel) {
             ) {
                 Column(Modifier.padding(22.dp)) {
                     Text(
-                        if (isPartner) "Partner sign in" else "Sign in / Sign up",
+                        "Sign in / Sign up",
                         style = MaterialTheme.typography.titleLarge,
                         color = MaterialTheme.colorScheme.onSurface,
                     )
-                    if (isPartner) {
+
+                    // Choose role ONCE at signup. This fixes the session's identity
+                    // (no in-app role switching). Hidden once an OTP is in flight.
+                    if (!viewModel.otpSent) {
+                        Spacer(Modifier.height(14.dp))
                         Text(
-                            "Log in with your partner phone number.",
-                            style = MaterialTheme.typography.bodyMedium,
+                            "I am a",
+                            style = MaterialTheme.typography.labelLarge,
                             color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        Spacer(Modifier.height(8.dp))
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                            RolePill(
+                                label = "Customer",
+                                selected = !isPartner,
+                                modifier = Modifier.weight(1f),
+                            ) { viewModel.loginRole = "customer" }
+                            RolePill(
+                                label = "Partner",
+                                selected = isPartner,
+                                modifier = Modifier.weight(1f),
+                            ) { viewModel.loginRole = "partner" }
+                        }
+                        Text(
+                            if (isPartner) "List your services and receive booking requests."
+                            else "Book beauty & wellness services at your doorstep.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.padding(top = 6.dp),
                         )
                     }
                     Spacer(Modifier.height(16.dp))
@@ -152,7 +176,8 @@ fun GlamLoginScreen(viewModel: GlamGoViewModel) {
                         }
                     }
 
-                    if (!viewModel.otpSent && viewModel.pendingLoginRole == null) {
+                    // Guests browse the customer side only; partners must sign in.
+                    if (!viewModel.otpSent && !isPartner) {
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(
                             onClick = { viewModel.isGuestMode = true },
@@ -175,13 +200,10 @@ fun GlamLoginScreen(viewModel: GlamGoViewModel) {
                             enabled = !viewModel.authBusy,
                             modifier = Modifier.fillMaxWidth(),
                         ) { Text("Resend OTP", color = MaterialTheme.colorScheme.onSurfaceVariant) }
-                    }
-
-                    if (viewModel.pendingLoginRole != null) {
                         TextButton(
-                            onClick = { viewModel.cancelPendingLogin() },
+                            onClick = { viewModel.resetOtpFlow() },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Cancel") }
+                        ) { Text("Change number / role", color = MaterialTheme.colorScheme.onSurfaceVariant) }
                     }
                 }
             }
@@ -194,5 +216,30 @@ fun GlamLoginScreen(viewModel: GlamGoViewModel) {
                 textAlign = TextAlign.Center,
             )
         }
+    }
+}
+
+@Composable
+private fun RolePill(
+    label: String,
+    selected: Boolean,
+    modifier: Modifier = Modifier,
+    onClick: () -> Unit,
+) {
+    if (selected) {
+        Button(
+            onClick = onClick,
+            modifier = modifier.height(46.dp),
+            shape = RoundedCornerShape(12.dp),
+            colors = ButtonDefaults.buttonColors(containerColor = GlamRose),
+        ) { Text(label, fontWeight = FontWeight.SemiBold) }
+    } else {
+        OutlinedButton(
+            onClick = onClick,
+            modifier = modifier.height(46.dp),
+            shape = RoundedCornerShape(12.dp),
+            border = BorderStroke(1.dp, GlamRose),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = GlamRose),
+        ) { Text(label, fontWeight = FontWeight.SemiBold) }
     }
 }

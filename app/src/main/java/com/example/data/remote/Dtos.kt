@@ -151,6 +151,44 @@ data class AddressCreateReq(
     @Json(name = "is_default") val isDefault: Boolean = false,
 )
 
+// ── Cart (single-partner, multi-service) ─────────────────────────────────────
+@JsonClass(generateAdapter = true)
+data class CartItemDto(
+    val id: Int,
+    @Json(name = "service_id") val serviceId: Int,
+    val name: String? = null,
+    @Json(name = "image_url") val imageUrl: String? = null,
+    val qty: Int = 1,
+    @Json(name = "unit_price_paise") val unitPricePaise: Long = 0,
+    @Json(name = "line_total_paise") val lineTotalPaise: Long = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class CartResp(
+    @Json(name = "partner_id") val partnerId: Int? = null,
+    @Json(name = "partner_name") val partnerName: String? = null,
+    val items: List<CartItemDto> = emptyList(),
+    @Json(name = "subtotal_paise") val subtotalPaise: Long = 0,
+    val count: Int = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class CartAddReq(
+    @Json(name = "partner_id") val partnerId: Int,
+    @Json(name = "service_id") val serviceId: Int,
+    val qty: Int = 1,
+)
+
+@JsonClass(generateAdapter = true)
+data class CartItemPatchReq(val qty: Int)
+
+@JsonClass(generateAdapter = true)
+data class CartQuoteReq(
+    @Json(name = "slot_id") val slotId: String? = null,
+    @Json(name = "address_id") val addressId: Int? = null,
+    @Json(name = "coupon_code") val couponCode: String? = null,
+)
+
 // ── Quote + Booking ──────────────────────────────────────────────────────────
 @JsonClass(generateAdapter = true)
 data class QuoteReq(

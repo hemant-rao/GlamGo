@@ -40,6 +40,7 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import coil.compose.AsyncImage
 import com.example.data.*
+import com.example.data.remote.CartItemDto
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -47,11 +48,12 @@ import kotlinx.coroutines.launch
 @Composable
 fun GlamMainShell(viewModel: GlamGoViewModel) {
     val activeUser by viewModel.activeUser.collectAsState()
-    
+    val cart by viewModel.cart.collectAsState()
+
     val currentThemeDark = isSystemInDarkTheme()
     val scope = rememberCoroutineScope()
-    
-    val showLogin = (!viewModel.isLoggedIn && !viewModel.isGuestMode) || viewModel.pendingLoginRole != null
+
+    val showLogin = !viewModel.isLoggedIn && !viewModel.isGuestMode
 
     Scaffold(
         bottomBar = {
@@ -59,11 +61,8 @@ fun GlamMainShell(viewModel: GlamGoViewModel) {
                 GlamBottomBar(
                     currentScreen = viewModel.currentScreen,
                     userRole = activeUser?.role ?: "customer",
+                    cartCount = cart?.count ?: 0,
                     onNavigate = { screen -> viewModel.currentScreen = screen },
-                    onSwitchRole = {
-                        val targetRole = if (activeUser?.role == "customer") "partner" else "customer"
-                        viewModel.switchRole(targetRole)
-                    }
                 )
             }
         }
@@ -92,17 +91,17 @@ fun GlamMainShell(viewModel: GlamGoViewModel) {
                     is Screen.PartnerSelect -> PartnerSelectScreen(viewModel, screen.service)
                     is Screen.BookingConfirm -> BookingConfirmScreen(viewModel, screen.service, screen.partner)
                     is Screen.BookingDetail -> BookingDetailScreen(viewModel, screen.bookingId)
-                    is Screen.Wallet -> WalletScreen(viewModel)
+                    is Screen.Cart -> CartScreen(viewModel)
+                    is Screen.MyBookings -> MyBookingsScreen(viewModel)
                     is Screen.ComplaintsList -> ComplaintsListScreen(viewModel)
-                    is Screen.AIChat -> AIChatScreen(viewModel)
                     is Screen.CustomerProfile -> CustomerProfileScreen(viewModel)
                     is Screen.ServiceBookingForm -> ServiceBookingFormScreen(viewModel)
-                    
+
                     // Partner Screens
                     is Screen.PartnerDashboard -> PartnerDashboardScreen(viewModel)
                     is Screen.PartnerKyc -> PartnerKycScreen(viewModel)
                     is Screen.PartnerServices -> PartnerServicesScreen(viewModel)
-                    is Screen.PartnerEarnings -> PartnerEarningsScreen(viewModel)
+                    is Screen.PartnerProfile -> PartnerProfileScreen(viewModel)
                     is Screen.PreBookingChat -> PreBookingChatScreen(viewModel, screen.service, screen.partner)
                 }
             }
@@ -114,9 +113,13 @@ fun GlamMainShell(viewModel: GlamGoViewModel) {
 fun GlamBottomBar(
     currentScreen: Screen,
     userRole: String,
+    cartCount: Int,
     onNavigate: (Screen) -> Unit,
-    onSwitchRole: () -> Unit
 ) {
+    val selectedColors = NavigationBarItemDefaults.colors(
+        selectedIconColor = MaterialTheme.colorScheme.primary,
+        indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
+    )
     NavigationBar(
         tonalElevation = 8.dp,
         containerColor = MaterialTheme.colorScheme.surface,
@@ -126,65 +129,71 @@ fun GlamBottomBar(
             NavigationBarItem(
                 selected = currentScreen is Screen.CustomerHome,
                 onClick = { onNavigate(Screen.CustomerHome) },
-                icon = { Icon(Icons.Default.Home, contentDescription = "Home") },
+                icon = { Icon(Icons.Default.Home, contentDescription = "Explore") },
                 label = { Text("Explore", fontSize = 11.sp) },
-                colors = NavigationBarItemDefaults.colors(
-                    selectedIconColor = MaterialTheme.colorScheme.primary,
-                    indicatorColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.15f)
-                )
+                colors = selectedColors,
             )
             NavigationBarItem(
-                selected = currentScreen is Screen.AIChat,
-                onClick = { onNavigate(Screen.AIChat) },
-                icon = { Icon(Icons.Default.Face, contentDescription = "AI Assist") },
-                label = { Text("AI Assist", fontSize = 11.sp) },
-                modifier = Modifier.testTag("ai_assist_tab")
+                selected = currentScreen is Screen.Cart,
+                onClick = { onNavigate(Screen.Cart) },
+                icon = {
+                    if (cartCount > 0) {
+                        BadgedBox(badge = { Badge { Text("$cartCount") } }) {
+                            Icon(Icons.Default.ShoppingCart, contentDescription = "Cart")
+                        }
+                    } else {
+                        Icon(Icons.Default.ShoppingCart, contentDescription = "Cart")
+                    }
+                },
+                label = { Text("Cart", fontSize = 11.sp) },
+                colors = selectedColors,
+                modifier = Modifier.testTag("cart_tab"),
             )
             NavigationBarItem(
-                selected = currentScreen is Screen.Wallet,
-                onClick = { onNavigate(Screen.Wallet) },
-                icon = { Icon(Icons.Default.AccountBalanceWallet, contentDescription = "Wallet") },
-                label = { Text("Wallet", fontSize = 11.sp) }
+                selected = currentScreen is Screen.MyBookings,
+                onClick = { onNavigate(Screen.MyBookings) },
+                icon = { Icon(Icons.Default.EventNote, contentDescription = "Bookings") },
+                label = { Text("Bookings", fontSize = 11.sp) },
+                colors = selectedColors,
+                modifier = Modifier.testTag("bookings_tab"),
             )
             NavigationBarItem(
                 selected = currentScreen is Screen.CustomerProfile,
                 onClick = { onNavigate(Screen.CustomerProfile) },
                 icon = { Icon(Icons.Default.Person, contentDescription = "Profile") },
                 label = { Text("Profile", fontSize = 11.sp) },
+                colors = selectedColors,
                 modifier = Modifier.testTag("customer_profile_tab")
-            )
-            NavigationBarItem(
-                selected = false,
-                onClick = onSwitchRole,
-                icon = { Icon(Icons.Outlined.Build, contentDescription = "Become Partner", tint = GlamRose) },
-                label = { Text("Partner Mode", fontSize = 11.sp, color = GlamRose, fontWeight = FontWeight.Bold) },
-                modifier = Modifier.testTag("switch_to_partner_button")
             )
         } else {
             NavigationBarItem(
                 selected = currentScreen is Screen.PartnerDashboard,
                 onClick = { onNavigate(Screen.PartnerDashboard) },
                 icon = { Icon(Icons.Default.Dashboard, contentDescription = "Dashboard") },
-                label = { Text("Cabinet", fontSize = 11.sp) }
+                label = { Text("Dashboard", fontSize = 11.sp) },
+                colors = selectedColors,
             )
             NavigationBarItem(
                 selected = currentScreen is Screen.PartnerServices,
                 onClick = { onNavigate(Screen.PartnerServices) },
-                icon = { Icon(Icons.Default.ContentCut, contentDescription = "Pricing") },
-                label = { Text("Services", fontSize = 11.sp) }
+                icon = { Icon(Icons.Default.ContentCut, contentDescription = "Services") },
+                label = { Text("Services", fontSize = 11.sp) },
+                colors = selectedColors,
             )
             NavigationBarItem(
-                selected = currentScreen is Screen.PartnerEarnings,
-                onClick = { onNavigate(Screen.PartnerEarnings) },
-                icon = { Icon(Icons.Default.TrendingUp, contentDescription = "Earnings") },
-                label = { Text("Earnings", fontSize = 11.sp) }
+                selected = currentScreen is Screen.MyBookings,
+                onClick = { onNavigate(Screen.MyBookings) },
+                icon = { Icon(Icons.Default.EventNote, contentDescription = "Requests") },
+                label = { Text("Requests", fontSize = 11.sp) },
+                colors = selectedColors,
+                modifier = Modifier.testTag("partner_requests_tab"),
             )
             NavigationBarItem(
-                selected = false,
-                onClick = onSwitchRole,
-                icon = { Icon(Icons.Outlined.Person, contentDescription = "Become Customer", tint = SuccessGreen) },
-                label = { Text("Customer", fontSize = 11.sp, color = SuccessGreen, fontWeight = FontWeight.Bold) },
-                modifier = Modifier.testTag("switch_to_customer_button")
+                selected = currentScreen is Screen.PartnerProfile,
+                onClick = { onNavigate(Screen.PartnerProfile) },
+                icon = { Icon(Icons.Default.Person, contentDescription = "Account") },
+                label = { Text("Account", fontSize = 11.sp) },
+                colors = selectedColors,
             )
         }
     }
@@ -259,12 +268,10 @@ fun CustomerHomeScreen(viewModel: GlamGoViewModel) {
                         }
                     }
                     IconButton(
-                        onClick = { viewModel.currentScreen = Screen.Wallet },
-                        modifier = Modifier.testTag("wallet_view_btn")
+                        onClick = { viewModel.currentScreen = Screen.Cart },
+                        modifier = Modifier.testTag("cart_view_btn")
                     ) {
-                        Badge {
-                            Text("₹${(activeUser?.walletBalancePaise ?: 0) / 100}")
-                        }
+                        Icon(Icons.Default.ShoppingCart, contentDescription = "Cart", tint = Color.White)
                     }
                 }
                 
@@ -1165,9 +1172,25 @@ fun PartnerSelectScreen(viewModel: GlamGoViewModel, service: Service) {
                             ) {
                                 Icon(Icons.Default.Chat, contentDescription = null, tint = GlamRose, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Chat & Verify", color = GlamRose, fontSize = 12.sp)
+                                Text("Chat", color = GlamRose, fontSize = 12.sp)
                             }
-                            
+
+                            OutlinedButton(
+                                onClick = {
+                                    viewModel.addToCart(partner.id, service.id)
+                                    viewModel.currentScreen = Screen.Cart
+                                },
+                                modifier = Modifier
+                                    .weight(1.2f)
+                                    .height(44.dp)
+                                    .testTag("add_to_cart_${partner.id}"),
+                                border = BorderStroke(1.dp, GlamRose)
+                            ) {
+                                Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = GlamRose, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text("Add", color = GlamRose, fontSize = 12.sp)
+                            }
+
                             Button(
                                 onClick = {
                                     viewModel.updateBookingQuote(service, partner, resolvedPrice)
@@ -1179,7 +1202,7 @@ fun PartnerSelectScreen(viewModel: GlamGoViewModel, service: Service) {
                                     .testTag("book_button_${partner.id}"),
                                 colors = ButtonDefaults.buttonColors(containerColor = GlamRose)
                             ) {
-                                Text("Book Now", fontSize = 12.sp)
+                                Text("Book", fontSize = 12.sp)
                             }
                         }
                     }
@@ -1304,26 +1327,6 @@ fun BookingConfirmScreen(viewModel: GlamGoViewModel, service: Service, partner: 
                 )
             }
 
-            // Wallet Toggle
-            Spacer(modifier = Modifier.height(12.dp))
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Column {
-                    Text("Apply Wallet Balance", fontWeight = FontWeight.Bold)
-                    Text("Available: ₹${(activeUser?.walletBalancePaise ?: 0L) / 100}", fontSize = 12.sp, color = Color.Gray)
-                }
-                Switch(
-                    checked = viewModel.applyWalletDiscount,
-                    onCheckedChange = {
-                        viewModel.applyWalletDiscount = it
-                        viewModel.updateBookingQuote(service, partner)
-                    }
-                )
-            }
-
             // STEP 4: Server Authoritative Pricing Quote
             Spacer(modifier = Modifier.height(16.dp))
             Text("4. PRICE BREAKDOWN", fontWeight = FontWeight.Bold, color = GlamGold)
@@ -1361,13 +1364,6 @@ fun BookingConfirmScreen(viewModel: GlamGoViewModel, service: Service, partner: 
                             Text("GST (18%)", color = Color.Gray)
                             Text("₹${quote.taxPaise / 100}")
                         }
-                        if (quote.walletDiscountPaise > 0) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Wallet Applied", color = SuccessGreen)
-                                Text("- ₹${quote.walletDiscountPaise / 100}", color = SuccessGreen)
-                            }
-                        }
-                        
                         Divider(modifier = Modifier.padding(vertical = 4.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
@@ -1903,112 +1899,6 @@ fun StateChip(status: String) {
 }
 
 @Composable
-fun WalletScreen(viewModel: GlamGoViewModel) {
-    val activeUser by viewModel.activeUser.collectAsState()
-    val transactions by viewModel.repository.getTransactionsFlow(activeUser?.role ?: "customer").collectAsState(initial = emptyList())
-    
-    var moneyToAdd by remember { mutableStateOf("1000") }
-    var showPaymentSuccessAnim by remember { mutableStateOf(false) }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("My Secure Wallet", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.CustomerHome }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            }
-        )
-        
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary),
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(24.dp)
-            ) {
-                Column(
-                    modifier = Modifier.padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text(
-                        text = "ACTIVE WALLET BALANCE",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = Color(0xFFEADDFF)
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text(
-                        "₹${(activeUser?.walletBalancePaise ?: 0L) / 100}",
-                        fontSize = 36.sp,
-                        color = Color.White,
-                        fontWeight = FontWeight.Black,
-                        letterSpacing = (-1).sp
-                    )
-                    Text("Safe & Insured via Razorpay Gate", color = Color(0xFFEADDFF).copy(alpha = 0.7f), fontSize = 11.sp)
-                }
-            }
-            
-            // Add Cash
-            Text("Top Up Wallet Balance (Simulated Razorpay)", fontWeight = FontWeight.Bold)
-            OutlinedTextField(
-                value = moneyToAdd,
-                onValueChange = { moneyToAdd = it },
-                placeholder = { Text("Amount in Rupees") },
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("add_money_input"),
-                prefix = { Text("₹ ") }
-            )
-            
-            Button(
-                onClick = {
-                    val rps = moneyToAdd.toLongOrNull() ?: 1000L
-                    viewModel.addWalletMoney(rps * 100, activeUser?.role ?: "customer")
-                    showPaymentSuccessAnim = true
-                },
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .testTag("submit_add_money_btn"),
-                colors = ButtonDefaults.buttonColors(containerColor = GlamRose)
-            ) {
-                Text("Simulate Razorpay Payment Flow")
-            }
-            
-            if (showPaymentSuccessAnim) {
-                Card(
-                    colors = CardDefaults.cardColors(containerColor = SuccessGreen.copy(alpha = 0.1f)),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SuccessGreen)
-                        Spacer(modifier = Modifier.width(12.dp))
-                        Text("Payment authenticated successfully! ₹$moneyToAdd credited.", fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-            
-            Text("WALLET TRANSACTION LEDGER", fontWeight = FontWeight.Bold)
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(transactions) { tx ->
-                    ListItem(
-                        headlineContent = { Text(tx.reason) },
-                        supportingContent = { Text(java.text.SimpleDateFormat("MMM dd, HH:mm").format(java.util.Date(tx.at))) },
-                        trailingContent = { 
-                            Text(
-                                text = "${if (tx.type == "credit") "+" else "-"} ₹${tx.amountPaise / 100}",
-                                fontWeight = FontWeight.Bold,
-                                color = if (tx.type == "credit") SuccessGreen else Color.Red
-                            )
-                        },
-                        colors = ListItemDefaults.colors(containerColor = Color.Transparent)
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun ComplaintsListScreen(viewModel: GlamGoViewModel) {
     val complaints by viewModel.complaints.collectAsState()
     
@@ -2105,103 +1995,6 @@ fun ComplaintsListScreen(viewModel: GlamGoViewModel) {
                         }
                     }
                 }
-            }
-        }
-    }
-}
-
-@Composable
-fun AIChatScreen(viewModel: GlamGoViewModel) {
-    val aiLogs by viewModel.aiMessages.collectAsState()
-    var inputMsg by remember { mutableStateOf("") }
-    
-    val listState = rememberLazyListState()
-    val scope = rememberCoroutineScope()
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Nikhat Glow Beauty AI", fontWeight = FontWeight.Bold) },
-            actions = {
-                IconButton(onClick = { viewModel.clearAiLog() }) {
-                    Icon(Icons.Default.Refresh, contentDescription = "Reset Chat")
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
-        )
-        
-        LazyColumn(
-            state = listState,
-            modifier = Modifier.weight(1f).padding(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp)
-        ) {
-            items(aiLogs) { msg ->
-                val isUser = msg.second
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = if (isUser) Arrangement.End else Arrangement.Start
-                ) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isUser) GlamRose else DeepPlum
-                        ),
-                        modifier = Modifier.widthIn(max = 280.dp),
-                        shape = RoundedCornerShape(
-                            topStart = 16.dp,
-                            topEnd = 16.dp,
-                            bottomStart = if (isUser) 16.dp else 4.dp,
-                            bottomEnd = if (isUser) 4.dp else 16.dp
-                        )
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Text(
-                                msg.first, 
-                                color = if (isUser) Color.White else Color.White,
-                                fontSize = 14.sp
-                            )
-                        }
-                    }
-                }
-            }
-            
-            if (viewModel.aiLoading) {
-                item {
-                    Text("NikhatBot AI is thinking...", fontSize = 11.sp, color = GlamGold, modifier = Modifier.padding(start = 4.dp))
-                }
-            }
-        }
-        
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            OutlinedTextField(
-                value = inputMsg,
-                onValueChange = { inputMsg = it },
-                placeholder = { Text("Ask for makeup, hair cuts advice...") },
-                modifier = Modifier
-                    .weight(1f)
-                    .testTag("ai_chat_input"),
-                singleLine = true
-            )
-            Spacer(modifier = Modifier.width(12.dp))
-            IconButton(
-                onClick = {
-                    if (inputMsg.isNotBlank()) {
-                        viewModel.sendAiMessage(inputMsg)
-                        inputMsg = ""
-                        scope.launch {
-                            delay(200)
-                            listState.animateScrollToItem(aiLogs.size)
-                        }
-                    }
-                },
-                modifier = Modifier
-                    .background(GlamRose, CircleShape)
-                    .testTag("submit_ai_chat_btn")
-            ) {
-                Icon(Icons.AutoMirrored.Filled.Send, contentDescription = "Send", tint = Color.White)
             }
         }
     }
@@ -2833,70 +2626,6 @@ fun PartnerServicesScreen(viewModel: GlamGoViewModel) {
 }
 
 @Composable
-fun PartnerEarningsScreen(viewModel: GlamGoViewModel) {
-    val activeUser by viewModel.activeUser.collectAsState()
-    val transactions by viewModel.repository.getTransactionsFlow("partner").collectAsState(initial = emptyList())
-    
-    var payoutTriggered by remember { mutableStateOf(false) }
-
-    Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Earnings & Ledgers", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.PartnerDashboard }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            }
-        )
-        
-        Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
-            Card(colors = CardDefaults.cardColors(containerColor = DeepPlum)) {
-                Column(
-                    modifier = Modifier.fillMaxWidth().padding(24.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally
-                ) {
-                    Text("LIFETIME CLEAR BALANCE", fontWeight = FontWeight.Bold, color = GlamGold, fontSize = 12.sp)
-                    Spacer(modifier = Modifier.height(8.dp))
-                    Text("₹${(activeUser?.walletBalancePaise ?: 0L) / 100}", fontSize = 34.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    Text("Commission Deducted Base Rate of 15% Apply", fontSize = 10.sp, color = Color.Gray)
-                }
-            }
-            
-            Button(
-                onClick = { payoutTriggered = true },
-                colors = ButtonDefaults.buttonColors(containerColor = GlamRose),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                Text("Transfer Balance to KYC Bank Account")
-            }
-            
-            if (payoutTriggered) {
-                Card(colors = CardDefaults.cardColors(containerColor = SuccessGreen.copy(alpha = 0.1F))) {
-                    Text("Clear balance payout initiated! Transfers post to your bank within 24 hours.", color = SuccessGreen, fontWeight = FontWeight.Bold, modifier = Modifier.padding(16.dp))
-                }
-            }
-            
-            Text("JOB COMPLETED HISTORIC REVENUES", fontWeight = FontWeight.Bold)
-            LazyColumn(modifier = Modifier.weight(1f)) {
-                items(transactions) { tx ->
-                    ListItem(
-                        headlineContent = { Text(tx.reason) },
-                        supportingContent = { Text(java.text.SimpleDateFormat("MMM dd, HH:mm").format(java.util.Date(tx.at))) },
-                        trailingContent = {
-                            Text(
-                                "₹${tx.amountPaise / 100}",
-                                fontWeight = FontWeight.Bold,
-                                color = SuccessGreen
-                            )
-                        }
-                    )
-                }
-            }
-        }
-    }
-}
-
-@Composable
 fun CustomerProfileScreen(viewModel: GlamGoViewModel) {
     val activeUser by viewModel.activeUser.collectAsState()
     val bookings by viewModel.bookings.collectAsState()
@@ -3341,6 +3070,22 @@ fun CustomerProfileScreen(viewModel: GlamGoViewModel) {
                     }
                 }
             }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+        OutlinedButton(
+            onClick = { viewModel.logout() },
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp)
+                .height(50.dp)
+                .testTag("logout_button"),
+            border = BorderStroke(1.dp, GlamRose),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = GlamRose),
+        ) {
+            Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Log out", fontWeight = FontWeight.SemiBold)
         }
         Spacer(modifier = Modifier.height(48.dp))
     }

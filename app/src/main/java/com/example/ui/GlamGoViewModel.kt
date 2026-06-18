@@ -18,9 +18,9 @@ sealed class Screen {
     data class PartnerSelect(val service: Service) : Screen()
     data class BookingConfirm(val service: Service, val partner: Partner) : Screen(), RouteWithParams
     data class BookingDetail(val bookingId: String) : Screen(), RouteWithParams
-    object Wallet : Screen()
+    object Cart : Screen()
+    object MyBookings : Screen()
     object ComplaintsList : Screen()
-    object AIChat : Screen()
 
     object CustomerProfile : Screen()
     object ServiceBookingForm : Screen()
@@ -29,7 +29,7 @@ sealed class Screen {
     object PartnerDashboard : Screen()
     object PartnerKyc : Screen()
     object PartnerServices : Screen()
-    object PartnerEarnings : Screen()
+    object PartnerProfile : Screen()
 
     // Pre-booking messaging
     data class PreBookingChat(val service: Service, val partner: Partner) : Screen()
@@ -92,18 +92,18 @@ class GlamGoViewModel(application: Application) : AndroidViewModel(application) 
     var onboardingComplete by mutableStateOf(true)
 
     // ── Auth / session ─────────────────────────────────────────────────────────
+    // Single fixed session: the role is chosen ONCE on the login screen at signup
+    // and never switched in-app. To use the other role the user logs out and signs
+    // in again choosing it. No dual-identity / "partner mode" toggle.
     var isLoggedIn by mutableStateOf(repository.isAuthenticated())
         private set
     var isGuestMode by mutableStateOf(false)
-    var pendingLoginRole by mutableStateOf<String?>(null)   // non-null → show login for this role
-        private set
+    var loginRole by mutableStateOf("customer")   // user-selected on the login screen
     var authBusy by mutableStateOf(false); private set
     var authError by mutableStateOf<String?>(null); private set
     var otpSent by mutableStateOf(false); private set
     var devOtpHint by mutableStateOf<String?>(null); private set
     private var otpToken: String? = null
-
-    val loginRole: String get() = pendingLoginRole ?: "customer"
 
     init {
         if (repository.isAuthenticated()) {
@@ -139,7 +139,6 @@ class GlamGoViewModel(application: Application) : AndroidViewModel(application) 
                 .onSuccess {
                     isLoggedIn = true
                     isGuestMode = false
-                    pendingLoginRole = null
                     otpSent = false
                     otpToken = null
                     devOtpHint = null
@@ -150,10 +149,11 @@ class GlamGoViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun cancelPendingLogin() {
-        pendingLoginRole = null
+    /** Go back from the OTP-entry step to the phone/role step. */
+    fun resetOtpFlow() {
         otpSent = false
         otpToken = null
+        devOtpHint = null
         authError = null
     }
 
@@ -163,12 +163,18 @@ class GlamGoViewModel(application: Application) : AndroidViewModel(application) 
             isLoggedIn = false
             isGuestMode = false
             otpSent = false
+            otpToken = null
+            loginRole = "customer"
             currentScreen = Screen.CustomerHome
         }
     }
 
+    /** A guest tapped a login-gated action — drop guest mode so the login screen
+     *  shows. Role defaults to customer (guests browse the customer side). */
     fun triggerLoginPrompt() {
-        pendingLoginRole = "customer"
+        isGuestMode = false
+        otpSent = false
+        loginRole = "customer"
     }
 
     private fun isScreenRestricted(screen: Screen): Boolean {
@@ -177,7 +183,6 @@ class GlamGoViewModel(application: Application) : AndroidViewModel(application) 
             is Screen.CategoryDetail -> false
             is Screen.ServiceDetail -> false
             is Screen.PartnerSelect -> false
-            is Screen.AIChat -> false
             else -> true
         }
     }
@@ -201,20 +206,52 @@ class GlamGoViewModel(application: Application) : AndroidViewModel(application) 
     // ── Booking flow caches ──────────────────────────────────────────────────
     var selectedSlot by mutableStateOf("Tomorrow, 10:00 AM - 11:30 AM")
     var couponCode by mutableStateOf("")
-    var applyWalletDiscount by mutableStateOf(true)
     var quoteBreakdown by mutableStateOf<QuoteBreakdown?>(null)
+
+    // ── Cart (single-partner, multi-service) ───────────────────────────────────
+    val cart = repository.cartFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), null
+    )
+
+    fun addToCart(partnerId: String, serviceId: String, onResult: (String?) -> Unit = {}) {
+        if (!isLoggedIn) { triggerLoginPrompt(); return }
+        viewModelScope.launch {
+            runCatching { repository.addToCart(partnerId, serviceId) }
+                .onSuccess { onResult(null) }
+                .onFailure { onResult(friendly(it)) }
+        }
+    }
+
+    fun updateCartQty(itemId: Int, qty: Int) {
+        viewModelScope.launch { runCatching { repository.updateCartQty(itemId, qty) } }
+    }
+
+    fun removeCartItem(itemId: Int) {
+        viewModelScope.launch { runCatching { repository.removeCartItem(itemId) } }
+    }
+
+    fun clearCart() {
+        viewModelScope.launch { runCatching { repository.clearCart() } }
+    }
+
+    /** Quote the whole cart, place the booking request, then open its detail. */
+    fun checkoutCart(onResult: (String?) -> Unit = {}) {
+        viewModelScope.launch {
+            runCatching {
+                val addr = addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull()
+                repository.cartQuote(couponCode, addr?.id)
+                repository.createBookingFromLastQuote()
+            }.onSuccess { booking ->
+                currentScreen = Screen.BookingDetail(booking.id)
+                onResult(null)
+            }.onFailure { onResult(friendly(it)) }
+        }
+    }
 
     // ── Partner Availability Engine ──────────────────────────────────────────
     var isPartnerActive by mutableStateOf(true)
     var partnerServiceRadiusKm by mutableStateOf(10.0)
     var partnerWorkingHoursRange by mutableStateOf("9:00 AM - 8:00 PM")
-
-    // ── AI chat ─────────────────────────────────────────────────────────────────
-    private val _aiMessages = MutableStateFlow<List<Pair<String, Boolean>>>(
-        listOf("Hello! I am your Nikhat Glow Beauty AI assistant. Ask me for custom style suggestions, fragrance palettes, haircut advice, or body spa recommendations!" to false)
-    )
-    val aiMessages = _aiMessages.asStateFlow()
-    var aiLoading by mutableStateOf(false)
 
     private val loadedThreads = mutableSetOf<String>()
     fun getMessagesForBooking(bookingId: String): Flow<List<ChatMessageEntity>> {
@@ -224,25 +261,8 @@ class GlamGoViewModel(application: Application) : AndroidViewModel(application) 
         return repository.getMessagesFlow(bookingId)
     }
 
-    fun switchRole(newRole: String) {
-        viewModelScope.launch {
-            val ok = runCatching { repository.switchRole(newRole) }.getOrDefault(false)
-            if (ok) {
-                currentScreen = if (newRole == "customer") Screen.CustomerHome else Screen.PartnerDashboard
-            } else {
-                // No session for that identity yet — prompt an OTP login for it.
-                pendingLoginRole = newRole
-                otpSent = false
-            }
-        }
-    }
-
     fun updateProfile(name: String, email: String, bio: String = "", experience: Int = 0) {
         viewModelScope.launch { runCatching { repository.updateProfile(name, email, bio, experience) } }
-    }
-
-    fun addWalletMoney(amountPaise: Long, role: String) {
-        viewModelScope.launch { runCatching { repository.addWalletMoney(amountPaise, role) } }
     }
 
     fun addNewAddress(label: String, line1: String, line2: String, city: String, pincode: String) {
@@ -269,7 +289,7 @@ class GlamGoViewModel(application: Application) : AndroidViewModel(application) 
                     slotId = null,
                     addressId = defaultAddr?.id,
                     couponCode = couponCode,
-                    useWallet = applyWalletDiscount,
+                    useWallet = false,
                 )
             }.onSuccess { quoteBreakdown = it }
         }
@@ -322,30 +342,5 @@ class GlamGoViewModel(application: Application) : AndroidViewModel(application) 
 
     fun submitComplaint(bookingId: String, subject: String, message: String) {
         viewModelScope.launch { runCatching { repository.createComplaint(bookingId, subject, message) } }
-    }
-
-    fun sendAiMessage(message: String) {
-        if (message.isBlank()) return
-        val log = _aiMessages.value.toMutableList()
-        log.add(message to true)
-        _aiMessages.value = log
-        aiLoading = true
-        viewModelScope.launch {
-            val history = _aiMessages.value.map { (txt, isUser) ->
-                mapOf("role" to (if (isUser) "user" else "model"), "text" to txt)
-            }
-            val reply = runCatching { repository.aiChat(message, history) }
-                .getOrDefault("Sorry, I couldn't reach the stylist right now. Please try again.")
-            val updated = _aiMessages.value.toMutableList()
-            updated.add(reply to false)
-            _aiMessages.value = updated
-            aiLoading = false
-        }
-    }
-
-    fun clearAiLog() {
-        _aiMessages.value = listOf(
-            "Hello! I am your Nikhat Glow Beauty AI assistant. Ask me for custom style suggestions, fragrance palettes, haircut advice, or body spa recommendations!" to false
-        )
     }
 }
