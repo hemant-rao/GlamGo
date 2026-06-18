@@ -1,76 +1,77 @@
-# GlamGo - Premium On-Demand Doorstep Beauty & Grooming Platform
+# Nikhat Glow – The Fragrance of Beauty
 
-GlamGo is a modern, production-grade Android application built with **Jetpack Compose**, **Kotlin Coroutines / Flow**, and a robust hybrid data layer utilizing **Firebase Firestore** alongside local **Room Database** persistence. It delivers a seamless, high-trust experience for beauty services on-demand, styled in a luxury dark cosmic theme.
+Nikhat Glow is a hyper-transparent, two-sided beauty marketplace built with **Jetpack Compose**, **Kotlin Coroutines / Flow**, **Firebase Firestore**, and local **Room Database** persistence. It empowers independent beauty professionals (Partners) to manage their digital micro-salons, while providing customers with a secure, premium doorstep service experience backed by authentic multi-dimensional reviews, verified brand kit transparency, and safe pre-booking negotiations.
 
----
-
-## 🌌 The Vision & Design Philosophy
-
-GlamGo is engineered to look and feel premium, stepping away from generic interfaces to establish a luxury beauty salon atmosphere:
-*   **Theming**: High-contrast, elegant colors utilizing `DeepPlum` (#2A0845), `GlamRose` (#FF4A70), and `GlamGold` (#D4AF37) over Slate backgrounds.
-*   **Edge-to-Edge Experience**: Complete edge-to-edge rendering with proper safe bounds padding via `WindowInsets` handling.
-*   **Intuitive Hierarchy**: Tactile card borders, elegant verified stickers, custom typography pairings, and modern responsive micro-actions.
+The entire application compiles with a luxury dark cosmic theme: `DeepPlum` (#2A0845), `GlamRose` (#FF4A70), and `GlamGold` (#D4AF37) accents.
 
 ---
 
-## 🚀 Key App Modules & Features
+## 🌌 Core Vision & Design Philosophy
 
-### 1. Hybrid Persistence: FireStore Sync & Room Local Cache
-*   **Live Firestore Integration**: Persists user profile updates, partner listing parameters, and chat message history.
-*   **Offline Fallback Capability**: Uses a graceful configuration check (`GlamGoFirestoreManager.isEnabled`). If firebase configurations are absent, the application elegantly defaults to a local-first **Room database** pipeline to keep the app fully functional and crash-free.
-*   **Real-Time Syncing**: Multi-role support where profile adjustments and services offered are pushed instantly to the cloud.
+Nikhat Glow steps away from standard interfaces to offer an exquisite, high-trust luxury salon experience:
+* **Branded Theme**: Pure deep premium cosmos color accents, polished gold typography, and spacious layouts.
+* **Edge-to-Edge Fluidity**: Dynamic layout wrapping with `WindowInsets` handling, proper safe zone padding, and fluid sizing adaptiveness.
+* **Custom Launcher Emblem / Logo**: Completely redesigned vector launcher icons featuring blooming rose gradients, glistening star dust, and gold fragrance droplet elements supporting the *Fragrance of Beauty* identity.
 
-### 2. Live Booking Tracker & Status System
-*   **State-Driven Appointment Pipeline**: Direct lifecycle handling from **Pending** to **Confirmed**, **In Progress**, and **Completed**.
-*   **Dual Viewpoint Control Nodes**:
-    *   *Customer Perspective*: Transparent progress bars on upcoming appointments, direct provider chats, and an **Instant Refund Cancellation** trigger.
-    *   *Provider Panel*: Dynamic status toggles (Accept, Mark in progress, Mark completed) allowing absolute direct service execution control.
-*   **Automated Wallet Escrow**: Safely deposits funds to provider wallets upon completion, minus platform commission, and completely automates instant partial/full refunds to customer wallets on booking cancellation.
+---
 
-### 3. Zomato/Swiggy-Style Safe Pre-Booking Discussions
-*   **Pre-Booking Inquiry Line**: Before scheduling a slot, clients can initiate pre-service questions on products used or visual safe-seals.
-*   **Brand Integrity Verification**: Direct question suggestions (e.g., *Is the kit 100% brand-new & sealed?*, *Which premium brands will you bring?*, *Are there hidden travel charges?*).
-*   **Dynamic Auto-Replies**: Context-aware automated expert answers responding instantly to provide assurance regarding hygienic standards and certified organic brands.
+## 🚀 Enhanced Marketplace Modules & Features
 
-### 4. Interactive Ratings & Customer Reviews
-*   **Verified Experience Circle**: Allows authenticated customers who completed appointments to directly submit ratings (1-5 stars) and reviews on product brand authenticity and partner hospitality.
-*   **Static & Live Aggregations**: Provider profile pages load both pre-loaded community trust reviews and actual dynamic customer reviews, preserving overall score calculations.
+### 🛠 1. The Partner Ecosystem (Micro-Entrepreneurship)
+* **Self-Onboarding & Catalog Builder**: Partners registers, uploads dynamic picture avatars, and establishes a highly customized "Digital Salon/Clinic" presence.
+* **Dynamic Menus & Swiggy/Zomato-Style Pricing**: Partners can customize their service items (e.g., Bridal Grooming, Gel Manicure, Facials), control Swiggy/Zomato style open prices (paise-precision), and toggle activations.
+* **Verified Product Kit Lists**: Supports premium product transparency. Professionals must configure which certified kit lists or brands they will utilize (e.g., L'Oréal Professional, O3+, organic floral oils).
+* **Availability Control Engine**: Includes an interactive panel where therapists can:
+    * Toggle **Active Status** (Online & Visible vs. Away Mode).
+    * Configure **Service Bounds Radius** via active sliders (1 km to 30 km limits).
+    * Set daily operating **Shift Hours Grid** (Standard, Extended, Late shift, or Late Night Luxe).
+* **Comprehensive Provider Dashboard**: Dedicated hub to manage incoming job request queues, track lifetime clear balance earnings, monitor multi-dimensional ratings, and reply to client inquiries.
 
-### 5. Preferred Beauty Experts ("Favorite" Toggle)
-*   **Taggable Favorites**: Customers can tap the heart icon on any beauty partner during service search comparison.
-*   **Horizontal Favorites Shelf**: Beautifully aggregated horizontal scroll tray within the `Customer Profile Screen` for rapid appointment-booking access.
+### 💖 2. The Customer Experience (Discovery & Trust)
+* **Aesthetic Discovery Layer**: Search interface supporting search prompts, combined with brand filters (L'Oreal, Wella, Forest Essentials, O3+) and rating thresholds (Any Rating, 4.5+ Stars, 4.8+ Stars).
+* **Pre-Booking Inquiry Corridor**: Safe pre-service discussion channel opening a direct connection between customer and partner before locking in slots. Customers can negotiate custom demands, check skin sensitivities, or verify physical kit seals.
+* **Multi-Dimensional Review Engine**:
+    * Post-service feedback is locked strictly behind completed transaction IDs to prevent fake reviews.
+    * Users review professionals across three distinct parameters: **Technical Grooming Skill**, **Hygiene & Sanitation Care**, and **Product Authenticity & Seal Check**.
+    * Scores are mathematically unified and structured transparently inside the partner database.
+* **Favorites Shelf**: Instant hot-toggle bookmarking for chosen therapist specialists, displayed in a horizontal tray in the user dashboard.
 
-### 6. Built-In Gemini AI Beauty Stylist Assistant
-*   **Conversational Guidance**: Integrated Gemini LLM agent customized as a beauty stylist guiding haircut, makeup, facial, massage, and spa questions.
-*   **Personalization**: Generates step-by-step grooming advice tailored strictly to user concerns, directly in the chat panel.
+### 💳 3. Secure Transacting & Wallet Escrow
+* **Big GPT AI/Nikhat Glow Escrow**: Upon dispatching booking requests, funds are securely held in escrow until both the client and the therapist register the appointment as completed.
+* **Instant Cancellation Refund**: Instantly returns funds to customer wallets on state cancellation, while automatically releasing escrow reserves to partner wallets when successfully finished.
+* **Wallet Balance Tracking**: High-trust ledger documenting all platform payouts, top-ups, and cashback discounts.
+
+### 🧠 4. Nikhat Glow AI Beauty Stylist
+* Powered by Google's LLM engine to act as a personal fragrance palette advisor, skin therapist, and grooming stylist.
+* Features responsive state animations and rapid interaction resets.
 
 ---
 
 ## 🛠 Tech Stack & Architecture
 
 ```
-                                              [ Jetpack Compose UI ]
-                                                         │
-                                               [ GlamGoViewModel ]
-                                                         │
-                                             [ GlamGo Repository ]
-                                           /                       \
-                 (Offline Cache / Local db)                         (Cloud Sync Layer)
-              [ Room AppDatabase / DAOs ]                 [ GlamGoFirestoreManager ]
+                                            [ Jetpack Compose UI ]
+                                                       │
+                                              [ Nikhat Glow VM ]
+                                                       │
+                                           [ Nikhat Glow Repository ]
+                                         /                            \
+              (Offline Cache / Local db)                               (Cloud Sync Layer)
+           [ Room AppDatabase / DAOs ]                      [ GlamGoFirestoreManager ]
 ```
 
-*   **Jetpack Compose**: Declarative Material 3 UI.
-*   **Room Database**: Offline persistence holding tables for `UserEntity`, `BookingEntity`, `PartnerServiceEntity`, `ChatMessageEntity`, `FavoritePartnerEntity`, and `ComplaintEntity`.
-*   **Firebase Firestore**: Document-collection remote synchronizer supporting scalable document queries for remote databases.
-*   **Kotlin Flow & Coroutines**: Reactive stream management maintaining absolute synchronization during UI transitions.
+* **Jetpack Compose**: 100% Declarative UI with accessible components.
+* **Room Database**: Secondary offline-first fallback handling all critical tables (`UserEntity`, `BookingEntity`, etc.).
+* **Firebase Firestore Sync**: Syncs live marketplace tables instantly across customers and providers.
+* **Kotlin Coroutines / Flow**: Asynchronous responsive states.
 
 ---
 
 ## 🎨 Resource Codes & UI Touchpoints
 
-*   **TestTags (Snake Case)**: Automated tests are equipped with standard test targets (e.g., `fav_toggle_<id>`, `empty_favorites_card`, `favorites_scroll_row`, `pre_chat_input`).
-*   **Accessibility First**: Interactivity triggers strictly adhere to the minimum visual touch standard constraint (minimum **48dp x 48dp** density size).
+* **TestTags**: Outfitted with robust testing locators (e.g., `partner_availability_toggle`, `submit_triple_review_btn`, `review_input_comment`).
+* **Accessibility**: Touch targets adhere strictly to the Material 3 standard constraint of **48dp x 48dp**.
 
 ---
 
-Developed with ❤️ using modern Android practices. For inquiries or live setups, configure a valid `google-services.json` onto the gradle bundle.
+Developed with ❤️ under modern Android design practices. For live deployments, place a valid `google-services.json` inside the gradle bundle.
