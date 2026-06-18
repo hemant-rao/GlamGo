@@ -157,7 +157,7 @@ class NikhatGlowRepository(context: Context) {
     }
 
     // ── Hydration ────────────────────────────────────────────────────────────
-    suspend fun hydrateCatalog() {
+    suspend fun hydrateCatalog(lat: Double? = null, lon: Double? = null) {
         // Always overwrite with the server's truth — including EMPTY. The catalog
         // is admin-controlled and the partner list is discovery (subscription-
         // gated), so an empty result is the correct "no partners yet" state.
@@ -171,17 +171,21 @@ class NikhatGlowRepository(context: Context) {
             }
         }
         NikhatGlowDataSource.services = allServices
+        // §687 — pass the device fix (when known) so the backend can sort/limit
+        // by distance ("near me"). Pre-§687 coords were never sent so distance
+        // sorting silently did nothing. null coords → backend returns un-sorted.
         NikhatGlowDataSource.partners = runCatching {
-            api.partners().items.map { Mappers.partner(it) }
+            api.partners(lat = lat, lon = lon, sort = lat?.let { "distance" }).items.map { Mappers.partner(it) }
         }.getOrDefault(emptyList())
     }
 
     /** Discovery for a single service — used by the partner-select screen so the
      *  list reflects who actually offers that service right now (blank until a
-     *  subscribed partner adds it). */
-    suspend fun loadPartnersForService(serviceId: String) {
+     *  subscribed partner adds it). §687 — accepts the device fix for near-me. */
+    suspend fun loadPartnersForService(serviceId: String, lat: Double? = null, lon: Double? = null) {
         NikhatGlowDataSource.partners = runCatching {
-            api.partners(serviceId = serviceId.toIntOrNull()).items.map { Mappers.partner(it) }
+            api.partners(serviceId = serviceId.toIntOrNull(), lat = lat, lon = lon,
+                sort = lat?.let { "distance" }).items.map { Mappers.partner(it) }
         }.getOrDefault(emptyList())
     }
 
@@ -344,10 +348,24 @@ class NikhatGlowRepository(context: Context) {
     }
 
     // ── Customer actions ───────────────────────────────────────────────────────
-    suspend fun addAddress(label: String, line1: String, line2: String, city: String, pincode: String, lat: Double, lon: Double) {
+    // §687 — lat/lon are NULLABLE now: a "use current location" save passes the
+    // real device fix; a pure-manual address passes null (distance features just
+    // degrade gracefully — the backend guards on lat/lon presence). Pre-§687 this
+    // hardcoded a Bangalore coordinate for EVERY address (the location bug).
+    suspend fun addAddress(label: String, line1: String, line2: String, city: String, pincode: String, lat: Double? = null, lon: Double? = null) {
         api.addAddress(AddressCreateReq(label, line1, line2.ifBlank { null }, city, pincode, lat, lon, _addresses.value.isEmpty()))
         refreshAddresses()
     }
+
+    // §687 — Ola Maps geo proxy passthroughs (server injects the REST key).
+    suspend fun geoAutocomplete(q: String, lat: Double? = null, lon: Double? = null) =
+        runCatching { api.geoAutocomplete(q, lat, lon).suggestions }.getOrDefault(emptyList())
+
+    suspend fun geoReverse(lat: Double, lon: Double) =
+        runCatching { api.geoReverse(lat, lon) }.getOrNull()
+
+    suspend fun geoDirections(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double) =
+        runCatching { api.geoDirections(fromLat, fromLon, toLat, toLon) }.getOrNull()
 
     suspend fun deleteAddress(id: Long) {
         api.deleteAddress(id.toInt())

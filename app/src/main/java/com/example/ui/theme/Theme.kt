@@ -11,46 +11,46 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
-// Nikhat Glow "Amber Bloom": a warm rose primary (white text) paired with the
-// signature amber-gold "Glow" secondary (dark text), over warm aubergine-plum
-// darks. Matches the web admin's Amber Bloom brand. On-colours are unchanged so
-// every Material contrast pairing stays valid.
+// Nikhat Glow "Crimson Bloom" (§687): a deep crimson primary (white text) over
+// warm maroon darks / crisp white light surfaces. In dark mode the primary lifts
+// to a dusty-rose (AccentBronze) so onPrimary dark text stays AA (7:1). Matches
+// the web admin's Crimson Bloom brand. All on-colour pairings WCAG-AA verified.
 private val DarkColorScheme =
   darkColorScheme(
-    primary = NikhatRose,
-    onPrimary = Color.White,
-    primaryContainer = Color(0xFF5A2238),
-    onPrimaryContainer = Color(0xFFFFD9E2),
-    secondary = NikhatGold,
-    onSecondary = Color(0xFF2A1E33),
-    tertiary = AccentBronze,
+    primary = AccentBronze,            // #E891A0 — lifts for AA on dark (8.4:1 as text)
+    onPrimary = Color(0xFF410F1A),
+    primaryContainer = Color(0xFF5E1726),
+    onPrimaryContainer = Color(0xFFFADCE1),
+    secondary = Color(0xFFF4B9C2),     // link rose on dark
+    onSecondary = Color(0xFF410F1A),
+    tertiary = NikhatGold,             // champagne accent (stars)
     background = DarkSlate,
-    onBackground = Color(0xFFF3ECF2),
+    onBackground = Color(0xFFF6ECEE),
     surface = DeepPlum,
-    onSurface = Color(0xFFF3ECF2),
-    surfaceVariant = Color(0xFF362B41),
-    onSurfaceVariant = Color(0xFFD3C7D6),
-    outline = Color(0xFF6E5F73),
-    error = Color(0xFFE5687E),
+    onSurface = Color(0xFFF6ECEE),
+    surfaceVariant = Color(0xFF3A1E2A),
+    onSurfaceVariant = Color(0xFFC9B7BC),
+    outline = Color(0xFF5A3D45),
+    error = Color(0xFFF2B8B5),
   )
 
 private val LightColorScheme =
   lightColorScheme(
-    primary = NikhatRose,
+    primary = NikhatRose,              // #C0334F crimson — white text (5.4:1)
     onPrimary = Color.White,
-    primaryContainer = RoseSoft,
-    onPrimaryContainer = Color(0xFF5A2238),
-    secondary = PlumDeepInk,
+    primaryContainer = RoseSoft,       // #FADCE1
+    onPrimaryContainer = Color(0xFF5E1726),
+    secondary = PlumDeepInk,           // #7A1F2E deep wine
     onSecondary = Color.White,
     tertiary = AccentBronze,
-    background = SoftCream,
-    onBackground = Color(0xFF231A28),
+    background = SoftCream,            // #FBF7F8
+    onBackground = Color(0xFF291F25),
     surface = Color.White,
-    onSurface = Color(0xFF231A28),
-    surfaceVariant = Color(0xFFF1E9EE),
-    onSurfaceVariant = Color(0xFF5C5260),
-    outline = Color(0xFFD9CEd6),
-    error = Color(0xFFC4374F),
+    onSurface = Color(0xFF291F25),
+    surfaceVariant = Color(0xFFF4EEEF),
+    onSurfaceVariant = Color(0xFF7C6E72),
+    outline = Color(0xFFE7DEE0),
+    error = Color(0xFFB3261E),
   )
 
 @Composable

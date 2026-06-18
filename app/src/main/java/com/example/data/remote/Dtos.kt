@@ -122,6 +122,49 @@ data class SlotDto(
 @JsonClass(generateAdapter = true)
 data class SlotsResp(val slots: List<SlotDto> = emptyList())
 
+// ── Geo (§687 — Ola Maps proxy responses) ────────────────────────────────────
+@JsonClass(generateAdapter = true)
+data class GeoSuggestionDto(
+    @Json(name = "place_id") val placeId: String? = null,
+    val title: String? = null,
+    val subtitle: String? = null,
+    val lat: Double? = null,
+    val lon: Double? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class GeoSuggestionsResp(
+    val suggestions: List<GeoSuggestionDto> = emptyList(),
+    @Json(name = "_disabled") val disabled: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class GeoReverseResp(
+    val address: String? = null,
+    val city: String? = null,
+    val pincode: String? = null,
+    val lat: Double? = null,
+    val lon: Double? = null,
+    @Json(name = "_disabled") val disabled: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class GeoGeocodeResultDto(val address: String? = null, val lat: Double? = null, val lon: Double? = null)
+
+@JsonClass(generateAdapter = true)
+data class GeoGeocodeResp(
+    val results: List<GeoGeocodeResultDto> = emptyList(),
+    @Json(name = "_disabled") val disabled: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class GeoDirectionsResp(
+    val polyline: String = "",
+    @Json(name = "distance_m") val distanceM: Int = 0,
+    @Json(name = "duration_s") val durationS: Int = 0,
+    @Json(name = "_disabled") val disabled: Boolean = false,
+)
+
 // ── Addresses ────────────────────────────────────────────────────────────────
 @JsonClass(generateAdapter = true)
 data class AddressDto(

@@ -48,6 +48,28 @@ interface NikhatGlowApi {
     @GET("catalog/search")
     suspend fun search(@Query("q") q: String? = null, @Query("category") category: Int? = null): ServicesResp
 
+    // ── Geo (§687 — server-side Ola Maps proxy; the REST key stays on the server) ──
+    @GET("geo/autocomplete")
+    suspend fun geoAutocomplete(
+        @Query("q") q: String,
+        @Query("lat") lat: Double? = null,
+        @Query("lon") lon: Double? = null,
+    ): GeoSuggestionsResp
+
+    @GET("geo/reverse")
+    suspend fun geoReverse(@Query("lat") lat: Double, @Query("lon") lon: Double): GeoReverseResp
+
+    @GET("geo/geocode")
+    suspend fun geoGeocode(@Query("address") address: String): GeoGeocodeResp
+
+    @GET("geo/directions")
+    suspend fun geoDirections(
+        @Query("from_lat") fromLat: Double,
+        @Query("from_lon") fromLon: Double,
+        @Query("to_lat") toLat: Double,
+        @Query("to_lon") toLon: Double,
+    ): GeoDirectionsResp
+
     // ── Partner discovery ─────────────────────────────────────────────────────
     @GET("customer/partners")
     suspend fun partners(

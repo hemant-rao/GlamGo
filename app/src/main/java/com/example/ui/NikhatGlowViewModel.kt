@@ -185,10 +185,39 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch { runCatching { repository.loadPartnerReviews(partnerId) } }
     }
 
-    /** Refresh discovery for the service the customer is about to browse. */
+    /** Refresh discovery for the service the customer is about to browse.
+     *  §687 — sends the device fix (if captured) so the list is distance-sorted. */
     fun loadPartnersForService(serviceId: String) {
-        viewModelScope.launch { runCatching { repository.loadPartnersForService(serviceId) } }
+        val loc = _deviceLocation.value
+        viewModelScope.launch { runCatching { repository.loadPartnersForService(serviceId, loc?.first, loc?.second) } }
     }
+
+    // ── §687 device location (the GPS fix) ────────────────────────────────────
+    // Real device fix, captured once permission is granted. Null until then —
+    // discovery still works (just un-sorted) and manual address entry is allowed.
+    private val _deviceLocation = MutableStateFlow<Pair<Double, Double>?>(null)
+    val deviceLocation: StateFlow<Pair<Double, Double>?> = _deviceLocation.asStateFlow()
+
+    /** Read the current device fix into state, then refresh nearby discovery so
+     *  "near me" engages immediately. Safe to call after a permission grant —
+     *  returns silently (state stays null) if permission/location is unavailable. */
+    fun captureDeviceLocation(onResult: ((Pair<Double, Double>?) -> Unit)? = null) {
+        viewModelScope.launch {
+            val loc = com.example.data.LocationHelper.current(getApplication())
+            if (loc != null) {
+                _deviceLocation.value = loc
+                runCatching { repository.hydrateCatalog(loc.first, loc.second) }
+            }
+            onResult?.invoke(loc)
+        }
+    }
+
+    /** Address search-as-you-type via our Ola Maps proxy. */
+    suspend fun searchPlaces(q: String) =
+        if (q.isBlank()) emptyList() else repository.geoAutocomplete(q, _deviceLocation.value?.first, _deviceLocation.value?.second)
+
+    /** Turn a GPS fix into a human-readable address (prefill the manual form). */
+    suspend fun reverseGeocode(lat: Double, lon: Double) = repository.geoReverse(lat, lon)
 
     fun isFavorite(partnerId: String): Flow<Boolean> = repository.isFavoriteFlow(partnerId)
 
@@ -388,9 +417,16 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch { runCatching { repository.updateProfile(name, email, bio, experience) } }
     }
 
-    fun addNewAddress(label: String, line1: String, line2: String, city: String, pincode: String) {
+    // §687 — lat/lon now flow through from a real source: a "use current location"
+    // save passes the device fix (or a search-suggestion's coords); a pure-manual
+    // entry passes null. Pre-§687 this hardcoded Bangalore (12.9716, 77.5946) for
+    // EVERY address — the root of the "location not working" bug.
+    fun addNewAddress(
+        label: String, line1: String, line2: String, city: String, pincode: String,
+        lat: Double? = null, lon: Double? = null,
+    ) {
         viewModelScope.launch {
-            runCatching { repository.addAddress(label, line1, line2, city, pincode, 12.9716, 77.5946) }
+            runCatching { repository.addAddress(label, line1, line2, city, pincode, lat, lon) }
         }
     }
 
