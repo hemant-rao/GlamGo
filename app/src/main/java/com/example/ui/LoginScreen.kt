@@ -20,7 +20,7 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.DeepPlum
-import com.example.ui.theme.GlamRose
+import com.example.ui.theme.NikhatRose
 
 /**
  * OTP login + signup. The user first chooses a role (customer or partner) — this
@@ -39,7 +39,7 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(GlamRose.copy(alpha = 0.16f), MaterialTheme.colorScheme.background)
+                    listOf(NikhatRose.copy(alpha = 0.16f), MaterialTheme.colorScheme.background)
                 )
             )
             .windowInsetsPadding(WindowInsets.systemBars),
@@ -55,7 +55,7 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                 modifier = Modifier
                     .size(76.dp)
                     .clip(RoundedCornerShape(22.dp))
-                    .background(Brush.linearGradient(listOf(GlamRose, DeepPlum))),
+                    .background(Brush.linearGradient(listOf(NikhatRose, DeepPlum))),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Filled.Spa, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White)
@@ -140,7 +140,7 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                             Text(
                                 "Dev OTP: $it",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = GlamRose,
+                                color = NikhatRose,
                             )
                         }
                     }
@@ -159,7 +159,7 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                         },
                         enabled = !viewModel.authBusy,
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = GlamRose),
+                        colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                     ) {
                         if (viewModel.authBusy) {
@@ -181,10 +181,10 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(
                             onClick = { viewModel.isGuestMode = true },
-                            border = BorderStroke(1.dp, GlamRose),
+                            border = BorderStroke(1.dp, NikhatRose),
                             shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth().height(52.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = GlamRose),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
                         ) {
                             Text(
                                 "Bina Login ke Explore Karein (Browse as Guest)",
@@ -231,15 +231,15 @@ private fun RolePill(
             onClick = onClick,
             modifier = modifier.height(46.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = GlamRose),
+            colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
         ) { Text(label, fontWeight = FontWeight.SemiBold) }
     } else {
         OutlinedButton(
             onClick = onClick,
             modifier = modifier.height(46.dp),
             shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, GlamRose),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = GlamRose),
+            border = BorderStroke(1.dp, NikhatRose),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
         ) { Text(label, fontWeight = FontWeight.SemiBold) }
     }
 }

@@ -317,12 +317,12 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
     var pushRemindersEnabled by mutableStateOf(getPushRemindersPref()); private set
 
     private fun getPushRemindersPref(): Boolean =
-        getApplication<Application>().getSharedPreferences("glamgo_prefs", Context.MODE_PRIVATE)
+        getApplication<Application>().getSharedPreferences("nikhatglow_prefs", Context.MODE_PRIVATE)
             .getBoolean("push_reminders_enabled", true)
 
     fun updatePushReminders(enabled: Boolean) {
         pushRemindersEnabled = enabled
-        getApplication<Application>().getSharedPreferences("glamgo_prefs", Context.MODE_PRIVATE)
+        getApplication<Application>().getSharedPreferences("nikhatglow_prefs", Context.MODE_PRIVATE)
             .edit().putBoolean("push_reminders_enabled", enabled).apply()
     }
 

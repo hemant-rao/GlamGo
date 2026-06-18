@@ -22,8 +22,8 @@ val Pink40 = Color(0xFF7D5260)
 // amber glow, and the darks become warm aubergine-plum.
 // ─────────────────────────────────────────────────────────────────────────────
 
-val GlamRose = Color(0xFFE85C6A)     // warm rose-coral primary (bridges to amber); white text
-val GlamGold = Color(0xFFE0A458)     // amber-gold "Glow" accent (the signature)
+val NikhatRose = Color(0xFFE85C6A)     // warm rose-coral primary (bridges to amber); white text
+val NikhatGold = Color(0xFFE0A458)     // amber-gold "Glow" accent (the signature)
 val DeepPlum = Color(0xFF2A1B2E)     // elevated aubergine-plum surface
 val DarkSlate = Color(0xFF1C1420)    // warm aubergine background
 val SoftCream = Color(0xFFFBF6F1)    // warm near-white

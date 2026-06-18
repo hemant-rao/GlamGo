@@ -35,8 +35,8 @@ import androidx.compose.ui.unit.sp
 import com.example.data.remote.CartItemDto
 import com.example.ui.theme.DarkSlate
 import com.example.ui.theme.DeepPlum
-import com.example.ui.theme.GlamGold
-import com.example.ui.theme.GlamRose
+import com.example.ui.theme.NikhatGold
+import com.example.ui.theme.NikhatRose
 
 // ---------------- CART (single-partner, multi-service) ----------------
 
@@ -58,7 +58,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
             actions = {
                 if (items.isNotEmpty()) {
                     TextButton(onClick = { viewModel.clearCart() }) {
-                        Text("Clear", color = GlamRose)
+                        Text("Clear", color = NikhatRose)
                     }
                 }
             }
@@ -80,7 +80,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                 Spacer(modifier = Modifier.height(16.dp))
                 Button(
                     onClick = { viewModel.currentScreen = Screen.CustomerHome },
-                    colors = ButtonDefaults.buttonColors(containerColor = GlamRose)
+                    colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                 ) { Text("Explore Services") }
             }
             return
@@ -88,7 +88,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
 
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             cart?.partnerName?.let {
-                Text("Booking from $it", fontWeight = FontWeight.Bold, color = GlamRose)
+                Text("Booking from $it", fontWeight = FontWeight.Bold, color = NikhatRose)
             }
 
             LazyColumn(
@@ -116,7 +116,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                             IconButton(onClick = { viewModel.updateCartQty(item.id, item.qty + 1) }) {
                                 Icon(Icons.Default.Add, contentDescription = "More")
                             }
-                            Text("Rs ${item.lineTotalPaise / 100}", fontWeight = FontWeight.Bold, color = GlamGold)
+                            Text("Rs ${item.lineTotalPaise / 100}", fontWeight = FontWeight.Bold, color = NikhatGold)
                             IconButton(onClick = { viewModel.removeCartItem(item.id) }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color.Gray)
                             }
@@ -129,7 +129,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Estimated subtotal", fontWeight = FontWeight.Bold)
-                        Text("Rs ${(cart?.subtotalPaise ?: 0L) / 100}", fontWeight = FontWeight.Bold, color = GlamGold)
+                        Text("Rs ${(cart?.subtotalPaise ?: 0L) / 100}", fontWeight = FontWeight.Bold, color = NikhatGold)
                     }
                     Text(
                         "Estimate only - you pay the professional directly after the service.",
@@ -149,7 +149,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                         },
                         enabled = !placing,
                         modifier = Modifier.fillMaxWidth().height(50.dp).testTag("send_booking_request_btn"),
-                        colors = ButtonDefaults.buttonColors(containerColor = GlamRose)
+                        colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                     ) {
                         Text(if (placing) "Sending..." else "Send Booking Request", fontWeight = FontWeight.SemiBold)
                     }
@@ -221,7 +221,7 @@ fun MyBookingsScreen(viewModel: NikhatGlowViewModel) {
                             )
                         }
                         IconButton(onClick = { viewModel.currentScreen = Screen.BookingDetail(booking.id) }) {
-                            Icon(Icons.Default.ArrowForward, contentDescription = "Open", tint = GlamGold)
+                            Icon(Icons.Default.ArrowForward, contentDescription = "Open", tint = NikhatGold)
                         }
                     }
                 }
@@ -256,7 +256,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                 Text(activeUser?.name ?: "Partner", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 Text(
                     "Rating ${activeUser?.averageRating ?: 0f}  -  ${activeUser?.completedJobs ?: 0} jobs done",
-                    color = GlamGold, fontSize = 13.sp
+                    color = NikhatGold, fontSize = 13.sp
                 )
             }
         }
@@ -264,14 +264,14 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = GlamRose)
+                    Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = NikhatRose)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Verification (KYC)", fontWeight = FontWeight.Bold)
                         Text((activeUser?.kycStatus ?: "not_started").replace("_", " "), fontSize = 12.sp, color = Color.Gray)
                     }
                     TextButton(onClick = { viewModel.currentScreen = Screen.PartnerKyc }) {
-                        Text("Manage", color = GlamRose)
+                        Text("Manage", color = NikhatRose)
                     }
                 }
             }
@@ -279,7 +279,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
             val sub by viewModel.subscription.collectAsState()
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = GlamGold)
+                    Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = NikhatGold)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Subscription (₹99/month)", fontWeight = FontWeight.Bold)
@@ -288,35 +288,35 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                         Text(status.replaceFirstChar { it.uppercase() } + tail, fontSize = 12.sp, color = Color.Gray)
                     }
                     TextButton(onClick = { viewModel.currentScreen = Screen.PartnerSubscription }) {
-                        Text("Manage", color = GlamRose)
+                        Text("Manage", color = NikhatRose)
                     }
                 }
             }
 
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.EventNote, contentDescription = null, tint = GlamRose)
+                    Icon(Icons.Default.EventNote, contentDescription = null, tint = NikhatRose)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Availability", fontWeight = FontWeight.Bold)
                         Text("Working hours, days & leaves", fontSize = 12.sp, color = Color.Gray)
                     }
                     TextButton(onClick = { viewModel.currentScreen = Screen.PartnerAvailability }) {
-                        Text("Manage", color = GlamRose)
+                        Text("Manage", color = NikhatRose)
                     }
                 }
             }
 
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Person, contentDescription = null, tint = GlamGold)
+                    Icon(Icons.Default.Person, contentDescription = null, tint = NikhatGold)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Portfolio", fontWeight = FontWeight.Bold)
                         Text("Showcase your work", fontSize = 12.sp, color = Color.Gray)
                     }
                     TextButton(onClick = { viewModel.currentScreen = Screen.PartnerPortfolio }) {
-                        Text("Manage", color = GlamRose)
+                        Text("Manage", color = NikhatRose)
                     }
                 }
             }
@@ -337,15 +337,15 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                     viewModel.updateProfile(nameState, emailState, activeUser?.partnerBio ?: "", activeUser?.partnerExperience ?: 0)
                     saved = true
                 },
-                colors = ButtonDefaults.buttonColors(containerColor = GlamRose),
+                colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                 modifier = Modifier.fillMaxWidth().height(48.dp)
             ) { Text(if (saved) "Saved" else "Save Changes") }
 
             OutlinedButton(
                 onClick = { viewModel.logout() },
                 modifier = Modifier.fillMaxWidth().height(50.dp).testTag("logout_button"),
-                border = BorderStroke(1.dp, GlamRose),
-                colors = ButtonDefaults.outlinedButtonColors(contentColor = GlamRose),
+                border = BorderStroke(1.dp, NikhatRose),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
             ) {
                 Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))

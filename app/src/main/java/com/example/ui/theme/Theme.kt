@@ -17,11 +17,11 @@ import androidx.compose.ui.platform.LocalContext
 // every Material contrast pairing stays valid.
 private val DarkColorScheme =
   darkColorScheme(
-    primary = GlamRose,
+    primary = NikhatRose,
     onPrimary = Color.White,
     primaryContainer = Color(0xFF5A2238),
     onPrimaryContainer = Color(0xFFFFD9E2),
-    secondary = GlamGold,
+    secondary = NikhatGold,
     onSecondary = Color(0xFF2A1E33),
     tertiary = AccentBronze,
     background = DarkSlate,
@@ -36,7 +36,7 @@ private val DarkColorScheme =
 
 private val LightColorScheme =
   lightColorScheme(
-    primary = GlamRose,
+    primary = NikhatRose,
     onPrimary = Color.White,
     primaryContainer = RoseSoft,
     onPrimaryContainer = Color(0xFF5A2238),

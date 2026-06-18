@@ -10,7 +10,7 @@ import android.content.Context
  */
 class TokenStore(context: Context) {
     private val prefs = context.applicationContext
-        .getSharedPreferences("glamgo_session", Context.MODE_PRIVATE)
+        .getSharedPreferences("nikhatglow_session", Context.MODE_PRIVATE)
 
     var activeRole: String?
         get() = prefs.getString(KEY_ACTIVE_ROLE, null)

@@ -39,8 +39,8 @@ import com.example.data.NikhatGlowDataSource
 import com.example.data.Partner
 import com.example.ui.theme.DarkSlate
 import com.example.ui.theme.DeepPlum
-import com.example.ui.theme.GlamGold
-import com.example.ui.theme.GlamRose
+import com.example.ui.theme.NikhatGold
+import com.example.ui.theme.NikhatRose
 
 // ───────────────────────────── small shared header ──────────────────────────
 @Composable
@@ -130,20 +130,20 @@ fun FavouritesScreen(viewModel: NikhatGlowViewModel) {
                             )
                         } else {
                             Box(
-                                modifier = Modifier.size(48.dp).clip(CircleShape).background(GlamRose.copy(alpha = 0.2f)),
+                                modifier = Modifier.size(48.dp).clip(CircleShape).background(NikhatRose.copy(alpha = 0.2f)),
                                 contentAlignment = Alignment.Center
-                            ) { Text(partner.name.take(1).uppercase(), color = GlamRose, fontWeight = FontWeight.Bold) }
+                            ) { Text(partner.name.take(1).uppercase(), color = NikhatRose, fontWeight = FontWeight.Bold) }
                         }
                         Spacer(Modifier.width(12.dp))
                         Column(modifier = Modifier.weight(1f)) {
                             Text(partner.name, fontWeight = FontWeight.Bold)
                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                Icon(Icons.Default.Star, contentDescription = null, tint = GlamGold, modifier = Modifier.size(14.dp))
+                                Icon(Icons.Default.Star, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(14.dp))
                                 Text(" ${partner.rating} · ${partner.reviewsCount} reviews", fontSize = 12.sp, color = Color.Gray)
                             }
                         }
                         IconButton(onClick = { viewModel.toggleFavorite(partner.id) }) {
-                            Icon(Icons.Default.Favorite, contentDescription = "Remove", tint = GlamRose)
+                            Icon(Icons.Default.Favorite, contentDescription = "Remove", tint = NikhatRose)
                         }
                     }
                 }
@@ -188,7 +188,7 @@ fun PartnerReviewsScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                                 Icon(
                                     Icons.Default.Star,
                                     contentDescription = null,
-                                    tint = if (i < r.rating) GlamGold else Color.Gray.copy(alpha = 0.4f),
+                                    tint = if (i < r.rating) NikhatGold else Color.Gray.copy(alpha = 0.4f),
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -227,7 +227,7 @@ fun CustomerDashboardScreen(viewModel: NikhatGlowViewModel) {
                 StatTile("Completed", completed.toString(), Modifier.weight(1f))
                 StatTile("Favourites", favorites.size.toString(), Modifier.weight(1f))
             }
-            Text("Recent bookings", fontWeight = FontWeight.Bold, color = GlamGold)
+            Text("Recent bookings", fontWeight = FontWeight.Bold, color = NikhatGold)
             if (recent.isEmpty()) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Text("No bookings yet.", modifier = Modifier.padding(16.dp), color = Color.Gray)
@@ -245,7 +245,7 @@ fun CustomerDashboardScreen(viewModel: NikhatGlowViewModel) {
                                 Text(b.serviceName, fontWeight = FontWeight.Bold)
                                 Text("${b.partnerName} · ${b.dateTimeSlot}", fontSize = 12.sp, color = Color.Gray)
                             }
-                            Text(b.status.replace("_", " ").uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = GlamRose)
+                            Text(b.status.replace("_", " ").uppercase(), fontSize = 10.sp, fontWeight = FontWeight.Bold, color = NikhatRose)
                         }
                     }
                 }
@@ -260,10 +260,10 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
     Card(
         modifier = modifier,
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-        border = BorderStroke(1.dp, GlamGold.copy(alpha = 0.25f))
+        border = BorderStroke(1.dp, NikhatGold.copy(alpha = 0.25f))
     ) {
         Column(modifier = Modifier.padding(14.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Text(value, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = GlamGold)
+            Text(value, fontWeight = FontWeight.Bold, fontSize = 22.sp, color = NikhatGold)
             Text(label, fontSize = 11.sp, color = Color.Gray, textAlign = TextAlign.Center)
         }
     }
@@ -304,7 +304,7 @@ fun PartnerAvailabilityScreen(viewModel: NikhatGlowViewModel) {
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Working hours (24h, e.g. 09:00)", fontWeight = FontWeight.Bold, color = GlamGold)
+                    Text("Working hours (24h, e.g. 09:00)", fontWeight = FontWeight.Bold, color = NikhatGold)
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                         OutlinedTextField(
                             value = start, onValueChange = { start = it },
@@ -320,7 +320,7 @@ fun PartnerAvailabilityScreen(viewModel: NikhatGlowViewModel) {
 
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Working days", fontWeight = FontWeight.Bold, color = GlamGold)
+                    Text("Working days", fontWeight = FontWeight.Bold, color = NikhatGold)
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         DOW_LABELS.forEachIndexed { idx, label ->
                             val js = DOW_JS[idx]
@@ -329,7 +329,7 @@ fun PartnerAvailabilityScreen(viewModel: NikhatGlowViewModel) {
                                 modifier = Modifier
                                     .size(38.dp)
                                     .clip(CircleShape)
-                                    .background(if (on) GlamRose else Color.Gray.copy(alpha = 0.15f))
+                                    .background(if (on) NikhatRose else Color.Gray.copy(alpha = 0.15f))
                                     .clickable {
                                         selectedDays = if (on) selectedDays - js else selectedDays + js
                                     },
@@ -348,7 +348,7 @@ fun PartnerAvailabilityScreen(viewModel: NikhatGlowViewModel) {
 
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Leave dates (ISO, e.g. 2026-07-01)", fontWeight = FontWeight.Bold, color = GlamGold)
+                    Text("Leave dates (ISO, e.g. 2026-07-01)", fontWeight = FontWeight.Bold, color = NikhatGold)
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         OutlinedTextField(
                             value = newLeave, onValueChange = { newLeave = it },
@@ -360,11 +360,11 @@ fun PartnerAvailabilityScreen(viewModel: NikhatGlowViewModel) {
                                 leaves = leaves + v
                                 newLeave = ""
                             }
-                        }) { Icon(Icons.Default.Add, contentDescription = "Add leave", tint = GlamRose) }
+                        }) { Icon(Icons.Default.Add, contentDescription = "Add leave", tint = NikhatRose) }
                     }
                     leaves.forEach { d ->
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = GlamGold, modifier = Modifier.size(18.dp))
+                            Icon(Icons.Default.CalendarMonth, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(18.dp))
                             Text("  $d", modifier = Modifier.weight(1f))
                             IconButton(onClick = { leaves = leaves - d }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color.Gray)
@@ -378,14 +378,14 @@ fun PartnerAvailabilityScreen(viewModel: NikhatGlowViewModel) {
                 Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
             }
             if (viewModel.availabilitySaved) {
-                Text("✓ Availability saved.", color = GlamGold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                Text("✓ Availability saved.", color = NikhatGold, fontSize = 13.sp, fontWeight = FontWeight.Bold)
             }
             Button(
                 onClick = {
                     viewModel.saveAvailability(start.trim(), end.trim(), selectedDays.sorted(), leaves)
                 },
                 enabled = !viewModel.availabilityBusy,
-                colors = ButtonDefaults.buttonColors(containerColor = GlamRose),
+                colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                 modifier = Modifier.fillMaxWidth().height(50.dp)
             ) { Text(if (viewModel.availabilityBusy) "Saving…" else "Save Availability", fontWeight = FontWeight.SemiBold) }
             Spacer(Modifier.height(24.dp))
@@ -417,17 +417,17 @@ fun PartnerEarningsScreen(viewModel: NikhatGlowViewModel) {
             }
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, GlamGold.copy(alpha = 0.25f))
+                border = BorderStroke(1.dp, NikhatGold.copy(alpha = 0.25f))
             ) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.Payments, contentDescription = null, tint = GlamGold)
+                    Icon(Icons.Default.Payments, contentDescription = null, tint = NikhatGold)
                     Spacer(Modifier.width(12.dp))
                     Text("Completed jobs", modifier = Modifier.weight(1f), fontWeight = FontWeight.SemiBold)
-                    Text("${e?.completedJobs ?: 0}", fontWeight = FontWeight.Bold, color = GlamGold)
+                    Text("${e?.completedJobs ?: 0}", fontWeight = FontWeight.Bold, color = NikhatGold)
                 }
             }
 
-            Text("Recent completed jobs", fontWeight = FontWeight.Bold, color = GlamGold)
+            Text("Recent completed jobs", fontWeight = FontWeight.Bold, color = NikhatGold)
             val recent = e?.recent ?: emptyList()
             if (recent.isEmpty()) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
@@ -437,13 +437,13 @@ fun PartnerEarningsScreen(viewModel: NikhatGlowViewModel) {
                 recent.forEach { r ->
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                         Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = GlamRose, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("Booking #${r.bookingId}", fontWeight = FontWeight.SemiBold)
                                 Text((r.at ?: "").take(10), fontSize = 12.sp, color = Color.Gray)
                             }
-                            Text(rupees(r.totalPaise), fontWeight = FontWeight.Bold, color = GlamGold)
+                            Text(rupees(r.totalPaise), fontWeight = FontWeight.Bold, color = NikhatGold)
                         }
                     }
                 }
@@ -479,11 +479,11 @@ fun PartnerAnalyticsScreen(viewModel: NikhatGlowViewModel) {
             // Profile views
             Card(
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, GlamGold.copy(alpha = 0.25f))
+                border = BorderStroke(1.dp, NikhatGold.copy(alpha = 0.25f))
             ) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Visibility, contentDescription = null, tint = GlamGold)
+                        Icon(Icons.Default.Visibility, contentDescription = null, tint = NikhatGold)
                         Spacer(Modifier.width(8.dp))
                         Text("Profile views", fontWeight = FontWeight.Bold)
                     }
@@ -504,7 +504,7 @@ fun PartnerAnalyticsScreen(viewModel: NikhatGlowViewModel) {
                                         .weight(1f)
                                         .fillMaxHeight(frac.coerceIn(0.04f, 1f))
                                         .clip(RoundedCornerShape(topStart = 3.dp, topEnd = 3.dp))
-                                        .background(GlamRose)
+                                        .background(NikhatRose)
                                 )
                             }
                         }
@@ -516,7 +516,7 @@ fun PartnerAnalyticsScreen(viewModel: NikhatGlowViewModel) {
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.BarChart, contentDescription = null, tint = GlamGold)
+                        Icon(Icons.Default.BarChart, contentDescription = null, tint = NikhatGold)
                         Spacer(Modifier.width(8.dp))
                         Text("Rating distribution", fontWeight = FontWeight.Bold)
                     }
@@ -526,7 +526,7 @@ fun PartnerAnalyticsScreen(viewModel: NikhatGlowViewModel) {
                         val count = dist[star.toString()] ?: 0
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text("$star", modifier = Modifier.width(16.dp), fontWeight = FontWeight.Bold)
-                            Icon(Icons.Default.Star, contentDescription = null, tint = GlamGold, modifier = Modifier.size(14.dp))
+                            Icon(Icons.Default.Star, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(14.dp))
                             Spacer(Modifier.width(8.dp))
                             Box(
                                 modifier = Modifier
@@ -540,7 +540,7 @@ fun PartnerAnalyticsScreen(viewModel: NikhatGlowViewModel) {
                                         .fillMaxHeight()
                                         .fillMaxWidth(count.toFloat() / maxCount)
                                         .clip(RoundedCornerShape(7.dp))
-                                        .background(GlamGold)
+                                        .background(NikhatGold)
                                 )
                             }
                             Text("  $count", fontSize = 12.sp, color = Color.Gray)
@@ -553,7 +553,7 @@ fun PartnerAnalyticsScreen(viewModel: NikhatGlowViewModel) {
             val f = a?.funnel
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Booking funnel", fontWeight = FontWeight.Bold, color = GlamGold)
+                    Text("Booking funnel", fontWeight = FontWeight.Bold, color = NikhatGold)
                     FunnelRow("Pending", f?.pending ?: 0)
                     FunnelRow("Accepted", f?.accepted ?: 0)
                     FunnelRow("Completed", f?.completed ?: 0)
@@ -570,7 +570,7 @@ fun PartnerAnalyticsScreen(viewModel: NikhatGlowViewModel) {
 private fun FunnelRow(label: String, count: Int) {
     Row(modifier = Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         Text(label, modifier = Modifier.weight(1f), fontSize = 13.sp)
-        Text("$count", fontWeight = FontWeight.Bold, color = GlamGold)
+        Text("$count", fontWeight = FontWeight.Bold, color = NikhatGold)
     }
 }
 
@@ -665,7 +665,7 @@ fun PartnerPortfolioScreen(viewModel: NikhatGlowViewModel) {
                         uploadId = ""; imageUrl = ""; caption = ""
                         showAdd = false
                     }
-                ) { Text(if (viewModel.portfolioBusy) "Adding…" else "Add", color = GlamRose) }
+                ) { Text(if (viewModel.portfolioBusy) "Adding…" else "Add", color = NikhatRose) }
             },
             dismissButton = {
                 TextButton(onClick = { showAdd = false }) { Text("Cancel") }

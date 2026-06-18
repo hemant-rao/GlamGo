@@ -42,7 +42,7 @@ abstract class AppDatabase : RoomDatabase() {
                 val instance = Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "glamgo_database"
+                    "nikhatglow_database"
                 )
                     .fallbackToDestructiveMigration()
                     .addCallback(object : Callback() {
