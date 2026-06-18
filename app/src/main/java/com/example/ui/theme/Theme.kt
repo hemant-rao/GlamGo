@@ -11,9 +11,10 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
-// Rose is the hero action colour in both schemes (modern, on-brand with the
-// web admin). Gold is demoted to a secondary champagne accent. Darks are warm
-// charcoal-plum so the app feels premium rather than harsh.
+// Nikhat Glow "Amber Bloom": a warm rose primary (white text) paired with the
+// signature amber-gold "Glow" secondary (dark text), over warm aubergine-plum
+// darks. Matches the web admin's Amber Bloom brand. On-colours are unchanged so
+// every Material contrast pairing stays valid.
 private val DarkColorScheme =
   darkColorScheme(
     primary = GlamRose,
@@ -55,8 +56,8 @@ private val LightColorScheme =
 @Composable
 fun MyApplicationTheme(
   darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic colour is intentionally OFF so GlamGo's brand palette is consistent
-  // across devices (Material You would override our rose/plum identity).
+  // Dynamic colour is intentionally OFF so Nikhat Glow's brand palette is
+  // consistent across devices (Material You would override our Amber Bloom).
   dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {

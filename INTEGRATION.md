@@ -1,9 +1,9 @@
-# GlamGo Android — Backend API Integration
+# Nikhat Glow Android — Backend API Integration
 
 This app was originally a **local-only** Jetpack Compose prototype (Room + mock
 data, no login). It has been converted to a **100% server-backed** client that
-talks to the live GlamGo backend that ships inside this repo
-(`backend/app/glamgo/`, mounted at `/api/glamgo/v1/*`).
+talks to the live Nikhat Glow backend (internal codename `glamgo`, mounted at
+`/api/glamgo/v1/*` — the API path is kept stable as a frozen mobile contract).
 
 ## What changed
 

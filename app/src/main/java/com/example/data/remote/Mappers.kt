@@ -55,7 +55,7 @@ object Mappers {
 
     fun partner(d: PartnerDto): Partner = Partner(
         id = d.id.toString(),
-        name = d.name ?: "GlamGo Partner",
+        name = d.name ?: "Nikhat Glow Partner",
         avatarUrl = d.avatarUrl ?: "",
         rating = d.ratingAvg,
         reviewsCount = d.ratingCount,
@@ -73,7 +73,7 @@ object Mappers {
      *  separate call and is patched in by the repository. */
     fun user(d: ProfileDto, role: String, walletPaise: Long = 0): UserEntity = UserEntity(
         id = "me",
-        name = d.name ?: (if (role == "partner") "GlamGo Partner" else "GlamGo Customer"),
+        name = d.name ?: (if (role == "partner") "Nikhat Glow Partner" else "Nikhat Glow Customer"),
         email = d.email ?: "",
         role = role,
         kycStatus = d.kycStatus ?: "not_started",

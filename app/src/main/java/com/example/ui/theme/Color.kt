@@ -11,30 +11,30 @@ val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
 // ─────────────────────────────────────────────────────────────────────────────
-// GlamGo refined palette (2026 polish).
+// Nikhat Glow — "Amber Bloom" palette.
 //
-// The previous palette leaned on a muddy gold (#DFB474) over a near-black plum
-// (#110611), which read harsh and dated. This refresh keeps the SAME value
-// names (so the UI code is untouched) but retunes them into a cleaner,
-// premium beauty-&-wellness scheme aligned with the web admin's
-// rose → fuchsia → plum brand: rose is the hero action colour, gold becomes a
-// brighter champagne accent, and the darks are softened to warm charcoal-plum
-// so surfaces feel modern rather than oppressive.
+// Brand identity: a warm amber-gold "Glow" over a deep aubergine-plum base with
+// a soft blush-rose accent — a lit perfume bottle at golden hour ("Nikhat" =
+// fragrance). This retune keeps the SAME value NAMES (so the 3.5k-line screen
+// code is untouched) and preserves every Material on-colour contrast pairing:
+// `primary`(rose) keeps white text, `secondary`(gold) keeps dark text. Only the
+// hex values shift — rose warms toward the amber hero, gold becomes a vivid
+// amber glow, and the darks become warm aubergine-plum.
 // ─────────────────────────────────────────────────────────────────────────────
 
-val GlamRose = Color(0xFFE84A78)     // hero rose — primary action / brand
-val GlamGold = Color(0xFFE9C46A)     // bright champagne accent (was muddy #DFB474)
-val DeepPlum = Color(0xFF2A1E33)     // elevated plum surface (was near-black)
-val DarkSlate = Color(0xFF17131F)    // warm charcoal-plum background (was #110611)
-val SoftCream = Color(0xFFFBF7F4)    // warm near-white
-val AccentBronze = Color(0xFFC9A27E) // soft rose-bronze
-val LightSage = Color(0xFFEDECE6)
-val SuccessGreen = Color(0xFF2FA36B) // fresher success green (was dull #2E7D32)
+val GlamRose = Color(0xFFE85C6A)     // warm rose-coral primary (bridges to amber); white text
+val GlamGold = Color(0xFFE0A458)     // amber-gold "Glow" accent (the signature)
+val DeepPlum = Color(0xFF2A1B2E)     // elevated aubergine-plum surface
+val DarkSlate = Color(0xFF1C1420)    // warm aubergine background
+val SoftCream = Color(0xFFFBF6F1)    // warm near-white
+val AccentBronze = Color(0xFFE8A0A8) // soft blush-rose accent
+val LightSage = Color(0xFFEDE8E2)
+val SuccessGreen = Color(0xFF2FA36B) // fresher success green
 val OrderOrange = Color(0xFFEC7A45)  // warm coral-orange
 
 // Light-scheme brand anchors.
 val PlumDeepInk = Color(0xFF3A2240)  // deep plum for light-mode primary text/brand
-val RoseSoft = Color(0xFFFCE7EE)     // rose tint for chips / containers
+val RoseSoft = Color(0xFFFBE7DC)     // warm amber-rose tint for chips / containers
 
 // Bold Typography Theme Colors (M3 SPEC) — retained for any references.
 val BoldBg = Color(0xFFFEF7FF)

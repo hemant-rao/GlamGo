@@ -33,7 +33,7 @@ object GeminiAssistant {
 
         try {
             val url = "https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=$apiKey"
-            val systemInstruction = "You are GlamGo's Smart Beauty and Wellness AI Assistant. " +
+            val systemInstruction = "You are Nikhat Glow's Smart Beauty and Wellness AI Assistant. " +
                     "Your role is to guide users to choose the best beauty services like haircut, makeup, facial, spa, and massage. " +
                     "Be friendly, professional, concise (under 3-4 sentences), and propose relevant categories or treatments like hair oiling, M3 facial, deep tissue massage, etc."
 
@@ -96,7 +96,7 @@ object GeminiAssistant {
                 "Our Signature Party Glam Makeup is popular! It uses luxury products like MAC/Huda and is applied by expert artists for a gorgeous long-lasting finish."
             }
             else -> {
-                "Welcome to GlamGo! I can recommend haircuts, facials, bridal makeups, and professional massages. Feel free to let me know any skin or muscle concerns so I can guide you!"
+                "Welcome to Nikhat Glow! I can recommend haircuts, facials, bridal makeups, and professional massages. Feel free to let me know any skin or muscle concerns so I can guide you!"
             }
         }
     }
