@@ -102,6 +102,7 @@ fun GlamMainShell(viewModel: GlamGoViewModel) {
                     is Screen.PartnerKyc -> PartnerKycScreen(viewModel)
                     is Screen.PartnerServices -> PartnerServicesScreen(viewModel)
                     is Screen.PartnerProfile -> PartnerProfileScreen(viewModel)
+                    is Screen.PartnerSubscription -> PartnerSubscriptionScreen(viewModel)
                     is Screen.PreBookingChat -> PreBookingChatScreen(viewModel, screen.service, screen.partner)
                 }
             }
@@ -209,23 +210,14 @@ fun CustomerHomeScreen(viewModel: GlamGoViewModel) {
     
     val activeAddress = addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull()
     var searchPrompt by remember { mutableStateOf("") }
-    var selectedBrandFilter by remember { mutableStateOf("All Brands") }
     var minRatingFilter by remember { mutableStateOf(0.0) }
-    
+
     val filteredServices = GlamMockDataSource.services.filter { service ->
-        val matchesSearch = searchPrompt.isBlank() || 
-            service.name.contains(searchPrompt, ignoreCase = true) || 
+        val matchesSearch = searchPrompt.isBlank() ||
+            service.name.contains(searchPrompt, ignoreCase = true) ||
             service.description.contains(searchPrompt, ignoreCase = true)
-            
-        val matchesBrand = selectedBrandFilter == "All Brands" || (
-            selectedBrandFilter.lowercase() == "l'oreal" && (service.id == "ser_001" || service.id == "ser_002") ||
-            selectedBrandFilter.lowercase() == "wella" && service.id == "ser_001" ||
-            selectedBrandFilter.lowercase() == "forest essentials" && service.id == "ser_003" ||
-            selectedBrandFilter.lowercase() == "o3+" && service.id == "ser_002"
-        )
-        
         val matchesRating = service.rating >= minRatingFilter
-        matchesSearch && matchesBrand && matchesRating
+        matchesSearch && matchesRating
     }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -315,35 +307,6 @@ fun CustomerHomeScreen(viewModel: GlamGoViewModel) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp),
                     verticalAlignment = Alignment.CenterVertically
                 ) {
-                    // Brand Filter Chip
-                    var showBrandMenu by remember { mutableStateOf(false) }
-                    Box {
-                        FilterChip(
-                            selected = selectedBrandFilter != "All Brands",
-                            onClick = { showBrandMenu = true },
-                            label = { Text(selectedBrandFilter, fontSize = 11.sp, fontWeight = FontWeight.Bold) },
-                            trailingIcon = { Icon(Icons.Default.ArrowDropDown, null, modifier = Modifier.size(16.dp)) },
-                            colors = FilterChipDefaults.filterChipColors(
-                                selectedContainerColor = GlamRose,
-                                selectedLabelColor = Color.White
-                            )
-                        )
-                        DropdownMenu(
-                            expanded = showBrandMenu,
-                            onDismissRequest = { showBrandMenu = false }
-                        ) {
-                            listOf("All Brands", "L'Oreal", "Wella", "Forest Essentials", "O3+").forEach { brand ->
-                                DropdownMenuItem(
-                                    text = { Text(brand) },
-                                    onClick = {
-                                        selectedBrandFilter = brand
-                                        showBrandMenu = false
-                                    }
-                                )
-                            }
-                        }
-                    }
-                    
                     // Rating Filter Chip
                     var showRatingMenu by remember { mutableStateOf(false) }
                     Box {
@@ -383,12 +346,9 @@ fun CustomerHomeScreen(viewModel: GlamGoViewModel) {
                         }
                     }
                     
-                    if (selectedBrandFilter != "All Brands" || minRatingFilter > 0.0) {
+                    if (minRatingFilter > 0.0) {
                         TextButton(
-                            onClick = {
-                                selectedBrandFilter = "All Brands"
-                                minRatingFilter = 0.0
-                            },
+                            onClick = { minRatingFilter = 0.0 },
                             colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = 0.6f))
                         ) {
                             Text("Clear", fontSize = 10.sp, fontWeight = FontWeight.Bold)
@@ -833,57 +793,23 @@ fun ServiceDetailScreen(viewModel: GlamGoViewModel, service: Service) {
 
 @Composable
 fun PartnerSelectScreen(viewModel: GlamGoViewModel, service: Service) {
-    val activeServices by viewModel.partnerServices.collectAsState()
     val bookings by viewModel.bookings.collectAsState()
-    val basePartners = GlamMockDataSource.partners.filter { it.servicesOffered.contains(service.id) }
-    
-    // Add real-time seller option if currently active in custom catalog
-    val activeSetting = activeServices.firstOrNull { it.serviceId == service.id && it.active }
-    
-    val marketplaceOffers = remember(basePartners, activeSetting) {
-        val list = mutableListOf<Triple<Partner, Long, String>>()
-        
-        // 1. If activeSetting is set, add "Ananya Sharma (You - Live Seller Test)"
-        if (activeSetting != null) {
-            val livePartner = Partner(
-                id = "me",
-                name = "Ananya Sharma (Custom Seller)",
-                avatarUrl = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format&fit=crop&q=80&w=200",
-                rating = 4.98f,
-                reviewsCount = 42,
-                distanceKm = 0.5,
-                etaMin = 5,
-                experienceYears = 3,
-                description = "Live marketplace seller account configured in real-time.",
-                categories = listOf("Salon", "Beauty & Waxing", "Makeup", "Massage / Therapy"),
-                servicesOffered = listOf(service.id),
-                portfolioUrls = listOf("https://images.unsplash.com/photo-1522337360788-8b13dee7a37e?auto=format"),
-                recentReviews = listOf("Awesome custom experience!" to 5f)
-            )
-            list.add(Triple(livePartner, activeSetting.pricePaise, activeSetting.productsUsed))
+
+    // Discovery: who actually offers THIS service right now (subscription-gated
+    // server-side). Blank until a subscribed partner adds it.
+    LaunchedEffect(service.id) { viewModel.loadPartnersForService(service.id) }
+    val partners = GlamMockDataSource.partners
+
+    // Each professional sets their own price; the card shows their "from" price
+    // (falling back to the catalog indicative price). The final estimate is
+    // computed server-side at quote time from the partner's own rate.
+    val marketplaceOffers = remember(partners) {
+        partners.map { partner ->
+            val price = if (partner.fromPricePaise > 0) partner.fromPricePaise else service.pricePaise
+            Triple(partner, price, "")
         }
-        
-        // 2. Add base filtered partners with their individual decided price and products
-        basePartners.forEach { partner ->
-            val decidedPrice = when (partner.id) {
-                "part_001" -> (service.pricePaise * 0.90).toLong() // Budget Choice
-                "part_002" -> (service.pricePaise * 0.95).toLong() // Medium Option
-                "part_004" -> (service.pricePaise * 1.10).toLong() // Premium therapist
-                else -> service.pricePaise
-            }
-            
-            val decidedProducts = when (partner.id) {
-                "part_001" -> "L'Oreal Absolute Repair Range & Schwarzkopf spa therapies (Visual seal-check mutually completed on delivery)."
-                "part_002" -> "Wella Professional deep therapy kits & active charcoal packs. High brand standards."
-                "part_004" -> "Forest Essentials cold-pressed herbal oils & organic botanical mud wraps. 100% natural seal verification."
-                else -> "Premium certified materials with visual security seal, verified on-spot with client."
-            }
-            
-            list.add(Triple(partner, decidedPrice, decidedProducts))
-        }
-        list
     }
-    
+
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Choose a Beauty Expert", fontWeight = FontWeight.Bold) },
@@ -941,6 +867,23 @@ fun PartnerSelectScreen(viewModel: GlamGoViewModel, service: Service) {
         )
         
         LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            if (marketplaceOffers.isEmpty()) {
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(top = 64.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("No professionals offer this service yet", fontWeight = FontWeight.Bold)
+                        Text(
+                            "New experts are joining Nikhat Glow every day — please check back soon.",
+                            fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                        )
+                    }
+                }
+            }
             items(marketplaceOffers) { offer ->
                 val (partner, resolvedPrice, resolvedProducts) = offer
                 Card(
@@ -1049,28 +992,30 @@ fun PartnerSelectScreen(viewModel: GlamGoViewModel, service: Service) {
                             )
                         }
                         
-                        // Guaranteed Products Used
-                        Spacer(modifier = Modifier.height(10.dp))
-                        Column(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.03f), RoundedCornerShape(4.dp))
-                                .padding(10.dp)
-                        ) {
-                            Text(
-                                text = "📦 PRODUCTS & SEAL QUALITY PROMISE:",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = GlamGold,
-                                letterSpacing = 1.sp
-                            )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = resolvedProducts,
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onBackground,
-                                lineHeight = 16.sp
-                            )
+                        // Products / seal promise (only if the professional listed one)
+                        if (resolvedProducts.isNotBlank()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Column(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .background(MaterialTheme.colorScheme.onBackground.copy(alpha = 0.03f), RoundedCornerShape(4.dp))
+                                    .padding(10.dp)
+                            ) {
+                                Text(
+                                    text = "📦 PRODUCTS & SEAL QUALITY PROMISE:",
+                                    fontSize = 10.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = GlamGold,
+                                    letterSpacing = 1.sp
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = resolvedProducts,
+                                    fontSize = 12.sp,
+                                    color = MaterialTheme.colorScheme.onBackground,
+                                    lineHeight = 16.sp
+                                )
+                            }
                         }
 
                         Spacer(modifier = Modifier.height(10.dp))
@@ -1270,66 +1215,34 @@ fun BookingConfirmScreen(viewModel: GlamGoViewModel, service: Service, partner: 
                 }
             }
             
-            // STEP 2: Slot Picker
+            // STEP 2: Timing note (connector model — exact time arranged in chat)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("2. DATE & TIME", fontWeight = FontWeight.Bold, color = GlamGold)
+            Text("2. PREFERRED TIME", fontWeight = FontWeight.Bold, color = GlamGold)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
                     .padding(vertical = 8.dp),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
-                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-                    Icon(Icons.Default.CalendarToday, contentDescription = null, tint = GlamGold)
-                    Spacer(modifier = Modifier.width(16.dp))
-                    Column(modifier = Modifier.weight(1f)) {
-                        Text("Booking Time Slot", fontWeight = FontWeight.Bold)
-                        Text(viewModel.selectedSlot, fontSize = 13.sp, color = Color.Gray)
-                    }
-                    IconButton(onClick = {
-                        val slots = listOf(
-                            "Tomorrow, 10:00 AM - 11:30 AM",
-                            "Tomorrow, 2:00 PM - 3:30 PM",
-                            "Friday, 11:30 AM - 1:00 PM",
-                            "Saturday, 4:00 PM - 5:30 PM"
-                        )
-                        viewModel.selectedSlot = slots.random()
-                    }) {
-                        Icon(Icons.Default.SwapHoriz, contentDescription = "Change Slot")
-                    }
+                Column(modifier = Modifier.padding(16.dp)) {
+                    OutlinedTextField(
+                        value = viewModel.selectedSlot,
+                        onValueChange = { viewModel.selectedSlot = it },
+                        label = { Text("e.g. Tomorrow evening, or a date & time") },
+                        modifier = Modifier.fillMaxWidth(),
+                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        "You'll confirm the exact time directly with the professional in chat once they accept your request.",
+                        fontSize = 11.sp, color = Color.Gray, lineHeight = 15.sp
+                    )
                 }
             }
 
-            // STEP 3: Coupons
+            // STEP 3: Estimate (you pay the professional directly)
             Spacer(modifier = Modifier.height(16.dp))
-            Text("3. APPLY COUPON", fontWeight = FontWeight.Bold, color = GlamGold)
-            Row(modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(
-                    value = viewModel.couponCode,
-                    onValueChange = { 
-                        viewModel.couponCode = it
-                        viewModel.updateBookingQuote(service, partner)
-                    },
-                    placeholder = { Text("Try GLAMNEW or FIRST50") },
-                    modifier = Modifier
-                        .weight(1f)
-                        .testTag("coupon_input"),
-                    singleLine = true
-                )
-            }
-            if (quote?.couponMessage != null) {
-                Text(
-                    text = quote.couponMessage ?: "",
-                    color = if (quote.couponDiscountPaise > 0) SuccessGreen else MaterialTheme.colorScheme.error,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Bold,
-                    modifier = Modifier.padding(start = 4.dp)
-                )
-            }
-
-            // STEP 4: Server Authoritative Pricing Quote
-            Spacer(modifier = Modifier.height(16.dp))
-            Text("4. PRICE BREAKDOWN", fontWeight = FontWeight.Bold, color = GlamGold)
+            Text("3. ESTIMATE", fontWeight = FontWeight.Bold, color = GlamGold)
             if (quote != null) {
                 Card(
                     modifier = Modifier
@@ -1338,39 +1251,12 @@ fun BookingConfirmScreen(viewModel: GlamGoViewModel, service: Service, partner: 
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
                 ) {
                     Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("Base Price of Kit & Service", color = Color.Gray)
-                            Text("₹${quote.basePaise / 100}")
-                        }
-                        if (quote.distancePaise > 0) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Doorstep Travel Conveyance", color = Color.Gray)
-                                Text("₹${quote.distancePaise / 100}")
-                            }
-                        }
-                        if (quote.surgePaise > 0) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Peak Hour Demand Charge", color = Color.Gray)
-                                Text("₹${quote.surgePaise / 100}", color = OrderOrange, fontWeight = FontWeight.Bold)
-                            }
-                        }
-                        if (quote.couponDiscountPaise > 0) {
-                            Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                                Text("Coupon Savings", color = SuccessGreen)
-                                Text("- ₹${quote.couponDiscountPaise / 100}", color = SuccessGreen)
-                            }
-                        }
-                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                            Text("GST (18%)", color = Color.Gray)
-                            Text("₹${quote.taxPaise / 100}")
-                        }
-                        Divider(modifier = Modifier.padding(vertical = 4.dp))
                         Row(
                             modifier = Modifier.fillMaxWidth(),
                             horizontalArrangement = Arrangement.SpaceBetween,
                             verticalAlignment = Alignment.CenterVertically
                         ) {
-                            Text("Total Payable Amount", fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text("Estimated total", fontWeight = FontWeight.Bold, fontSize = 16.sp)
                             Text(
                                 "₹${quote.totalPaise / 100}",
                                 fontWeight = FontWeight.Bold,
@@ -1378,20 +1264,17 @@ fun BookingConfirmScreen(viewModel: GlamGoViewModel, service: Service, partner: 
                                 fontSize = 18.sp
                             )
                         }
-                        
                         Divider(modifier = Modifier.padding(vertical = 4.dp), color = Color.Gray.copy(alpha = 0.15f))
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Icon(
                                 imageVector = Icons.Default.VerifiedUser,
-                                contentDescription = "Escrow Guarantee",
+                                contentDescription = null,
                                 tint = SuccessGreen,
                                 modifier = Modifier.size(16.dp)
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = "Secure Escrow: Funds are held by the platform (Big GPT AI/Nikhat Glow Escrow) until the service is marked 'Completed' by both parties.",
+                                text = "Estimate only — you pay the professional directly after the service. Nikhat Glow never holds your money.",
                                 fontSize = 10.sp,
                                 color = Color.LightGray.copy(alpha = 0.8f)
                             )
@@ -1535,65 +1418,30 @@ fun BookingDetailScreen(viewModel: GlamGoViewModel, bookingId: String) {
         if (!showChatTab) {
             // PROGRESS & MAP
             Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-                // VECTOR MAP CONTAINER (SVG/Canvas representation of live movement)
+                // Current status banner (real booking state — no simulated GPS)
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .height(200.dp)
-                        .background(Color(0xFFE2F1E3))
+                        .height(120.dp)
+                        .background(Brush.verticalGradient(listOf(DeepPlum, DarkSlate))),
+                    contentAlignment = Alignment.Center
                 ) {
-                    Canvas(modifier = Modifier.fillMaxSize()) {
-                        // Drawing simple vector grid and path line to replicate OpenStreetMap
-                        drawRect(color = Color(0xFFAED581), size = size)
-                        
-                        // Roads simulated
-                        drawLine(color = Color.White, start = androidx.compose.ui.geometry.Offset(0f, size.height/2), end = androidx.compose.ui.geometry.Offset(size.width, size.height/2), strokeWidth = 14f)
-                        drawLine(color = Color.White, start = androidx.compose.ui.geometry.Offset(size.width/2, 0f), end = androidx.compose.ui.geometry.Offset(size.width/2, size.height), strokeWidth = 14f)
-                        
-                        // Booking route green tracer
-                        drawLine(color = Color(0xFF1E88E5), start = androidx.compose.ui.geometry.Offset(200f, size.height/2), end = androidx.compose.ui.geometry.Offset(size.width/2, size.height/2), strokeWidth = 8f)
-                    }
-                    
-                    // Client pinpoint
-                    Box(
-                        modifier = Modifier
-                            .align(Alignment.Center)
-                            .offset(y = (-10).dp)
-                            .background(GlamRose, CircleShape)
-                            .padding(4.dp)
-                    ) {
-                        Icon(Icons.Default.Home, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
-                    }
-                    
-                    // Partner delivery vehicle animation overlay
-                    if (booking.status == "partner_on_the_way" || booking.status == "arrived") {
-                        val animatedOffset = if (booking.status == "arrived") Alignment.Center else Alignment.CenterStart
-                        Box(
-                            modifier = Modifier
-                                .align(animatedOffset)
-                                .offset(x = if (booking.status == "partner_on_the_way") 40.dp else 0.dp)
-                                .background(SuccessGreen, CircleShape)
-                                .padding(4.dp)
-                        ) {
-                            Icon(Icons.Default.DirectionsBike, contentDescription = null, tint = Color.White, modifier = Modifier.size(16.dp))
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        val statusIcon = when (booking.status) {
+                            "partner_on_the_way" -> Icons.Default.DirectionsBike
+                            "arrived", "started" -> Icons.Default.Home
+                            "completed" -> Icons.Default.Verified
+                            else -> Icons.Default.EventNote
                         }
-                    }
-                    
-                    Card(
-                        modifier = Modifier
-                            .align(Alignment.BottomEnd)
-                            .padding(8.dp),
-                        colors = CardDefaults.cardColors(containerColor = Color.Black.copy(alpha = 0.7f))
-                    ) {
+                        Icon(statusIcon, contentDescription = null, tint = GlamGold, modifier = Modifier.size(36.dp))
+                        Spacer(modifier = Modifier.height(8.dp))
                         Text(
-                            text = "Photon Map Vector Tracker",
-                            color = Color.White,
-                            fontSize = 10.sp,
-                            modifier = Modifier.padding(6.dp)
+                            text = booking.status.replace("_", " ").replaceFirstChar { it.uppercase() },
+                            color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp
                         )
                     }
                 }
-                
+
                 Column(modifier = Modifier.padding(16.dp)) {
                     // DETAILS
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -2320,7 +2168,7 @@ fun PartnerDashboardScreen(viewModel: GlamGoViewModel) {
                                         }
                                     } else if (job.status == "started") {
                                         Button(
-                                            onClick = { scope.launch { viewModel.repository.completeJob(job.id, "https://images.unsplash.com/photo") } },
+                                            onClick = { scope.launch { viewModel.repository.completeJob(job.id) } },
                                             modifier = Modifier.fillMaxWidth().testTag("complete_service_btn"),
                                             colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
                                         ) {
@@ -2398,11 +2246,11 @@ fun PartnerDashboardScreen(viewModel: GlamGoViewModel) {
                         
                         val service = GlamMockDataSource.services.firstOrNull { it.id == serviceId } ?: return@forEach
                         val partner = GlamMockDataSource.partners.firstOrNull { it.id == partnerId } ?: Partner(
-                            id = "me",
-                            name = "Ananya Sharma (You)",
-                            avatarUrl = "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?auto=format",
-                            rating = 4.9f, reviewsCount = 42, distanceKm = 0.5, etaMin = 5, experienceYears = 3,
-                            description = "Premium licensed seller", categories = listOf("Salon"), servicesOffered = listOf(serviceId),
+                            id = partnerId.ifBlank { "0" },
+                            name = "Customer enquiry",
+                            avatarUrl = "",
+                            rating = 0f, reviewsCount = 0, distanceKm = 0.0, etaMin = 0, experienceYears = 0,
+                            description = "", categories = emptyList(), servicesOffered = listOf(serviceId),
                             portfolioUrls = emptyList(), recentReviews = emptyList()
                         )
                         
@@ -3096,8 +2944,8 @@ fun ServiceBookingFormScreen(viewModel: GlamGoViewModel) {
     val services = GlamMockDataSource.services
     
     var selectedService by remember { mutableStateOf<Service?>(null) }
-    var dateState by remember { mutableStateOf("25 June 2026") }
-    var timeState by remember { mutableStateOf("11:00 AM") }
+    var dateState by remember { mutableStateOf("") }
+    var timeState by remember { mutableStateOf("") }
     var customNotes by remember { mutableStateOf("") }
     
     var errorState by remember { mutableStateOf<String?>(null) }
@@ -3521,17 +3369,6 @@ fun PreBookingChatScreen(viewModel: GlamGoViewModel, service: Service, partner: 
                 SuggestionChip(
                     onClick = {
                         viewModel.sendChatMessage(preBookingId, activeUser?.role ?: "customer", question)
-                        // Trigger dynamic expert reply
-                        scope.launch {
-                            delay(800)
-                            val answerText = when {
-                                question.contains("sealed") -> "Yes absolutely! As per Zomato/Swiggy guidelines, we only use 100% brand-new single-use sealed kits, opened directly in front of you."
-                                question.contains("verify") -> "Of course, ma'am! We will verify the visual safety seal check together upon my arrival. I won't start until you are fully satisfied!"
-                                question.contains("brands") -> "I use professional saloon-certified series: L'Oreal Advanced Therapy, Wella, and organic active ingredients. Let me know if you have sensitive skin!"
-                                else -> "No hidden fees at all! The price listed is final and includes the full doorstep kit, sanitization standards, and travel costs. Mutual trust is our top priority."
-                            }
-                            viewModel.sendChatMessage(preBookingId, if (activeUser?.role == "customer") "partner" else "customer", answerText)
-                        }
                     },
                     label = { Text(question, fontSize = 11.sp, maxLines = 1) }
                 )
@@ -3558,21 +3395,8 @@ fun PreBookingChatScreen(viewModel: GlamGoViewModel, service: Service, partner: 
             IconButton(
                 onClick = {
                     if (chatText.isNotBlank()) {
-                        val currentText = chatText
-                        val isCustomer = activeUser?.role == "customer"
-                        viewModel.sendChatMessage(preBookingId, activeUser?.role ?: "customer", currentText)
+                        viewModel.sendChatMessage(preBookingId, activeUser?.role ?: "customer", chatText)
                         chatText = ""
-                        
-                        // Automated respond test to questions
-                        scope.launch {
-                            delay(1000)
-                            val smartReply = if (isCustomer) {
-                                "Understood! I guarantee 100% genuine products, and we can mutually review the visual package seal before commencing the service. Your comfort is our promise!"
-                            } else {
-                                "Thanks for the swift confirmation! This works perfectly for me. Appreciate the transparent quality check."
-                            }
-                            viewModel.sendChatMessage(preBookingId, if (isCustomer) "partner" else "customer", smartReply)
-                        }
                     }
                 },
                 modifier = Modifier

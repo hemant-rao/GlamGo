@@ -122,14 +122,9 @@ interface GlamGoApi {
     @POST("customer/bookings/{id}/start-otp")
     suspend fun startOtp(@Path("id") id: Int): StartOtpResp
 
-    // ── Wallet ────────────────────────────────────────────────────────────────
-    @GET("customer/wallet")
-    suspend fun wallet(): WalletResp
+    // Connector model: no customer wallet (the customer pays the partner directly).
 
-    @GET("customer/wallet/transactions")
-    suspend fun walletTxns(): WalletTxnsResp
-
-    // ── Reviews / Complaints / Wishlist / Coupons ───────────────────────────────
+    // ── Reviews / Complaints / Wishlist ─────────────────────────────────────────
     @POST("customer/bookings/{id}/review")
     suspend fun review(@Path("id") id: Int, @Body body: ReviewReq): ReviewDto
 
@@ -196,6 +191,15 @@ interface GlamGoApi {
     @PATCH("partner/services/{id}")
     suspend fun patchPartnerService(@Path("id") id: Int, @Body body: Map<String, Any?>): PartnerServiceDto
 
+    @DELETE("partner/services/{id}")
+    suspend fun deletePartnerService(@Path("id") id: Int): OkResp
+
+    @GET("partner/availability")
+    suspend fun partnerAvailability(): PartnerAvailabilityResp
+
+    @retrofit2.http.PUT("partner/availability")
+    suspend fun setPartnerAvailability(@Body body: Map<String, Any?>): OkResp
+
     @GET("partner/bookings")
     suspend fun partnerBookings(@Query("status") status: String? = null): BookingsResp
 
@@ -208,11 +212,18 @@ interface GlamGoApi {
     @POST("partner/bookings/{id}/status")
     suspend fun partnerBookingStatus(@Path("id") id: Int, @Body body: StatusReq): BookingDto
 
-    @GET("partner/earnings")
-    suspend fun earnings(): EarningsResp
+    // ── Partner subscription (₹99/month listing fee — connector revenue) ───────
+    @GET("partner/subscription")
+    suspend fun subscription(): SubscriptionDto
 
-    @GET("partner/earnings/ledger")
-    suspend fun earningsLedger(): WalletTxnsResp
+    @POST("partner/subscription/subscribe")
+    suspend fun subscribe(@Body body: Map<String, Any?> = emptyMap()): SubscriptionDto
+
+    @POST("partner/subscription/cancel")
+    suspend fun cancelSubscription(@Body body: Map<String, Any?> = emptyMap()): SubscriptionDto
+
+    @GET("partner/subscription/payments")
+    suspend fun subscriptionPayments(): SubscriptionPaymentsResp
 }
 
 

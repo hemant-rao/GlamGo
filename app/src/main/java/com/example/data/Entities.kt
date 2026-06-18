@@ -51,7 +51,7 @@ data class BookingEntity(
     val totalPaise: Long,
     val paymentStatus: String, // "pending", "paid", "refunded"
     val createdAt: Long = System.currentTimeMillis(),
-    val startOtp: String = "1234",
+    val startOtp: String = "",
     val completionProofUrls: String = "", // Comma-separated URLs
     val reviewRating: Int = 0, // 0 means unreviewed
     val reviewComment: String = ""

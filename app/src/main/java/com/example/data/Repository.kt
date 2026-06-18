@@ -79,6 +79,13 @@ class GlamGoRepository(context: Context) {
     private val _cart = MutableStateFlow<CartResp?>(null)
     val cartFlow: StateFlow<CartResp?> = _cart.asStateFlow()
 
+    // partner ₹99/month subscription (null = not yet loaded)
+    private val _subscription = MutableStateFlow<com.example.data.remote.SubscriptionDto?>(null)
+    val subscriptionFlow: StateFlow<com.example.data.remote.SubscriptionDto?> = _subscription.asStateFlow()
+
+    private val _subscriptionPayments = MutableStateFlow<List<com.example.data.remote.SubscriptionPaymentDto>>(emptyList())
+    val subscriptionPaymentsFlow: StateFlow<List<com.example.data.remote.SubscriptionPaymentDto>> = _subscriptionPayments.asStateFlow()
+
     // last server quote, kept so confirmAndBook can create the booking from it
     @Volatile private var lastQuoteId: String? = null
 
@@ -126,12 +133,17 @@ class GlamGoRepository(context: Context) {
         _complaints.value = emptyList()
         _favorites.value = emptyList()
         _cart.value = null
+        _subscription.value = null
+        _subscriptionPayments.value = emptyList()
     }
 
     // ── Hydration ────────────────────────────────────────────────────────────
     suspend fun hydrateCatalog() {
+        // Always overwrite with the server's truth — including EMPTY. The catalog
+        // is admin-controlled and the partner list is discovery (subscription-
+        // gated), so an empty result is the correct "no partners yet" state.
         val cats = api.categories().items.map { Mappers.category(it) }
-        if (cats.isNotEmpty()) GlamMockDataSource.categories = cats
+        GlamMockDataSource.categories = cats
         val allServices = mutableListOf<Service>()
         for (c in cats) {
             try {
@@ -139,12 +151,19 @@ class GlamGoRepository(context: Context) {
             } catch (_: Exception) {
             }
         }
-        if (allServices.isNotEmpty()) GlamMockDataSource.services = allServices
-        try {
-            val partners = api.partners().items.map { Mappers.partner(it) }
-            if (partners.isNotEmpty()) GlamMockDataSource.partners = partners
-        } catch (_: Exception) {
-        }
+        GlamMockDataSource.services = allServices
+        GlamMockDataSource.partners = runCatching {
+            api.partners().items.map { Mappers.partner(it) }
+        }.getOrDefault(emptyList())
+    }
+
+    /** Discovery for a single service — used by the partner-select screen so the
+     *  list reflects who actually offers that service right now (blank until a
+     *  subscribed partner adds it). */
+    suspend fun loadPartnersForService(serviceId: String) {
+        GlamMockDataSource.partners = runCatching {
+            api.partners(serviceId = serviceId.toIntOrNull()).items.map { Mappers.partner(it) }
+        }.getOrDefault(emptyList())
     }
 
     suspend fun hydrateForRole(role: String) {
@@ -160,7 +179,27 @@ class GlamGoRepository(context: Context) {
             refreshProfile("partner")
             refreshPartnerServices()
             refreshBookings("partner")
+            refreshSubscription()
         }
+    }
+
+    // ── Partner subscription (₹99/month listing fee) ──────────────────────────
+    suspend fun refreshSubscription() {
+        _subscription.value = runCatching { api.subscription() }.getOrNull()
+    }
+
+    suspend fun loadSubscriptionPayments() {
+        _subscriptionPayments.value =
+            runCatching { api.subscriptionPayments().items }.getOrDefault(emptyList())
+    }
+
+    suspend fun subscribe() {
+        _subscription.value = api.subscribe()
+        loadSubscriptionPayments()
+    }
+
+    suspend fun cancelSubscription() {
+        _subscription.value = api.cancelSubscription()
     }
 
     private suspend fun refreshProfile(role: String) {
@@ -220,16 +259,15 @@ class GlamGoRepository(context: Context) {
 
     suspend fun refreshPartnerServices() {
         _partnerServices.value = api.partnerServices().items.map {
-            val customKit = customProductsUsed[it.serviceId.toString()] ?: "Premium salon kit (L'Oreal/O3+), 100% seal-packed & verified prior to use."
             PartnerServiceEntity(
                 id = it.id.toString(),
                 serviceId = it.serviceId.toString(),
                 name = it.name ?: "",
                 categoryName = "",
                 pricePaise = it.pricePaise,
-                durationMin = 45,
+                durationMin = 0,
                 active = it.active,
-                productsUsed = customKit
+                productsUsed = customProductsUsed[it.serviceId.toString()] ?: ""
             )
         }
     }
@@ -383,8 +421,9 @@ class GlamGoRepository(context: Context) {
         api.partnerBookingStatus(id.toInt(), StatusReq(to = "started", startOtp = otp))
         refreshBookings("partner")
     }
-    suspend fun completeJob(id: String, proofUrl: String) {
-        api.partnerBookingStatus(id.toInt(), StatusReq(to = "completed", proofUploadIds = listOf(proofUrl)))
+    suspend fun completeJob(id: String, proofUrl: String = "") {
+        val proof = proofUrl.takeIf { it.isNotBlank() }?.let { listOf(it) }
+        api.partnerBookingStatus(id.toInt(), StatusReq(to = "completed", proofUploadIds = proof))
         refreshBookings("partner")
     }
 

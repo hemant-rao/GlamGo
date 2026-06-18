@@ -276,6 +276,23 @@ fun PartnerProfileScreen(viewModel: GlamGoViewModel) {
                 }
             }
 
+            val sub by viewModel.subscription.collectAsState()
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.VerifiedUser, contentDescription = null, tint = GlamGold)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Subscription (₹99/month)", fontWeight = FontWeight.Bold)
+                        val status = sub?.status ?: "—"
+                        val tail = if ((sub?.daysLeft ?: 0) > 0) " · ${sub?.daysLeft}d left" else ""
+                        Text(status.replaceFirstChar { it.uppercase() } + tail, fontSize = 12.sp, color = Color.Gray)
+                    }
+                    TextButton(onClick = { viewModel.currentScreen = Screen.PartnerSubscription }) {
+                        Text("Manage", color = GlamRose)
+                    }
+                }
+            }
+
             Text("Edit profile", fontWeight = FontWeight.Bold)
             OutlinedTextField(
                 value = nameState, onValueChange = { nameState = it; saved = false },

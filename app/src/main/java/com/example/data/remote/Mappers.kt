@@ -67,6 +67,7 @@ object Mappers {
         servicesOffered = (d.servicesOffered ?: emptyList()).map { it.toString() },
         portfolioUrls = d.portfolio ?: emptyList(),
         recentReviews = emptyList(),
+        fromPricePaise = d.fromPricePaise ?: 0,
     )
 
     /** Build a UserEntity for the active identity. Wallet balance comes from a

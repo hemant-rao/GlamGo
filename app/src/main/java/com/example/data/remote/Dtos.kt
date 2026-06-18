@@ -436,3 +436,43 @@ data class ProfileResp(val profile: ProfileDto? = null)
 
 @JsonClass(generateAdapter = true)
 data class ServicesWrap(val services: List<ServiceDto> = emptyList(), val reason: String? = null)
+
+// ── Partner subscription (₹99/month) ─────────────────────────────────────────
+@JsonClass(generateAdapter = true)
+data class SubscriptionDto(
+    val plan: String = "monthly_99",
+    val status: String = "none",                         // none|trial|active|expired|cancelled
+    @Json(name = "price_paise") val pricePaise: Long = 9900,
+    @Json(name = "is_active") val isActive: Boolean = false,
+    @Json(name = "current_period_start") val currentPeriodStart: String? = null,
+    @Json(name = "current_period_end") val currentPeriodEnd: String? = null,
+    @Json(name = "trial_end") val trialEnd: String? = null,
+    @Json(name = "days_left") val daysLeft: Int = 0,
+    @Json(name = "auto_renew") val autoRenew: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class SubscriptionPaymentDto(
+    val id: Int = 0,
+    @Json(name = "amount_paise") val amountPaise: Long = 0,
+    val method: String? = null,
+    val status: String = "paid",
+    val ref: String? = null,
+    @Json(name = "period_start") val periodStart: String? = null,
+    @Json(name = "period_end") val periodEnd: String? = null,
+    val at: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class SubscriptionPaymentsResp(val items: List<SubscriptionPaymentDto> = emptyList())
+
+// ── Partner availability (working hours) ─────────────────────────────────────
+@JsonClass(generateAdapter = true)
+data class PartnerAvailabilityResp(
+    @Json(name = "working_hours") val workingHours: WorkingHoursDto? = null,
+    val days: List<Int> = emptyList(),
+    val leaves: List<String> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class WorkingHoursDto(val start: String? = null, val end: String? = null)

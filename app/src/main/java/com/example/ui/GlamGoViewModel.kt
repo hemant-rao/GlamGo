@@ -30,6 +30,7 @@ sealed class Screen {
     object PartnerKyc : Screen()
     object PartnerServices : Screen()
     object PartnerProfile : Screen()
+    object PartnerSubscription : Screen()
 
     // Pre-booking messaging
     data class PreBookingChat(val service: Service, val partner: Partner) : Screen()
@@ -67,6 +68,45 @@ class GlamGoViewModel(application: Application) : AndroidViewModel(application) 
     val favoritePartners = repository.favoritePartnersFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
     )
+
+    // partner ₹99/month subscription
+    val subscription = repository.subscriptionFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), null
+    )
+    val subscriptionPayments = repository.subscriptionPaymentsFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+    var subscriptionBusy by mutableStateOf(false); private set
+    var subscriptionError by mutableStateOf<String?>(null); private set
+
+    fun loadSubscription() {
+        viewModelScope.launch {
+            runCatching { repository.refreshSubscription(); repository.loadSubscriptionPayments() }
+        }
+    }
+
+    fun subscribeNow() {
+        subscriptionBusy = true; subscriptionError = null
+        viewModelScope.launch {
+            runCatching { repository.subscribe() }
+                .onFailure { subscriptionError = friendly(it) }
+            subscriptionBusy = false
+        }
+    }
+
+    fun cancelSubscriptionNow() {
+        subscriptionBusy = true; subscriptionError = null
+        viewModelScope.launch {
+            runCatching { repository.cancelSubscription() }
+                .onFailure { subscriptionError = friendly(it) }
+            subscriptionBusy = false
+        }
+    }
+
+    /** Refresh discovery for the service the customer is about to browse. */
+    fun loadPartnersForService(serviceId: String) {
+        viewModelScope.launch { runCatching { repository.loadPartnersForService(serviceId) } }
+    }
 
     fun isFavorite(partnerId: String): Flow<Boolean> = repository.isFavoriteFlow(partnerId)
 
@@ -204,8 +244,8 @@ class GlamGoViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     // ── Booking flow caches ──────────────────────────────────────────────────
-    var selectedSlot by mutableStateOf("Tomorrow, 10:00 AM - 11:30 AM")
-    var couponCode by mutableStateOf("")
+    var selectedSlot by mutableStateOf("")          // customer's free-text preferred time
+    var couponCode by mutableStateOf("")            // unused in connector model; kept for API compat
     var quoteBreakdown by mutableStateOf<QuoteBreakdown?>(null)
 
     // ── Cart (single-partner, multi-service) ───────────────────────────────────
