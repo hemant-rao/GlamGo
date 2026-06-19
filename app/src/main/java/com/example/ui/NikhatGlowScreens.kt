@@ -731,6 +731,7 @@ fun LocationPickerSheet(
     var query by remember { mutableStateOf("") }
     var suggestions by remember { mutableStateOf<List<com.example.data.remote.GeoSuggestionDto>>(emptyList()) }
     var busy by remember { mutableStateOf(false) }
+    var searching by remember { mutableStateOf(false) }
 
     // Detect the device fix → reverse-geocode → save as the active address.
     val detectAndSave: () -> Unit = {
@@ -766,9 +767,12 @@ fun LocationPickerSheet(
     LaunchedEffect(query) {
         if (query.trim().length >= 3) {
             delay(300)
+            searching = true
             suggestions = viewModel.searchPlaces(query.trim())
+            searching = false
         } else {
             suggestions = emptyList()
+            searching = false
         }
     }
 
@@ -831,10 +835,28 @@ fun LocationPickerSheet(
                         .testTag("location_search_input")
                 )
 
-                if (query.trim().length in 1..2) {
-                    Text("Type at least 3 letters to search", fontSize = 12.sp, color = Color.Gray)
-                } else if (query.isBlank()) {
-                    Text("Tap the location icon to use your current location, or type to search", fontSize = 12.sp, color = Color.Gray)
+                // Search status — never leave the list silently blank (Solaris parity).
+                when {
+                    query.isBlank() -> Text(
+                        "Tap the location icon to use your current location, or type to search",
+                        fontSize = 12.sp, color = Color.Gray,
+                    )
+                    query.trim().length in 1..2 -> Text(
+                        "Type at least 3 letters to search", fontSize = 12.sp, color = Color.Gray,
+                    )
+                    searching -> Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(14.dp), color = NikhatRose)
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Searching…", fontSize = 12.sp, color = Color.Gray)
+                    }
+                    suggestions.isEmpty() -> Text(
+                        "No matches found. Try a different spelling, or use your current location.",
+                        fontSize = 12.sp, color = Color.Gray,
+                    )
+                    else -> Text(
+                        "${suggestions.size} ${if (suggestions.size == 1) "match" else "matches"} found",
+                        fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Medium,
+                    )
                 }
 
                 LazyColumn(
