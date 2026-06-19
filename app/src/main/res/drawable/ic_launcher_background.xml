@@ -15,7 +15,7 @@
     <!-- Secondary Outer Ring for Elegance -->
     <path
         android:pathData="M54,54m-48,0a48,48 0,1 1,96 0a48,48 0,1 1,-96 0"
-        android:strokeColor="#FF4A70"
+        android:strokeColor="#1A73E8"
         android:strokeWidth="1.2"
         android:fillColor="#00000000" />
     <!-- Subtle Golden Sparkles in background -->

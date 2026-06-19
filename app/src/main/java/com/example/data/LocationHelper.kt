@@ -104,6 +104,41 @@ object LocationHelper {
         }
     }
 
+    /**
+     * §698 — continuous location stream for live tracking (the partner travelling to
+     * the customer). Mirrors Solaris's travel-service cadence: FusedLocation
+     * PRIORITY_HIGH_ACCURACY at a ~5s interval. Returns a [LocationUpdates] handle whose
+     * [LocationUpdates.stop] MUST be called to release the listener (else GPS keeps
+     * draining the battery). Returns null when permission is missing.
+     */
+    @SuppressLint("MissingPermission")
+    fun startUpdates(
+        context: Context,
+        intervalMs: Long = 5_000L,
+        onUpdate: (Double, Double) -> Unit,
+    ): LocationUpdates? {
+        if (!hasPermission(context)) return null
+        val client = LocationServices.getFusedLocationProviderClient(context.applicationContext)
+        val req = com.google.android.gms.location.LocationRequest.Builder(
+            Priority.PRIORITY_HIGH_ACCURACY, intervalMs
+        )
+            .setMinUpdateIntervalMillis((intervalMs / 2).coerceAtLeast(2_000L))
+            .setWaitForAccurateLocation(false)
+            .build()
+        val cb = object : com.google.android.gms.location.LocationCallback() {
+            override fun onLocationResult(result: com.google.android.gms.location.LocationResult) {
+                val loc = result.lastLocation ?: return
+                onUpdate(loc.latitude, loc.longitude)
+            }
+        }
+        return try {
+            client.requestLocationUpdates(req, cb, Looper.getMainLooper())
+            LocationUpdates(client, cb)
+        } catch (_: Exception) {
+            null
+        }
+    }
+
     /** Native LocationManager last-known fix: GPS first (more precise), then Network. */
     @SuppressLint("MissingPermission")
     private fun systemLastKnown(context: Context): Location? {
@@ -115,6 +150,19 @@ object LocationHelper {
                 lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) else null
         } catch (_: Exception) {
             null
+        }
+    }
+}
+
+/** Handle for an active [LocationHelper.startUpdates] stream; call [stop] to release it. */
+class LocationUpdates(
+    private val client: com.google.android.gms.location.FusedLocationProviderClient,
+    private val cb: com.google.android.gms.location.LocationCallback,
+) {
+    fun stop() {
+        try {
+            client.removeLocationUpdates(cb)
+        } catch (_: Exception) {
         }
     }
 }

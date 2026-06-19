@@ -1815,6 +1815,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
     val trackCustomer by viewModel.trackCustomer.collectAsState()
     val trackPartner by viewModel.trackPartner.collectAsState()
     val trackRoute by viewModel.trackRoute.collectAsState()
+    val trackEta by viewModel.trackEta.collectAsState()
     val trackableStates = remember { setOf("accepted", "assigned", "partner_on_the_way", "arrived", "started") }
     val isTrackable = booking?.status in trackableStates
     // Open the tracking socket only while the job is in a trackable state; close on
@@ -1910,10 +1911,11 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                     }
                 }
 
-                // §690/§692 — LIVE MAP (MapLibre + free OpenStreetMap tiles). Shown
-                // while the job is in a trackable state AND the admin has Maps +
+                // §690/§692/§698 — LIVE MAP (MapLibre + free OpenStreetMap tiles).
+                // Shown while the job is in a trackable state AND the admin has Maps +
                 // live-tracking enabled. No API key needed (free OpenFreeMap style).
-                // Mutual: blue = you, crimson = partner, line = route.
+                // Destination (green) = the customer's home/booking address; the partner
+                // (blue) streams their live GPS toward it; line = route, with distance/ETA.
                 val cfg = geoConfig
                 val mapReady = cfg != null && cfg.mapsEnabled && cfg.features.liveTracking &&
                     cfg.tileStyleUrl.isNotBlank()
@@ -1934,14 +1936,26 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
+                    val isPartnerView = activeUser?.role == "partner"
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                        horizontalArrangement = Arrangement.spacedBy(16.dp),
+                        verticalAlignment = Alignment.CenterVertically,
                     ) {
-                        Text("● You", color = Color(0xFF3B82F6), fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                        Text("● Partner", color = NikhatRose, fontSize = 12.sp, fontWeight = FontWeight.Medium)
-                        if (trackPartner == null) {
-                            Text("Waiting for partner location…", color = Color.Gray, fontSize = 12.sp)
+                        // Green marker = customer home/destination; blue = the partner.
+                        Text(
+                            if (isPartnerView) "● Destination" else "● You (home)",
+                            color = Color(0xFF1E8E3E), fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                        )
+                        Text(
+                            if (isPartnerView) "● You" else "● Partner",
+                            color = Color(0xFF1A73E8), fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                        )
+                        when {
+                            trackPartner == null ->
+                                Text("Waiting for partner location…", color = Color.Gray, fontSize = 12.sp)
+                            trackEta != null ->
+                                Text(trackEta!!, color = NikhatRose, fontSize = 12.sp, fontWeight = FontWeight.Bold)
                         }
                     }
                 }

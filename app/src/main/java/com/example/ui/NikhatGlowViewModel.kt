@@ -387,36 +387,65 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
     val trackPartner: StateFlow<GeoPoint?> = _trackPartner.asStateFlow()
     private val _trackRoute = MutableStateFlow<List<GeoPoint>?>(null)
     val trackRoute: StateFlow<List<GeoPoint>?> = _trackRoute.asStateFlow()
+    private val _trackEta = MutableStateFlow<String?>(null)
+    val trackEta: StateFlow<String?> = _trackEta.asStateFlow()
     private var trackingSocket: LiveTrackingSocket? = null
+    private var locationUpdates: com.example.data.LocationUpdates? = null
 
-    /** Open the live-tracking socket for a booking: our device fix is the customer
-     *  marker (also pushed so the partner sees us); the partner's position arrives
-     *  over the chat WS. Recomputes the route whenever either end moves. */
+    /**
+     * §698 — live tracking for a booking, modelled on Solaris travel tracking but
+     * adapted to two devices. The customer's saved booking/home location is the FIXED
+     * destination (green marker); the PARTNER is the moving party and streams their
+     * live GPS (≈5s, PRIORITY_HIGH_ACCURACY) over the chat WS so the customer watches
+     * them approach. The route + distance/ETA are recomputed whenever the partner moves.
+     */
     fun startLiveTracking(bookingId: String) {
         if (trackingSocket != null) return
-        val socket = LiveTrackingSocket(getApplication(), bookingId) { role, lat, lon ->
-            if (role == "partner") {
+        val booking = bookings.value.firstOrNull { it.id == bookingId }
+        val role = activeUser.value?.role
+        // Destination = the customer's saved booking/home address.
+        val destLat = booking?.addressLat
+        val destLon = booking?.addressLon
+        if (destLat != null && destLon != null) _trackCustomer.value = GeoPoint(destLat, destLon)
+
+        val socket = LiveTrackingSocket(getApplication(), bookingId) { msgRole, lat, lon ->
+            if (msgRole == "partner") {
                 _trackPartner.value = GeoPoint(lat, lon)
                 recomputeTrackRoute()
             }
         }
         trackingSocket = socket
         socket.connect()
-        viewModelScope.launch {
-            val loc = com.example.data.LocationHelper.current(getApplication())
-            if (loc != null) {
-                _trackCustomer.value = GeoPoint(loc.first, loc.second)
-                socket.sendLocation(loc.first, loc.second)
+
+        if (role == "partner") {
+            // Partner travels to the customer → stream continuous GPS; also show
+            // ourselves on our own map immediately.
+            locationUpdates = com.example.data.LocationHelper.startUpdates(getApplication(), 5_000L) { lat, lon ->
+                _trackPartner.value = GeoPoint(lat, lon)
+                trackingSocket?.sendLocation(lat, lon)
                 recomputeTrackRoute()
+            }
+        } else if (destLat == null || destLon == null) {
+            // Customer device + a booking with no saved coords → fall back to our own
+            // device fix as the destination anchor (graceful degradation for old data).
+            viewModelScope.launch {
+                val loc = com.example.data.LocationHelper.current(getApplication())
+                if (loc != null) {
+                    _trackCustomer.value = GeoPoint(loc.first, loc.second)
+                    recomputeTrackRoute()
+                }
             }
         }
     }
 
     fun stopLiveTracking() {
+        locationUpdates?.stop()
+        locationUpdates = null
         trackingSocket?.close()
         trackingSocket = null
         _trackPartner.value = null
         _trackRoute.value = null
+        _trackEta.value = null
     }
 
     private fun recomputeTrackRoute() {
@@ -424,9 +453,17 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         val p = _trackPartner.value
         if (c == null || p == null) return
         viewModelScope.launch {
-            val dir = repository.geoDirections(p.latitude, p.longitude, c.latitude, c.longitude)
-            val poly = dir?.polyline?.takeIf { it.isNotBlank() } ?: return@launch
-            _trackRoute.value = runCatching { NikhatMaps.decodePolyline(poly) }.getOrNull()
+            val dir = repository.geoDirections(p.latitude, p.longitude, c.latitude, c.longitude) ?: return@launch
+            dir.polyline.takeIf { it.isNotBlank() }?.let { poly ->
+                _trackRoute.value = runCatching { NikhatMaps.decodePolyline(poly) }.getOrNull()
+            }
+            // §698 — distance-remaining + ETA (Solaris parity).
+            if (dir.distanceM > 0) {
+                val km = dir.distanceM / 1000.0
+                val mins = kotlin.math.max(1, kotlin.math.round(dir.durationS / 60.0).toInt())
+                val distStr = if (km < 1.0) "${dir.distanceM} m" else String.format("%.1f km", km)
+                _trackEta.value = "$distStr • ~$mins min away"
+            }
         }
     }
 

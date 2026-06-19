@@ -125,6 +125,8 @@ object Mappers {
         dateTimeSlot = prettySlot(d.slotStart),
         slotStartIso = d.slotStart ?: "",
         addressText = addressText(d.address),
+        addressLat = d.address?.lat,
+        addressLon = d.address?.lon,
         totalPaise = d.totalPaise,
         paymentStatus = d.paymentStatus,
         startOtp = d.startOtp ?: "",

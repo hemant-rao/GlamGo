@@ -14,7 +14,7 @@
     <!-- Center Blooming Petals of the Fragrance Rose -->
     <!-- Bottom leaf support in brand pink -->
     <path
-        android:fillColor="#FF4A70"
+        android:fillColor="#1A73E8"
         android:pathData="M 54,72 C 40,72 32,62 32,54 C 32,46 54,30 54,30 C 54,30 76,46 76,54 C 76,62 68,72 54,72 Z" />
     
     <!-- Inner golden floral profile layering -->

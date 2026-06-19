@@ -55,6 +55,10 @@ data class BookingEntity(
     val dateTimeSlot: String,
     val slotStartIso: String = "", // §691 — raw ISO-8601 slot start, for window math
     val addressText: String,
+    // §698 — customer's saved booking/home location = the partner's destination on
+    // the live map. Nullable: older bookings / pure-manual addresses may lack coords.
+    val addressLat: Double? = null,
+    val addressLon: Double? = null,
     val totalPaise: Long,
     val paymentStatus: String, // "pending", "paid", "refunded"
     val createdAt: Long = System.currentTimeMillis(),
