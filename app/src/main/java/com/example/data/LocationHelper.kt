@@ -1,26 +1,43 @@
 package com.example.data
 
 import android.Manifest
+import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.location.LocationManager
+import android.os.Handler
+import android.os.Looper
 import androidx.core.content.ContextCompat
-import com.google.android.gms.location.CurrentLocationRequest
+import com.google.android.gms.location.CancellationTokenSource
 import com.google.android.gms.location.LocationServices
 import com.google.android.gms.location.Priority
 import kotlinx.coroutines.suspendCancellableCoroutine
+import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
 /**
- * §687 — device location via Google Play Services FusedLocationProvider.
+ * Device location for NikhatGlow.
  *
- * Pre-§687 the app NEVER read real GPS: addresses were saved with a hardcoded
- * Bangalore coordinate and discovery never sent lat/lon, so "near me" silently
- * did nothing. This helper is the single source of a real device fix. It is
- * permission-aware (returns null when not granted) and never throws — callers
- * fall back to manual address entry / un-sorted discovery.
+ * Ported from the Solaris-Gemini app's hardened acquisition chain — the previous
+ * version made a single FusedLocation BALANCED_POWER request and gave up the
+ * moment it returned null (very common on a cold start / indoors), which read to
+ * users as "can't set my location". This version walks a robust fallback chain
+ * and is guaranteed to resolve exactly once within a bounded time:
+ *
+ *   1. FusedLocation getCurrentLocation(PRIORITY_HIGH_ACCURACY)  — a fresh, precise fix
+ *   2. FusedLocation lastLocation                                — recent cached fix
+ *   3. system LocationManager getLastKnownLocation(GPS → Network)
+ *   4. overall 12s timeout → resolve with whatever we have, else null
+ *
+ * Permission-aware (returns null when not granted) and never throws — callers
+ * fall back to manual address entry / un-sorted discovery. We deliberately drop
+ * Solaris's timezone + reverse-geocode work: NikhatGlow only needs (lat, lon),
+ * and turns it into an address via the backend geo gateway (geoReverse).
  */
 object LocationHelper {
+
+    private const val OVERALL_TIMEOUT_MS = 12_000L
 
     fun hasPermission(context: Context): Boolean {
         val fine = ContextCompat.checkSelfPermission(
@@ -34,24 +51,68 @@ object LocationHelper {
 
     /**
      * Best-effort current location. Returns (lat, lon) or null if permission is
-     * missing / location is off / the provider returns nothing. Uses a fresh
-     * high-accuracy fix (falls back internally to last-known on the platform).
+     * missing / location is off / every provider returns nothing.
      */
-    suspend fun current(context: Context): Pair<Double, Double>? {
-        if (!hasPermission(context)) return null
-        return try {
-            val client = LocationServices.getFusedLocationProviderClient(context)
-            val req = CurrentLocationRequest.Builder()
-                .setPriority(Priority.PRIORITY_BALANCED_POWER_ACCURACY)
-                .setMaxUpdateAgeMillis(60_000L)
-                .build()
-            @Suppress("MissingPermission")
-            val loc: Location? = suspendCancellableCoroutine { cont ->
-                client.getCurrentLocation(req, null)
-                    .addOnSuccessListener { cont.resume(it) }
-                    .addOnFailureListener { cont.resume(null) }
+    suspend fun current(context: Context): Pair<Double, Double>? =
+        suspendCancellableCoroutine { cont ->
+            acquire(context.applicationContext) { result ->
+                if (cont.isActive) cont.resume(result)
             }
-            loc?.let { it.latitude to it.longitude }
+        }
+
+    /**
+     * Drives the fallback chain. [onResult] is invoked exactly once (guarded by an
+     * AtomicBoolean) with the first fix found, or null when the chain is exhausted
+     * / the overall timeout fires.
+     */
+    @SuppressLint("MissingPermission")
+    private fun acquire(context: Context, onResult: (Pair<Double, Double>?) -> Unit) {
+        if (!hasPermission(context)) {
+            onResult(null)
+            return
+        }
+        val completed = AtomicBoolean(false)
+        val mainHandler = Handler(Looper.getMainLooper())
+
+        fun finish(loc: Location?) {
+            if (!completed.compareAndSet(false, true)) return
+            mainHandler.removeCallbacksAndMessages(null)
+            onResult(loc?.let { it.latitude to it.longitude })
+        }
+
+        // Hard timeout so the caller's spinner can never stick forever even if a
+        // provider neither completes nor fails (e.g. a wedged Play Services call).
+        mainHandler.postDelayed({ finish(systemLastKnown(context)) }, OVERALL_TIMEOUT_MS)
+
+        try {
+            val fused = LocationServices.getFusedLocationProviderClient(context)
+            val cts = CancellationTokenSource()
+            fused.getCurrentLocation(Priority.PRIORITY_HIGH_ACCURACY, cts.token)
+                .addOnSuccessListener { fresh ->
+                    if (fresh != null) {
+                        finish(fresh)
+                    } else {
+                        // No fresh fix → try the recent cached one, then the system providers.
+                        fused.lastLocation
+                            .addOnSuccessListener { last -> finish(last ?: systemLastKnown(context)) }
+                            .addOnFailureListener { finish(systemLastKnown(context)) }
+                    }
+                }
+                .addOnFailureListener { finish(systemLastKnown(context)) }
+        } catch (_: Exception) {
+            finish(systemLastKnown(context))
+        }
+    }
+
+    /** Native LocationManager last-known fix: GPS first (more precise), then Network. */
+    @SuppressLint("MissingPermission")
+    private fun systemLastKnown(context: Context): Location? {
+        return try {
+            val lm = context.getSystemService(Context.LOCATION_SERVICE) as? LocationManager ?: return null
+            val gps = if (lm.isProviderEnabled(LocationManager.GPS_PROVIDER))
+                lm.getLastKnownLocation(LocationManager.GPS_PROVIDER) else null
+            gps ?: if (lm.isProviderEnabled(LocationManager.NETWORK_PROVIDER))
+                lm.getLastKnownLocation(LocationManager.NETWORK_PROVIDER) else null
         } catch (_: Exception) {
             null
         }
