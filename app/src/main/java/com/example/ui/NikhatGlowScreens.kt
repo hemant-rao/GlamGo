@@ -744,6 +744,8 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
             }
         }
         
+        GlamGoMarketplaceFeed(viewModel = viewModel)
+
         BeautyShowcaseSection(viewModel = viewModel)
         
         FaqAccordionSection()
@@ -754,6 +756,237 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
     // §697 — tap-the-header location picker (current location + search).
     if (showLocationPicker) {
         LocationPickerSheet(viewModel = viewModel, onDismiss = { showLocationPicker = false })
+    }
+}
+
+@Composable
+fun GlamGoMarketplaceFeed(viewModel: NikhatGlowViewModel) {
+    val favoritePartners by viewModel.favoritePartners.collectAsState()
+    val allPartners = NikhatGlowDataSource.partners
+    val allServices = NikhatGlowDataSource.services
+    
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(16.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Column {
+                Text(
+                    text = "GLAMGO BEAUTY MARKETPLACE",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = NikhatRose,
+                    fontWeight = FontWeight.Bold,
+                    letterSpacing = 1.sp
+                )
+                Text(
+                    text = "Top-tier salons & studios near you",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold
+                )
+            }
+        }
+        
+        if (allPartners.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
+            ) {
+                Column(
+                    modifier = Modifier.padding(24.dp).fillMaxWidth(),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Default.Spa, contentDescription = null, modifier = Modifier.size(32.dp), tint = Color.Gray)
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text("No salons or beauty studios are currently active nearby.", fontWeight = FontWeight.Medium, color = Color.Gray, fontSize = 13.sp)
+                }
+            }
+        } else {
+            allPartners.forEach { partner ->
+                val isFavorite = favoritePartners.any { it.partnerId == partner.id }
+                
+                // Get this partner's specific services from catalog
+                val partnerServices = allServices.filter { service ->
+                    partner.servicesOffered.contains(service.id)
+                }
+                
+                Card(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { viewModel.currentScreen = Screen.PartnerStore(partner) }
+                        .testTag("marketplace_partner_card_${partner.id}"),
+                    shape = RoundedCornerShape(16.dp),
+                    border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.15f)),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Column(modifier = Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.Top) {
+                            AsyncImage(
+                                model = partner.avatarUrl.ifBlank { "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=200" },
+                                contentDescription = partner.name,
+                                contentScale = ContentScale.Crop,
+                                modifier = Modifier
+                                    .size(56.dp)
+                                    .clip(RoundedCornerShape(10.dp))
+                                    .border(1.dp, Color.Gray.copy(alpha = 0.2f), RoundedCornerShape(10.dp))
+                            )
+                            Spacer(modifier = Modifier.width(12.dp))
+                            Column(modifier = Modifier.weight(1f)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Text(
+                                        text = partner.name,
+                                        fontWeight = FontWeight.Bold,
+                                        fontSize = 16.sp,
+                                        color = Color.White
+                                    )
+                                    IconButton(
+                                        onClick = { viewModel.toggleFavorite(partner.id) },
+                                        modifier = Modifier.size(24.dp).testTag("partner_heart_toggle_${partner.id}")
+                                    ) {
+                                        Icon(
+                                            imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                            contentDescription = "Save Partner",
+                                            tint = if (isFavorite) NikhatRose else Color.Gray,
+                                            modifier = Modifier.size(18.dp)
+                                        )
+                                    }
+                                }
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Star, null, tint = NikhatGold, modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text("${partner.rating}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White)
+                                        Text(" (${partner.reviewsCount})", fontSize = 11.sp, color = Color.Gray)
+                                    }
+                                    Text("•", color = Color.Gray, fontSize = 11.sp)
+                                    Text("${partner.experienceYears} Yrs Exp", fontSize = 11.sp, color = Color.Gray)
+                                    Text("•", color = Color.Gray, fontSize = 11.sp)
+                                    Text("₹${partner.fromPricePaise / 100} min", fontSize = 11.sp, color = NikhatRose, fontWeight = FontWeight.Bold)
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = partner.description,
+                                    fontSize = 11.sp,
+                                    color = Color.Gray,
+                                    maxLines = 2,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                            }
+                        }
+                        
+                        if (partnerServices.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Divider(color = Color.Gray.copy(alpha = 0.1f))
+                            Spacer(modifier = Modifier.height(10.dp))
+                            
+                            // Respective Services Subsection in horizontal carousel styled exactly like food items
+                            Text(
+                                text = "MENU SELECTIONS & INSTANT ADD",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = NikhatRose,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp,
+                                modifier = Modifier.padding(bottom = 8.dp)
+                            )
+                            
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                partnerServices.forEach { service ->
+                                    var addBusy by remember { mutableStateOf(false) }
+                                    Card(
+                                        modifier = Modifier
+                                            .width(160.dp)
+                                            .clickable { viewModel.currentScreen = Screen.PartnerStore(partner) },
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.4f)),
+                                        border = BorderStroke(0.5.dp, Color.Gray.copy(alpha = 0.15f))
+                                    ) {
+                                        Column(modifier = Modifier.padding(8.dp)) {
+                                            AsyncImage(
+                                                model = service.imageUrl,
+                                                contentDescription = service.name,
+                                                contentScale = ContentScale.Crop,
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .height(70.dp)
+                                                    .clip(RoundedCornerShape(8.dp))
+                                            )
+                                            Spacer(modifier = Modifier.height(6.dp))
+                                            Text(
+                                                text = service.name,
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                maxLines = 1,
+                                                overflow = TextOverflow.Ellipsis,
+                                                color = Color.White
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Row(
+                                                modifier = Modifier.fillMaxWidth(),
+                                                horizontalArrangement = Arrangement.SpaceBetween,
+                                                verticalAlignment = Alignment.CenterVertically
+                                            ) {
+                                                Column {
+                                                    Text(
+                                                        text = "₹${service.pricePaise / 100}",
+                                                        fontSize = 11.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = NikhatRose
+                                                    )
+                                                    Text(
+                                                        text = "${service.durationMin}m",
+                                                        fontSize = 10.sp,
+                                                        color = Color.Gray
+                                                    )
+                                                }
+                                                IconButton(
+                                                    onClick = {
+                                                        addBusy = true
+                                                        viewModel.addToCart(partner.id, service.id) { _ ->
+                                                            addBusy = false
+                                                        }
+                                                    },
+                                                    enabled = !addBusy,
+                                                    modifier = Modifier
+                                                        .size(32.dp)
+                                                        .background(NikhatRose.copy(alpha = 0.15f), CircleShape)
+                                                        .testTag("feed_add_btn_${partner.id}_${service.id}")
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Add,
+                                                        contentDescription = "Quick add service to booking cart",
+                                                        tint = NikhatRose,
+                                                        modifier = Modifier.size(16.dp)
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -3670,6 +3903,337 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                                     }
                                 }
                             )
+                        }
+                    }
+                }
+            }
+
+            // GLAMGO PREMIUM LISTING & PARTNER SUBSCRIPTION CHECKER
+            val subState by viewModel.subscription.collectAsState()
+            val subIsActive = subState?.isActive == true
+            val subPeriodEnd = subState?.currentPeriodEnd?.take(10) ?: "Not set"
+            val subStatusLabel = subState?.status ?: "trial"
+            
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth().testTag("glamgo_subscription_card"),
+                border = BorderStroke(1.dp, if (subIsActive) SuccessGreen.copy(alpha = 0.25f) else NikhatRose.copy(alpha = 0.25f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                "GLAMGO PREMIUM SUBSCRIPTION",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = NikhatRose,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(10.dp)
+                                        .background(if (subIsActive) SuccessGreen else Color.Red, CircleShape)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Text(
+                                    text = if (subIsActive) "Listing: ACTIVE" else "Listing: INACTIVE",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = if (subIsActive) SuccessGreen else Color.Red
+                                )
+                            }
+                        }
+                        
+                        AssistChip(
+                            onClick = { viewModel.currentScreen = Screen.PartnerSubscription },
+                            label = { Text("₹99/month Tier", fontSize = 11.sp, fontWeight = FontWeight.Bold) },
+                            colors = AssistChipDefaults.assistChipColors(containerColor = NikhatRose.copy(alpha = 0.15f))
+                        )
+                    }
+                    
+                    Text(
+                        text = "Your beauty services are active and searchable on the GlamGo marketplace. The subscription allows unlimited incoming booking reservations with zero commission.",
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        lineHeight = 15.sp
+                    )
+                    
+                    if (subIsActive) {
+                        Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+                            Text("Current Period End:", fontSize = 11.sp, color = Color.Gray)
+                            Text(subPeriodEnd, fontSize = 11.sp, fontWeight = FontWeight.Bold, color = SuccessGreen)
+                        }
+                    } else {
+                        Surface(
+                            color = NikhatRose.copy(alpha = 0.08f),
+                            shape = RoundedCornerShape(8.dp),
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Text(
+                                text = "⚠️ Non-subscribers listings may be hidden in the user marketplace feeds. Activate your ₹99/month monthly tier card to resume bookings.",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Medium,
+                                color = NikhatRose,
+                                modifier = Modifier.padding(8.dp)
+                            )
+                        }
+                    }
+                    
+                    Button(
+                        onClick = { viewModel.currentScreen = Screen.PartnerSubscription },
+                        colors = ButtonDefaults.buttonColors(containerColor = if (subIsActive) MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f) else NikhatRose),
+                        modifier = Modifier.fillMaxWidth().testTag("glamgo_subscription_btn")
+                    ) {
+                        Text(
+                            text = if (subIsActive) "Manage Monthly Subscription Plan" else "Subscribe Now — ₹99/month",
+                            color = if (subIsActive) Color.White else Color.Black,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                }
+            }
+
+            // SALON/STUDIO REGISTRATION & SERVICE CATALOG MANAGER
+            var expandRegistrationForm by remember { mutableStateOf(false) }
+
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.fillMaxWidth(),
+                border = BorderStroke(1.dp, NikhatRose.copy(alpha = 0.25f))
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.weight(1f)) {
+                            Icon(Icons.Default.Spa, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(20.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(
+                                    "SALON / STUDIO SETUP",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = NikhatRose,
+                                    fontWeight = FontWeight.Bold,
+                                    letterSpacing = 1.sp
+                                )
+                                Text(
+                                    "Registration & Service Menu",
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = Color.White
+                                )
+                            }
+                        }
+                        IconButton(onClick = { expandRegistrationForm = !expandRegistrationForm }) {
+                            Icon(
+                                imageVector = if (expandRegistrationForm) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
+                                contentDescription = "Expand registration details",
+                                tint = Color.White
+                            )
+                        }
+                    }
+                    
+                    Text(
+                        "Manage your official beauty salon/studio branding, years of experience, and customize catalog services shown to nearby customers on GlamGo marketplace.",
+                        fontSize = 11.sp,
+                        color = Color.Gray,
+                        lineHeight = 15.sp
+                    )
+                    
+                    if (expandRegistrationForm) {
+                        Divider(color = Color.Gray.copy(alpha = 0.12f))
+                        
+                        // Register Salon/Studio inputs
+                        Text(
+                            "1. STUDIO PROFILE BRANDING",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NikhatRose,
+                            letterSpacing = 1.sp
+                        )
+                        
+                        var studioNameInput by remember { mutableStateOf(activeUser?.name ?: "") }
+                        var studioBioInput by remember { mutableStateOf(activeUser?.partnerBio ?: "") }
+                        var studioExpInput by remember { mutableStateOf(activeUser?.partnerExperience?.toString() ?: "0") }
+                        
+                        LaunchedEffect(activeUser) {
+                            activeUser?.let {
+                                studioNameInput = it.name
+                                studioBioInput = it.partnerBio
+                                studioExpInput = it.partnerExperience.toString()
+                            }
+                        }
+                        
+                        OutlinedTextField(
+                            value = studioNameInput,
+                            onValueChange = { studioNameInput = it },
+                            label = { Text("Salon / Studio Brand Name") },
+                            placeholder = { Text("e.g. Simran's Bridal Lounge") },
+                            modifier = Modifier.fillMaxWidth().testTag("salon_brand_name_input"),
+                            singleLine = true
+                        )
+                        
+                        OutlinedTextField(
+                            value = studioBioInput,
+                            onValueChange = { studioBioInput = it },
+                            label = { Text("About your Studio & Specialties") },
+                            placeholder = { Text("e.g. Specialists in deluxe organic glow facials, celebrity makeup, and stress relief massages.") },
+                            modifier = Modifier.fillMaxWidth().testTag("salon_bio_input"),
+                            maxLines = 3
+                        )
+                        
+                        OutlinedTextField(
+                            value = studioExpInput,
+                            onValueChange = { studioExpInput = it },
+                            label = { Text("Years of Professional Experience") },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth().testTag("salon_exp_input"),
+                            singleLine = true
+                        )
+                        
+                        Button(
+                            onClick = {
+                                if (studioNameInput.isNotBlank()) {
+                                    viewModel.updateProfile(
+                                        name = studioNameInput,
+                                        email = activeUser?.email ?: "",
+                                        bio = studioBioInput,
+                                        experience = studioExpInput.toIntOrNull() ?: 0
+                                    )
+                                    viewModel.notify("Salon & Studio registry updated successfully!")
+                                } else {
+                                    viewModel.notify("Please fill out a valid Salon / Studio Brand Name.", isError = true)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
+                            modifier = Modifier.fillMaxWidth().testTag("salon_branding_save_btn")
+                        ) {
+                            Text("Save Studio Details", fontWeight = FontWeight.Bold, color = Color.Black)
+                        }
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Divider(color = Color.Gray.copy(alpha = 0.12f))
+                        Spacer(modifier = Modifier.height(4.dp))
+                        
+                        // Add service
+                        Text(
+                            "2. SERVICE DICTIONARY ADDER",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = NikhatRose,
+                            letterSpacing = 1.sp
+                        )
+                        
+                        var customSvcName by remember { mutableStateOf("") }
+                        var customSvcCategory by remember { mutableStateOf("Salon") }
+                        var customSvcPrice by remember { mutableStateOf("") }
+                        var customSvcDuration by remember { mutableStateOf("45") }
+                        var customSvcDesc by remember { mutableStateOf("") }
+                        var customSvcProducts by remember { mutableStateOf("") }
+                        
+                        OutlinedTextField(
+                            value = customSvcName,
+                            onValueChange = { customSvcName = it },
+                            label = { Text("Beauty Treatment / Service Name") },
+                            placeholder = { Text("e.g. GlamGo Ultra Glow Facial") },
+                            modifier = Modifier.fillMaxWidth().testTag("custom_svc_name"),
+                            singleLine = true
+                        )
+                        
+                        Text("Category Tag:", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.Gray)
+                        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                            listOf("Salon", "Beauty", "Makeup", "Massage").forEach { cat ->
+                                val isSelected = customSvcCategory == cat
+                                FilterChip(
+                                    selected = isSelected,
+                                    onClick = { customSvcCategory = cat },
+                                    label = { Text(cat) },
+                                    colors = FilterChipDefaults.filterChipColors(
+                                        selectedContainerColor = NikhatRose.copy(alpha = 0.2f),
+                                        selectedLabelColor = NikhatRose
+                                    )
+                                )
+                            }
+                        }
+                        
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            OutlinedTextField(
+                                value = customSvcPrice,
+                                onValueChange = { customSvcPrice = it },
+                                label = { Text("Price (₹)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f).testTag("custom_svc_price"),
+                                singleLine = true
+                            )
+                            OutlinedTextField(
+                                value = customSvcDuration,
+                                onValueChange = { customSvcDuration = it },
+                                label = { Text("Duration (mins)") },
+                                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                modifier = Modifier.weight(1f).testTag("custom_svc_duration"),
+                                singleLine = true
+                            )
+                        }
+                        
+                        OutlinedTextField(
+                            value = customSvcDesc,
+                            onValueChange = { customSvcDesc = it },
+                            label = { Text("Menu Description") },
+                            placeholder = { Text("Briefly describe steps of facial, massage, haircut etc.") },
+                            modifier = Modifier.fillMaxWidth().testTag("custom_svc_desc")
+                        )
+                        
+                        OutlinedTextField(
+                            value = customSvcProducts,
+                            onValueChange = { customSvcProducts = it },
+                            label = { Text("Supplies & Premium Products Used") },
+                            placeholder = { Text("e.g. Lotus / Biotique pack, opened brand new.") },
+                            modifier = Modifier.fillMaxWidth().testTag("custom_svc_products")
+                        )
+                        
+                        Button(
+                            onClick = {
+                                val priceVal = customSvcPrice.toLongOrNull() ?: 0L
+                                val durationVal = customSvcDuration.toIntOrNull() ?: 45
+                                if (customSvcName.isNotBlank() && priceVal > 0) {
+                                    viewModel.createCustomPartnerService(
+                                        name = customSvcName,
+                                        categoryName = customSvcCategory,
+                                        pricePaise = priceVal * 100L,
+                                        durationMin = durationVal,
+                                        description = customSvcDesc.ifBlank { "Professional $customSvcName treatment." },
+                                        productsUsed = customSvcProducts.ifBlank { "Professional double-safety verified kit." }
+                                    )
+                                    customSvcName = ""
+                                    customSvcPrice = ""
+                                    customSvcDesc = ""
+                                    customSvcProducts = ""
+                                    viewModel.notify("New service listed successfully!")
+                                } else {
+                                    viewModel.notify("Please fill valid service name and rupee price", isError = true)
+                                }
+                            },
+                            colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
+                            modifier = Modifier.fillMaxWidth().testTag("custom_svc_add_btn")
+                        ) {
+                            Text("➕ List New Service to Catalog", fontWeight = FontWeight.Bold, color = Color.Black)
+                        }
+                        
+                        Spacer(modifier = Modifier.height(6.dp))
+                        
+                        Button(
+                            onClick = { viewModel.currentScreen = Screen.PartnerServices },
+                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
+                            modifier = Modifier.fillMaxWidth().testTag("standard_services_btn")
+                        ) {
+                            Text("Manage Rates & Standard Catalog ⚙️", color = Color.White)
                         }
                     }
                 }
