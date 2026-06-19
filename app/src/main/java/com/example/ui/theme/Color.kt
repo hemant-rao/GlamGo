@@ -11,30 +11,31 @@ val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Nikhat Glow — "Crimson Bloom" palette (§687).
+// Nikhat Glow — "Google Blue" palette (§694).
 //
-// Recoloured from the founder's reference image: deep crimson / wine / burgundy
-// organic shapes with crisp pure-white cards — premium, calm beauty-salon. This
-// retune keeps the SAME value NAMES (so the 3.5k-line screen code is untouched)
-// and preserves every Material on-colour contrast pairing: `primary`(crimson)
-// keeps white text (5.4:1), `secondary` keeps light text. Only the hex shifts —
-// the hero is now a dominant crimson, gold becomes a thin champagne accent (stars
-// only), and the darks become deep maroon. All WCAG-AA verified.
+// Recoloured from the founder's logo (green→blue→yellow→orange→red multicolour
+// mark). We take BLUE — the colour that bridges both halves of the logo — as the
+// single primary, with the other logo hues reserved for small status accents
+// (success/warning/error). This retune keeps the SAME value NAMES (so the
+// 3.5k-line screen code is untouched) and preserves every Material on-colour
+// contrast pairing: `primary`(blue) keeps white text, `secondary` keeps light
+// text. Only the hex shifts — the hero is now Google Blue, the gold star accent
+// becomes Google amber, and the darks become deep navy. WCAG-AA verified.
 // ─────────────────────────────────────────────────────────────────────────────
 
-val NikhatRose = Color(0xFFC0334F)     // DOMINANT brand crimson — primary; white text (5.4:1)
-val NikhatGold = Color(0xFFC9A24A)     // champagne-gold accent (rating stars / premium badge only)
-val DeepPlum = Color(0xFF2A1620)     // deep maroon-plum surface (dark)
-val DarkSlate = Color(0xFF1C1419)    // near-black warm maroon background (dark)
-val SoftCream = Color(0xFFFBF7F8)    // warm near-white app background (light)
-val AccentBronze = Color(0xFFE891A0) // dusty blush-rose tertiary / dark-mode primary
-val LightSage = Color(0xFFF4EEEF)    // muted surface variant
-val SuccessGreen = Color(0xFF1E7A4D) // AA-safe success on white (4.6:1)
-val OrderOrange = Color(0xFFB26A00)  // AA-safe warning/order amber-brown
+val NikhatRose = Color(0xFF1A73E8)     // DOMINANT brand blue — primary (Google Blue); white text
+val NikhatGold = Color(0xFFF9AB00)     // amber accent (rating stars / premium badge only)
+val DeepPlum = Color(0xFF0F2A47)     // deep navy surface (dark)
+val DarkSlate = Color(0xFF0B1A2E)    // near-black blue background (dark)
+val SoftCream = Color(0xFFF6F9FE)    // cool near-white app background (light)
+val AccentBronze = Color(0xFF8AB4F8) // soft blue tertiary / dark-mode primary (blue-300)
+val LightSage = Color(0xFFEEF3FC)    // muted blue-grey surface variant
+val SuccessGreen = Color(0xFF1E8E3E) // AA-safe success on white (Google green)
+val OrderOrange = Color(0xFFE37400)  // AA-safe warning/order amber (Google orange)
 
 // Light-scheme brand anchors.
-val PlumDeepInk = Color(0xFF7A1F2E)  // deep wine for light-mode secondary/brand text
-val RoseSoft = Color(0xFFFADCE1)     // blush tint for chips / tonal containers (crimson-100)
+val PlumDeepInk = Color(0xFF174EA6)  // deep blue for light-mode secondary/brand text
+val RoseSoft = Color(0xFFD2E3FC)     // blue tint for chips / tonal containers (blue-100)
 
 // Bold Typography Theme Colors (M3 SPEC) — retained for any references.
 val BoldBg = Color(0xFFFEF7FF)

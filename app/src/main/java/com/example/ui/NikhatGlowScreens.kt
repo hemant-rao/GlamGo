@@ -56,6 +56,16 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
     val currentThemeDark = isSystemInDarkTheme()
     val scope = rememberCoroutineScope()
 
+    // §694 — single app-wide Snackbar host. The ViewModel emits friendly API
+    // messages (every error path funnels through friendly()); we surface them
+    // here so the whole app shows user-readable toasts from one place.
+    val snackbarHostState = remember { SnackbarHostState() }
+    LaunchedEffect(Unit) {
+        viewModel.uiMessages.collect { msg ->
+            snackbarHostState.showSnackbar(message = msg.text, withDismissAction = true)
+        }
+    }
+
     val showLogin = !viewModel.isLoggedIn && !viewModel.isGuestMode
 
     // §687 — hardware Back: pop the nav history; when at a root, press Back twice
@@ -77,6 +87,7 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
     }
 
     Scaffold(
+        snackbarHost = { SnackbarHost(snackbarHostState) },
         bottomBar = {
             if (!showLogin) {
                 NikhatGlowBottomBar(
@@ -1239,6 +1250,9 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
     var addrQuery by remember { mutableStateOf("") }
     var addrSuggestions by remember { mutableStateOf<List<com.example.data.remote.GeoSuggestionDto>>(emptyList()) }
     val scope = rememberCoroutineScope()
+    // §694 — booking-time data capture for this flow.
+    var bookingNotes by remember { mutableStateOf("") }
+    var genderPref by remember { mutableStateOf("any") }
 
     // §687 — address search-as-you-type via the geo proxy (free OSM); only fires after
     // 3 characters, debounced 300ms (per the founder's "show after 3 letters").
@@ -1380,10 +1394,30 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                 }
             }
             
+            Spacer(modifier = Modifier.height(20.dp))
+            // §694 — special requests + professional gender preference.
+            Text("SPECIAL REQUESTS (OPTIONAL)", fontWeight = FontWeight.Bold, color = NikhatGold)
+            OutlinedTextField(
+                value = bookingNotes,
+                onValueChange = { bookingNotes = it },
+                label = { Text("Notes for the professional") },
+                placeholder = { Text("e.g. allergic to a product, gate code…") },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(vertical = 8.dp)
+                    .height(96.dp),
+                shape = RoundedCornerShape(12.dp)
+            )
+            Text("PROFESSIONAL PREFERENCE", fontWeight = FontWeight.Bold, color = NikhatGold)
+            Spacer(modifier = Modifier.height(8.dp))
+            GenderPreferenceSelector(selected = genderPref, onSelect = { genderPref = it })
+
             Spacer(modifier = Modifier.height(24.dp))
             Button(
                 onClick = {
                     if (defaultAddress != null) {
+                        viewModel.bookingNotes = bookingNotes
+                        viewModel.bookingGenderPref = genderPref
                         viewModel.confirmAndBook(service, partner, defaultAddress)
                     }
                 },
@@ -2991,6 +3025,94 @@ fun PartnerServicesScreen(viewModel: NikhatGlowViewModel) {
     }
 }
 
+// §694 — a circular avatar showing the user's initials over a translucent fill.
+// Used on the account headers for a clean, modern profile look.
+@Composable
+fun InitialsAvatar(name: String?, size: Int = 72) {
+    val initials = (name ?: "")
+        .trim()
+        .split(Regex("\\s+"))
+        .filter { it.isNotBlank() }
+        .take(2)
+        .joinToString("") { it.first().uppercase() }
+        .ifBlank { "?" }
+    Box(
+        modifier = Modifier
+            .size(size.dp)
+            .clip(CircleShape)
+            .background(Color.White.copy(alpha = 0.18f)),
+        contentAlignment = Alignment.Center
+    ) {
+        Text(
+            text = initials,
+            color = Color.White,
+            fontWeight = FontWeight.Bold,
+            fontSize = (size / 2.6f).sp
+        )
+    }
+}
+
+// §694 — a 3-way professional gender preference selector (Any / Female / Male).
+// Reused on the booking form and the partner profile edit form.
+@Composable
+fun GenderPreferenceSelector(selected: String, onSelect: (String) -> Unit) {
+    val options = listOf("any" to "Any", "female" to "Female", "male" to "Male")
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.spacedBy(8.dp)
+    ) {
+        options.forEach { (value, label) ->
+            val isSel = selected == value
+            Surface(
+                modifier = Modifier
+                    .weight(1f)
+                    .clip(RoundedCornerShape(10.dp))
+                    .clickable { onSelect(value) },
+                color = if (isSel) MaterialTheme.colorScheme.primary.copy(alpha = 0.12f)
+                        else MaterialTheme.colorScheme.surface,
+                border = BorderStroke(
+                    1.dp,
+                    if (isSel) MaterialTheme.colorScheme.primary
+                    else MaterialTheme.colorScheme.outline.copy(alpha = 0.4f)
+                ),
+                shape = RoundedCornerShape(10.dp)
+            ) {
+                Text(
+                    text = label,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 10.dp),
+                    textAlign = TextAlign.Center,
+                    color = if (isSel) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.onSurface,
+                    fontWeight = if (isSel) FontWeight.Bold else FontWeight.Normal,
+                    fontSize = 13.sp
+                )
+            }
+        }
+    }
+}
+
+// §694 — a read-only labelled field row, used by the profile screens when not
+// in edit mode (normal profile UX: view first, tap Edit to change).
+@Composable
+fun ProfileReadonlyRow(icon: ImageVector, label: String, value: String) {
+    Row(
+        modifier = Modifier.fillMaxWidth(),
+        verticalAlignment = Alignment.CenterVertically
+    ) {
+        Icon(
+            icon, contentDescription = null,
+            tint = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.size(20.dp)
+        )
+        Spacer(modifier = Modifier.width(12.dp))
+        Column {
+            Text(label, fontSize = 11.sp, color = Color.Gray)
+            Text(value, style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+        }
+    }
+}
+
 @Composable
 fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
     val activeUser by viewModel.activeUser.collectAsState()
@@ -3001,12 +3123,18 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
     var emailState by remember { mutableStateOf(activeUser?.email ?: "") }
     var showSavedNotification by remember { mutableStateOf(false) }
     var validationError by remember { mutableStateOf<String?>(null) }
-    
-    // Watch activeUser to prepopulate once loaded
+    // §694 — normal profile UX: the card is READ-ONLY until the user taps Edit;
+    // Save persists and returns to read-only; Cancel discards edits.
+    var isEditing by remember { mutableStateOf(false) }
+
+    // Watch activeUser to prepopulate once loaded. While editing we don't clobber
+    // the user's in-progress typing.
     LaunchedEffect(activeUser) {
         activeUser?.let {
-            if (nameState.isEmpty()) nameState = it.name
-            if (emailState.isEmpty()) emailState = it.email
+            if (!isEditing) {
+                nameState = it.name
+                emailState = it.email
+            }
         }
     }
     
@@ -3047,17 +3175,24 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                 }
                 
                 Spacer(modifier = Modifier.height(16.dp))
-                
-                Text(
-                    text = "YOUR PROFILE",
-                    style = MaterialTheme.typography.displayLarge,
-                    color = Color.White
-                )
-                Text(
-                    text = "View upcoming treatments & edit your account settings",
-                    fontSize = 12.sp,
-                    color = Color.White.copy(alpha = 0.7f)
-                )
+
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    InitialsAvatar(activeUser?.name, size = 64)
+                    Spacer(modifier = Modifier.width(14.dp))
+                    Column {
+                        Text(
+                            text = (activeUser?.name ?: "").ifBlank { "Your profile" },
+                            style = MaterialTheme.typography.headlineSmall,
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = (activeUser?.phone ?: "").ifBlank { "Customer account" },
+                            fontSize = 12.sp,
+                            color = Color.White.copy(alpha = 0.7f)
+                        )
+                    }
+                }
             }
         }
         
@@ -3078,84 +3213,138 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                     modifier = Modifier.padding(16.dp),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    Text(
-                        text = "EDIT CONTACT DETAILS",
-                        style = MaterialTheme.typography.titleMedium,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-                    
-                    OutlinedTextField(
-                        value = nameState,
-                        onValueChange = { 
-                            nameState = it 
-                            validationError = null
-                        },
-                        label = { Text("Display Name") },
-                        placeholder = { Text("Enter your name") },
-                        leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("profile_name_input"),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true
-                    )
-                    
-                    OutlinedTextField(
-                        value = emailState,
-                        onValueChange = { 
-                            emailState = it 
-                            validationError = null
-                        },
-                        label = { Text("Email Address") },
-                        placeholder = { Text("Enter your email") },
-                        leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("profile_email_input"),
-                        shape = RoundedCornerShape(12.dp),
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
-                    )
-                    
-                    if (validationError != null) {
-                        Text(
-                            text = validationError!!,
-                            color = MaterialTheme.colorScheme.error,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
-                    }
-                    
-                    if (showSavedNotification) {
-                        Text(
-                            text = "✓ Profile details updated in server database!",
-                            color = SuccessGreen,
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Bold,
-                            modifier = Modifier.padding(start = 4.dp)
-                        )
-                    }
-                    
-                    Button(
-                        onClick = {
-                            if (nameState.trim().isEmpty()) {
-                                validationError = "Name field cannot be left blank."
-                            } else if (!emailState.contains("@") || !emailState.contains(".")) {
-                                validationError = "Please enter a valid email address."
-                            } else {
-                                viewModel.updateProfile(nameState.trim(), emailState.trim())
-                                showSavedNotification = true
-                                validationError = null
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .testTag("profile_save_btn"),
-                        shape = RoundedCornerShape(12.dp)
+                    // Header row: title + Edit pencil (only when read-only).
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
                     ) {
-                        Text("Save Profile Changes", fontWeight = FontWeight.Bold)
+                        Text(
+                            text = "CONTACT DETAILS",
+                            style = MaterialTheme.typography.titleMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                        if (!isEditing) {
+                            TextButton(
+                                onClick = {
+                                    // enter edit mode from the latest saved values
+                                    nameState = activeUser?.name ?: nameState
+                                    emailState = activeUser?.email ?: emailState
+                                    validationError = null
+                                    showSavedNotification = false
+                                    isEditing = true
+                                },
+                                modifier = Modifier.testTag("profile_edit_btn")
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit",
+                                    modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Edit", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    if (isEditing) {
+                        OutlinedTextField(
+                            value = nameState,
+                            onValueChange = {
+                                nameState = it
+                                validationError = null
+                            },
+                            label = { Text("Display Name") },
+                            placeholder = { Text("Enter your name") },
+                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profile_name_input"),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true
+                        )
+
+                        OutlinedTextField(
+                            value = emailState,
+                            onValueChange = {
+                                emailState = it
+                                validationError = null
+                            },
+                            label = { Text("Email Address") },
+                            placeholder = { Text("Enter your email") },
+                            leadingIcon = { Icon(Icons.Default.Email, contentDescription = null) },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .testTag("profile_email_input"),
+                            shape = RoundedCornerShape(12.dp),
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email)
+                        )
+
+                        if (validationError != null) {
+                            Text(
+                                text = validationError!!,
+                                color = MaterialTheme.colorScheme.error,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    // discard edits, revert to saved values
+                                    nameState = activeUser?.name ?: ""
+                                    emailState = activeUser?.email ?: ""
+                                    validationError = null
+                                    isEditing = false
+                                },
+                                modifier = Modifier.weight(1f),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Cancel")
+                            }
+                            Button(
+                                onClick = {
+                                    if (nameState.trim().isEmpty()) {
+                                        validationError = "Name field cannot be left blank."
+                                    } else if (!emailState.contains("@") || !emailState.contains(".")) {
+                                        validationError = "Please enter a valid email address."
+                                    } else {
+                                        viewModel.updateProfile(nameState.trim(), emailState.trim())
+                                        viewModel.notify("Profile updated.", isError = false)
+                                        showSavedNotification = true
+                                        validationError = null
+                                        isEditing = false
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .testTag("profile_save_btn"),
+                                shape = RoundedCornerShape(12.dp)
+                            ) {
+                                Text("Save", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    } else {
+                        // Read-only view.
+                        ProfileReadonlyRow(Icons.Default.Person, "Display Name",
+                            (activeUser?.name ?: "").ifBlank { "Not set" })
+                        ProfileReadonlyRow(Icons.Default.Email, "Email Address",
+                            (activeUser?.email ?: "").ifBlank { "Not set" })
+                        ProfileReadonlyRow(Icons.Default.Phone, "Phone",
+                            (activeUser?.phone ?: "").ifBlank { "Not set" })
+                        if (showSavedNotification) {
+                            Text(
+                                text = "✓ Profile updated",
+                                color = SuccessGreen,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
                     }
                 }
             }
@@ -3483,7 +3672,9 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
     var dateState by remember { mutableStateOf("") }
     var timeState by remember { mutableStateOf("") }
     var customNotes by remember { mutableStateOf("") }
-    
+    // §694 — professional gender preference captured at booking time.
+    var genderPref by remember { mutableStateOf("any") }
+
     var errorState by remember { mutableStateOf<String?>(null) }
     var isBookingProgress by remember { mutableStateOf(false) }
     
@@ -3653,7 +3844,17 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                     shape = RoundedCornerShape(12.dp)
                 )
             }
-            
+
+            // Section 4: Professional gender preference (§694)
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    text = "4. PROFESSIONAL PREFERENCE",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                GenderPreferenceSelector(selected = genderPref, onSelect = { genderPref = it })
+            }
+
             // Error Indicator
             if (errorState != null) {
                 Card(
@@ -3692,6 +3893,10 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                         errorState = "Appointment preference slot time cannot be left blank."
                     } else {
                         isBookingProgress = true
+                        // §694 — hand the captured notes + gender preference to the VM
+                        // so they ride along on the create-booking request.
+                        viewModel.bookingNotes = customNotes
+                        viewModel.bookingGenderPref = genderPref
                         viewModel.bookDirectlyFromForm(
                             service = selectedService!!,
                             slot = "${dateState.trim()} at ${timeState.trim()}",

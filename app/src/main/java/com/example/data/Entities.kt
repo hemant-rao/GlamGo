@@ -20,7 +20,12 @@ data class UserEntity(
     val partnerServicesOffered: String = "", // Comma-separated list of service IDs
     val averageRating: Float = 4.8f,
     val completedJobs: Int = 0,
-    val partnerPublicCode: String = "" // §691 — unique UPPERCASE transfer code
+    val partnerPublicCode: String = "", // §691 — unique UPPERCASE transfer code
+    // §694 — display + partner business prefs.
+    val phone: String = "",
+    val gender: String = "", // "", "male", "female", "any"
+    val minimumOrderPaise: Long = 0,
+    val travelRadiusKm: Double = 0.0
 )
 
 @Entity(tableName = "addresses")

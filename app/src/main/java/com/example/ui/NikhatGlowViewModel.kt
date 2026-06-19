@@ -101,6 +101,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         subscriptionBusy = true; subscriptionError = null
         viewModelScope.launch {
             runCatching { repository.subscribe() }
+                .onSuccess { notify("Subscription active") }
                 .onFailure { subscriptionError = friendly(it) }
             subscriptionBusy = false
         }
@@ -110,6 +111,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         subscriptionBusy = true; subscriptionError = null
         viewModelScope.launch {
             runCatching { repository.cancelSubscription() }
+                .onSuccess { notify("Subscription cancelled") }
                 .onFailure { subscriptionError = friendly(it) }
             subscriptionBusy = false
         }
@@ -204,6 +206,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         portfolioBusy = true; portfolioError = null
         viewModelScope.launch {
             runCatching { repository.addPortfolioItem(uploadId, imageUrl, caption) }
+                .onSuccess { notify("Portfolio updated") }
                 .onFailure { portfolioError = friendly(it) }
             portfolioBusy = false
         }
@@ -492,8 +495,25 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private fun friendly(t: Throwable): String =
-        t.message?.takeIf { it.isNotBlank() } ?: "Something went wrong. Please try again."
+    // §694 — app-wide transient messages (Snackbar/toast). The root composable
+    // collects [uiMessages] and shows each one. Every error path already funnels
+    // through friendly(), so routing it through ApiErrors + emitting here wires
+    // user-friendly error toasts across the WHOLE app from one place. Successful
+    // actions call notify(..., isError=false) explicitly where confirmation helps.
+    data class UiMessage(val text: String, val isError: Boolean = false)
+
+    private val _uiMessages = MutableSharedFlow<UiMessage>(extraBufferCapacity = 16)
+    val uiMessages = _uiMessages.asSharedFlow()
+
+    fun notify(text: String, isError: Boolean = false) {
+        if (text.isNotBlank()) _uiMessages.tryEmit(UiMessage(text, isError))
+    }
+
+    private fun friendly(t: Throwable): String {
+        val msg = com.example.data.remote.ApiErrors.friendlyMessage(t)
+        notify(msg, isError = true)
+        return msg
+    }
 
     // ── Push reminders (device-local preference) ───────────────────────────────
     var pushRemindersEnabled by mutableStateOf(getPushRemindersPref()); private set
@@ -522,7 +542,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         if (!isLoggedIn) { triggerLoginPrompt(); return }
         viewModelScope.launch {
             runCatching { repository.addToCart(partnerId, serviceId) }
-                .onSuccess { onResult(null) }
+                .onSuccess { notify("Added to cart"); onResult(null) }
                 .onFailure { onResult(friendly(it)) }
         }
     }
@@ -545,8 +565,14 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             runCatching {
                 val addr = addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull()
                 repository.cartQuote(couponCode, addr?.id)
-                repository.createBookingFromLastQuote()
+                repository.createBookingFromLastQuote(
+                    customerNotes = bookingNotes,
+                    genderPreference = bookingGenderPref,
+                    deviceInfo = deviceInfoJson(),
+                )
             }.onSuccess { booking ->
+                bookingNotes = ""; bookingGenderPref = "any"
+                notify("Booking request sent")
                 currentScreen = Screen.BookingDetail(booking.id)
                 onResult(null)
             }.onFailure { onResult(friendly(it)) }
@@ -566,8 +592,33 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         return repository.getMessagesFlow(bookingId)
     }
 
-    fun updateProfile(name: String, email: String, bio: String = "", experience: Int = 0) {
-        viewModelScope.launch { runCatching { repository.updateProfile(name, email, bio, experience) } }
+    fun updateProfile(
+        name: String,
+        email: String,
+        bio: String = "",
+        experience: Int = 0,
+        gender: String? = null,
+        minimumOrderPaise: Long? = null,
+        travelRadiusKm: Double? = null,
+    ) {
+        viewModelScope.launch {
+            runCatching {
+                repository.updateProfile(name, email, bio, experience, gender, minimumOrderPaise, travelRadiusKm)
+            }
+        }
+    }
+
+    // ── §694 booking-time data capture (customer-set on the booking form) ──────
+    var bookingNotes by mutableStateOf("")
+    var bookingGenderPref by mutableStateOf("any")   // "any" | "male" | "female"
+
+    /** Small JSON describing the device, sent with each booking for analytics. */
+    private fun deviceInfoJson(): String {
+        val model = "${android.os.Build.MANUFACTURER} ${android.os.Build.MODEL}".trim()
+        val os = android.os.Build.VERSION.RELEASE ?: ""
+        // Plain string building (no JSON lib needed); values are tame device strings.
+        fun esc(s: String) = s.replace("\\", "").replace("\"", "")
+        return "{\"platform\":\"android\",\"os_version\":\"${esc(os)}\",\"model\":\"${esc(model)}\"}"
     }
 
     // §687 — lat/lon now flow through from a real source: a "use current location"
@@ -580,15 +631,20 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
     ) {
         viewModelScope.launch {
             runCatching { repository.addAddress(label, line1, line2, city, pincode, lat, lon) }
+                .onSuccess { notify("Address saved") }
         }
     }
 
     fun deleteAddress(id: Long) {
-        viewModelScope.launch { runCatching { repository.deleteAddress(id) } }
+        viewModelScope.launch {
+            runCatching { repository.deleteAddress(id) }.onSuccess { notify("Address removed") }
+        }
     }
 
     fun setDefaultAddress(id: Long) {
-        viewModelScope.launch { runCatching { repository.setDefaultAddress(id) } }
+        viewModelScope.launch {
+            runCatching { repository.setDefaultAddress(id) }.onSuccess { notify("Default address updated") }
+        }
     }
 
     fun updateBookingQuote(service: Service, partner: Partner, customPricePaise: Long? = null) {
@@ -609,8 +665,17 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
 
     fun confirmAndBook(service: Service, partner: Partner, address: AddressEntity) {
         viewModelScope.launch {
-            runCatching { repository.createBookingFromLastQuote() }
-                .onSuccess { booking -> currentScreen = Screen.BookingDetail(booking.id) }
+            runCatching {
+                repository.createBookingFromLastQuote(
+                    customerNotes = bookingNotes,
+                    genderPreference = bookingGenderPref,
+                    deviceInfo = deviceInfoJson(),
+                )
+            }.onSuccess { booking ->
+                bookingNotes = ""; bookingGenderPref = "any"
+                notify("Booking request sent")
+                currentScreen = Screen.BookingDetail(booking.id)
+            }
         }
     }
 
@@ -623,8 +688,14 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             val addr = addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull()
             runCatching {
                 repository.createQuote(partner.id, service.id, null, addr?.id, null, false)
-                repository.createBookingFromLastQuote()
+                repository.createBookingFromLastQuote(
+                    customerNotes = bookingNotes,
+                    genderPreference = bookingGenderPref,
+                    deviceInfo = deviceInfoJson(),
+                )
             }.onSuccess { booking ->
+                bookingNotes = ""; bookingGenderPref = "any"
+                notify("Booking request sent")
                 currentScreen = Screen.BookingDetail(booking.id)
                 onSuccess(booking.id)
             }
@@ -640,19 +711,28 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             runCatching {
                 repository.submitKyc(aadhaar, pan, "selfie_dev")
-            }
+            }.onSuccess { notify("KYC submitted for review") }
         }
     }
 
     fun setPartnerServicePrice(serviceId: String, name: String, category: String, pricePaise: Long, active: Boolean, productsUsed: String) {
-        viewModelScope.launch { runCatching { repository.setServicePrice(serviceId, pricePaise, active, productsUsed) } }
+        viewModelScope.launch {
+            runCatching { repository.setServicePrice(serviceId, pricePaise, active, productsUsed) }
+                .onSuccess { notify("Service updated") }
+        }
     }
 
     fun submitBookingReview(bookingId: String, rating: Int, comment: String) {
-        viewModelScope.launch { runCatching { repository.addReview(bookingId, rating, comment) } }
+        viewModelScope.launch {
+            runCatching { repository.addReview(bookingId, rating, comment) }
+                .onSuccess { notify("Thanks for your review") }
+        }
     }
 
     fun submitComplaint(bookingId: String, subject: String, message: String) {
-        viewModelScope.launch { runCatching { repository.createComplaint(bookingId, subject, message) } }
+        viewModelScope.launch {
+            runCatching { repository.createComplaint(bookingId, subject, message) }
+                .onSuccess { notify("Complaint submitted") }
+        }
     }
 }

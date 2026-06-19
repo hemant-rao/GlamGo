@@ -88,6 +88,10 @@ object Mappers {
         averageRating = d.ratingAvg ?: 0f,
         completedJobs = d.completedJobs ?: 0,
         partnerPublicCode = d.publicCode ?: "",
+        phone = d.phone ?: "",
+        gender = d.gender ?: "",
+        minimumOrderPaise = d.minimumOrderPaise ?: 0,
+        travelRadiusKm = d.travelRadiusKm ?: 0.0,
     )
 
     fun address(d: AddressDto): AddressEntity = AddressEntity(

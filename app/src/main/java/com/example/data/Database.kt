@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
         ComplaintEntity::class,
         FavoritePartnerEntity::class
     ],
-    version = 3,
+    version = 4, // §694 — UserEntity gained phone/gender/minimumOrderPaise/travelRadiusKm
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

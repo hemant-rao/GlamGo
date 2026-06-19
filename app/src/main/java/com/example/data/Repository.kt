@@ -422,9 +422,21 @@ class NikhatGlowRepository(context: Context) {
         )
     }
 
-    suspend fun createBookingFromLastQuote(): BookingEntity {
+    suspend fun createBookingFromLastQuote(
+        customerNotes: String? = null,
+        genderPreference: String? = null,
+        deviceInfo: String? = null,
+    ): BookingEntity {
         val qid = lastQuoteId ?: throw IllegalStateException("No quote — request a quote first.")
-        val dto = api.createBooking(BookingCreateReq(qid))
+        val dto = api.createBooking(
+            BookingCreateReq(
+                quoteId = qid,
+                customerNotes = customerNotes?.trim()?.ifBlank { null },
+                genderPreference = genderPreference?.ifBlank { null },
+                bookingSource = "app",
+                deviceInfo = deviceInfo?.ifBlank { null },
+            )
+        )
         lastQuoteId = null
         refreshBookings("customer")
         // Backend clears the checked-out cart server-side; mirror that locally.
@@ -531,13 +543,27 @@ class NikhatGlowRepository(context: Context) {
         loadThread(threadId)
     }
 
-    suspend fun updateProfile(name: String, email: String, bio: String, experience: Int) {
+    suspend fun updateProfile(
+        name: String,
+        email: String,
+        bio: String,
+        experience: Int,
+        gender: String? = null,
+        minimumOrderPaise: Long? = null,
+        travelRadiusKm: Double? = null,
+    ) {
         val role = tokenStore.activeRole ?: "customer"
-        runCatching { api.updateMe(mapOf("name" to name, "email" to email)) }
+        api.updateMe(mapOf("name" to name, "email" to email))
         if (role == "partner") {
-            runCatching {
-                api.updatePartnerProfile(mapOf("bio" to bio, "experience_years" to experience))
-            }
+            // Only send keys we actually have so we never clobber a server value with null.
+            val body = mutableMapOf<String, Any?>(
+                "bio" to bio,
+                "experience_years" to experience,
+            )
+            gender?.ifBlank { null }?.let { body["gender"] = it }
+            minimumOrderPaise?.let { body["minimum_order_paise"] = it }
+            travelRadiusKm?.let { body["travel_radius_km"] = it }
+            api.updatePartnerProfile(body)
         }
         refreshProfile(role)
     }

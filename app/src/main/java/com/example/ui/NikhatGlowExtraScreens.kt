@@ -9,6 +9,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -16,6 +17,7 @@ import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.EventNote
 import androidx.compose.material.icons.filled.Logout
 import androidx.compose.material.icons.filled.Person
@@ -34,6 +36,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import android.widget.Toast
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
@@ -244,6 +247,18 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
     var nameState by remember(activeUser?.name) { mutableStateOf(activeUser?.name ?: "") }
     var emailState by remember(activeUser?.email) { mutableStateOf(activeUser?.email ?: "") }
     var saved by remember { mutableStateOf(false) }
+    // §694 — read-only until the partner taps Edit; Save returns to read-only.
+    var isEditing by remember { mutableStateOf(false) }
+    // §694 — partner business prefs.
+    var genderState by remember(activeUser?.gender) {
+        mutableStateOf((activeUser?.gender ?: "").ifBlank { "any" })
+    }
+    var minOrderRupees by remember(activeUser?.minimumOrderPaise) {
+        mutableStateOf(((activeUser?.minimumOrderPaise ?: 0L) / 100).let { if (it > 0) it.toString() else "" })
+    }
+    var radiusState by remember(activeUser?.travelRadiusKm) {
+        mutableStateOf((activeUser?.travelRadiusKm ?: 0.0).let { if (it > 0) it.toString() else "" })
+    }
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -257,11 +272,15 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
             contentAlignment = Alignment.Center
         ) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                Icon(Icons.Default.Person, contentDescription = null, tint = Color.White, modifier = Modifier.size(56.dp))
+                InitialsAvatar(activeUser?.name, size = 72)
                 Spacer(modifier = Modifier.height(8.dp))
                 Text(activeUser?.name ?: "Partner", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                val phone = (activeUser?.phone ?: "").ifBlank { null }
+                if (phone != null) {
+                    Text(phone, color = Color.White.copy(alpha = 0.75f), fontSize = 13.sp)
+                }
                 Text(
-                    "Rating ${activeUser?.averageRating ?: 0f}  -  ${activeUser?.completedJobs ?: 0} jobs done",
+                    "Rating ${activeUser?.averageRating ?: 0f}  ·  ${activeUser?.completedJobs ?: 0} jobs done",
                     color = NikhatGold, fontSize = 13.sp
                 )
             }
@@ -360,25 +379,127 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                 }
             }
 
-            Text("Edit profile", fontWeight = FontWeight.Bold)
-            OutlinedTextField(
-                value = nameState, onValueChange = { nameState = it; saved = false },
-                label = { Text("Business / Display name") }, singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            OutlinedTextField(
-                value = emailState, onValueChange = { emailState = it; saved = false },
-                label = { Text("Email (optional)") }, singleLine = true,
-                modifier = Modifier.fillMaxWidth()
-            )
-            Button(
-                onClick = {
-                    viewModel.updateProfile(nameState, emailState, activeUser?.partnerBio ?: "", activeUser?.partnerExperience ?: 0)
-                    saved = true
-                },
-                colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
-                modifier = Modifier.fillMaxWidth().height(48.dp)
-            ) { Text(if (saved) "Saved" else "Save Changes") }
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Profile details", fontWeight = FontWeight.Bold)
+                        if (!isEditing) {
+                            TextButton(onClick = {
+                                nameState = activeUser?.name ?: ""
+                                emailState = activeUser?.email ?: ""
+                                saved = false
+                                isEditing = true
+                            }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Edit", color = NikhatRose, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    if (isEditing) {
+                        OutlinedTextField(
+                            value = nameState, onValueChange = { nameState = it; saved = false },
+                            label = { Text("Business / Display name") }, singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = emailState, onValueChange = { emailState = it; saved = false },
+                            label = { Text("Email (optional)") }, singleLine = true,
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Text("Preferred client gender", fontSize = 12.sp, color = Color.Gray)
+                        GenderPreferenceSelector(selected = genderState, onSelect = { genderState = it; saved = false })
+
+                        OutlinedTextField(
+                            value = minOrderRupees,
+                            onValueChange = { v -> minOrderRupees = v.filter { it.isDigit() }; saved = false },
+                            label = { Text("Minimum order (₹)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+                        OutlinedTextField(
+                            value = radiusState,
+                            onValueChange = { v -> radiusState = v.filter { it.isDigit() || it == '.' }; saved = false },
+                            label = { Text("Service radius (km)") },
+                            singleLine = true,
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                            modifier = Modifier.fillMaxWidth()
+                        )
+
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            OutlinedButton(
+                                onClick = {
+                                    nameState = activeUser?.name ?: ""
+                                    emailState = activeUser?.email ?: ""
+                                    genderState = (activeUser?.gender ?: "").ifBlank { "any" }
+                                    minOrderRupees = ((activeUser?.minimumOrderPaise ?: 0L) / 100).let { if (it > 0) it.toString() else "" }
+                                    radiusState = (activeUser?.travelRadiusKm ?: 0.0).let { if (it > 0) it.toString() else "" }
+                                    isEditing = false
+                                },
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Cancel") }
+                            Button(
+                                onClick = {
+                                    if (nameState.trim().isEmpty()) {
+                                        viewModel.notify("Name cannot be blank.", isError = true)
+                                    } else {
+                                        viewModel.updateProfile(
+                                            name = nameState.trim(),
+                                            email = emailState.trim(),
+                                            bio = activeUser?.partnerBio ?: "",
+                                            experience = activeUser?.partnerExperience ?: 0,
+                                            gender = genderState,
+                                            minimumOrderPaise = (minOrderRupees.toLongOrNull() ?: 0L) * 100,
+                                            travelRadiusKm = radiusState.toDoubleOrNull() ?: 0.0,
+                                        )
+                                        viewModel.notify("Profile updated.", isError = false)
+                                        saved = true
+                                        isEditing = false
+                                    }
+                                },
+                                colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
+                                modifier = Modifier.weight(1f)
+                            ) { Text("Save") }
+                        }
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Business / Display name", fontSize = 11.sp, color = Color.Gray)
+                            Text((activeUser?.name ?: "").ifBlank { "Not set" },
+                                style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Email", fontSize = 11.sp, color = Color.Gray)
+                            Text((activeUser?.email ?: "").ifBlank { "Not set" },
+                                style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Preferred client gender", fontSize = 11.sp, color = Color.Gray)
+                            Text((activeUser?.gender ?: "").ifBlank { "Any" }.replaceFirstChar { it.uppercase() },
+                                style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Minimum order", fontSize = 11.sp, color = Color.Gray)
+                            Text(((activeUser?.minimumOrderPaise ?: 0L) / 100).let { if (it > 0) "₹$it" else "No minimum" },
+                                style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        }
+                        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                            Text("Service radius", fontSize = 11.sp, color = Color.Gray)
+                            Text((activeUser?.travelRadiusKm ?: 0.0).let { if (it > 0) "$it km" else "Not set" },
+                                style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        }
+                    }
+                }
+            }
 
             OutlinedButton(
                 onClick = { viewModel.logout() },

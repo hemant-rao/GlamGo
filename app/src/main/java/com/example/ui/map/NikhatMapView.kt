@@ -86,9 +86,9 @@ private const val SRC_CUSTOMER = "ng-customer-src"
 private const val LYR_CUSTOMER_HALO = "ng-customer-halo-lyr"
 private const val LYR_CUSTOMER = "ng-customer-lyr"
 
-private const val COLOR_PARTNER = "#C0334F"   // Crimson (partner)
-private const val COLOR_CUSTOMER = "#3B82F6"  // blue (you)
-private const val COLOR_ROUTE = "#C0334F"
+private const val COLOR_PARTNER = "#1A73E8"   // Google Blue (partner / brand)
+private const val COLOR_CUSTOMER = "#1E8E3E"  // green (you) — distinct from brand blue
+private const val COLOR_ROUTE = "#1A73E8"      // brand blue route line
 
 @Volatile private var httpConfigured = false
 

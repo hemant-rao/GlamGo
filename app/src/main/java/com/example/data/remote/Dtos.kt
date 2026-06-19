@@ -52,6 +52,10 @@ data class ProfileDto(
     @Json(name = "kyc_status") val kycStatus: String? = null,
     // §691 — partner's own unique transfer code (UPPERCASE).
     @Json(name = "public_code") val publicCode: String? = null,
+    // §694 — partner business prefs (returned by ser_partner_profile / auth/me).
+    val gender: String? = null,
+    @Json(name = "minimum_order_paise") val minimumOrderPaise: Long? = null,
+    @Json(name = "travel_radius_km") val travelRadiusKm: Double? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -119,6 +123,10 @@ data class PartnerDto(
     // §691 — the partner's own unique code (UPPERCASE), shown on their profile and
     // shared with a colleague to receive a targeted booking transfer.
     @Json(name = "public_code") val publicCode: String? = null,
+    // §694 — partner business prefs.
+    val gender: String? = null,
+    @Json(name = "minimum_order_paise") val minimumOrderPaise: Long? = null,
+    @Json(name = "travel_radius_km") val travelRadiusKm: Double? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -307,7 +315,14 @@ data class QuoteResp(
 )
 
 @JsonClass(generateAdapter = true)
-data class BookingCreateReq(@Json(name = "quote_id") val quoteId: String)
+data class BookingCreateReq(
+    @Json(name = "quote_id") val quoteId: String,
+    // §694 — optional booking-time data capture (backend defaults if omitted).
+    @Json(name = "customer_notes") val customerNotes: String? = null,
+    @Json(name = "gender_preference") val genderPreference: String? = null,
+    @Json(name = "booking_source") val bookingSource: String? = null,
+    @Json(name = "device_info") val deviceInfo: String? = null,
+)
 
 @JsonClass(generateAdapter = true)
 data class BookingDto(
