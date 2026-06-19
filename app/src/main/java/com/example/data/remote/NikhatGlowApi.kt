@@ -46,7 +46,7 @@ interface NikhatGlowApi {
     suspend fun service(@Path("id") id: Int): ServiceDto
 
     @GET("catalog/search")
-    suspend fun search(@Query("q") q: String? = null, @Query("category") category: Int? = null): ServicesResp
+    suspend fun search(@Query("q") q: String? = null, @Query("category") category: Int? = null): ServicesWrap
 
     // ── Geo (§687 — server-side Ola Maps proxy; the REST key stays on the server) ──
     @GET("geo/autocomplete")
@@ -69,6 +69,12 @@ interface NikhatGlowApi {
         @Query("to_lat") toLat: Double,
         @Query("to_lon") toLon: Double,
     ): GeoDirectionsResp
+
+    // §690 — remote map/feature config from the OdioBook-level geo gateway. This
+    // lives at /api/geo/* (NOT under /api/nikhatglow/v1/), so we pass an ABSOLUTE
+    // URL via @Url (built by the repository from NetworkConfig.baseUrl).
+    @GET
+    suspend fun geoAppConfig(@retrofit2.http.Url url: String): GeoAppConfigDto
 
     // ── Partner discovery ─────────────────────────────────────────────────────
     @GET("customer/partners")

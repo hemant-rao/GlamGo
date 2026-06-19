@@ -179,6 +179,12 @@ class NikhatGlowRepository(context: Context) {
         }.getOrDefault(emptyList())
     }
 
+    /** §690 — server-side service search. Returns null on failure so the caller
+     *  can fall back to the local in-memory filter. Results are partner-filtered
+     *  and carry the price range (Mappers.service maps min/max). */
+    suspend fun searchServices(q: String): List<Service>? =
+        runCatching { api.search(q).services.map { Mappers.service(it) } }.getOrNull()
+
     /** Discovery for a single service — used by the partner-select screen so the
      *  list reflects who actually offers that service right now (blank until a
      *  subscribed partner adds it). §687 — accepts the device fix for near-me. */
@@ -366,6 +372,15 @@ class NikhatGlowRepository(context: Context) {
 
     suspend fun geoDirections(fromLat: Double, fromLon: Double, toLat: Double, toLon: Double) =
         runCatching { api.geoDirections(fromLat, fromLon, toLat, toLon) }.getOrNull()
+
+    /** §690 — remote map config from the OdioBook geo gateway (tile key + base url
+     *  + feature flags). Builds the ABSOLUTE /api/geo URL from the app's server
+     *  root (NetworkConfig.baseUrl is .../api/nikhatglow/v1/). Null on failure. */
+    suspend fun geoAppConfig(): com.example.data.remote.GeoAppConfigDto? {
+        val root = com.example.data.remote.NetworkConfig.baseUrl.substringBefore("/api/")
+        val url = "$root/api/geo/app-config?app=nikhatglow"
+        return runCatching { api.geoAppConfig(url) }.getOrNull()
+    }
 
     suspend fun deleteAddress(id: Long) {
         api.deleteAddress(id.toInt())

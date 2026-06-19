@@ -23,8 +23,35 @@ data class Service(
     val reviewsCount: Int,
     val inclusions: List<String>,
     val faqs: List<Pair<String, String>>,
-    val imageUrl: String
+    val imageUrl: String,
+    // §690 — partner-set price RANGE (null when unknown / single price). The app
+    // shows "₹X – ₹Y" instead of a single price; `partnerCount` = how many
+    // partners offer this service right now.
+    val priceMinPaise: Long? = null,
+    val priceMaxPaise: Long? = null,
+    val partnerCount: Int = 0,
 )
+
+/**
+ * §690 — human price label for a service. We never set the price; partners do, so
+ * we render the RANGE of what offering partners charge:
+ *   • both min & max present and different → "₹250 – ₹400"
+ *   • single price (min==max, or only one side) → "₹250"
+ *   • nothing known → fall back to the base price, else "Price on request".
+ * Whole rupees (paise/100), no decimals. Never throws on null.
+ */
+fun Service.priceLabel(): String {
+    fun r(paise: Long): String = "₹${paise / 100}"
+    val lo = priceMinPaise
+    val hi = priceMaxPaise
+    return when {
+        lo != null && hi != null && hi > lo -> "${r(lo)} – ${r(hi)}"
+        lo != null -> r(lo)
+        hi != null -> r(hi)
+        pricePaise > 0 -> r(pricePaise)
+        else -> "Price on request"
+    }
+}
 
 data class Partner(
     val id: String,

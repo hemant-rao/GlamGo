@@ -78,6 +78,14 @@ data class ServiceDto(
     @Json(name = "rating_avg") val ratingAvg: Float = 0f,
     @Json(name = "rating_count") val ratingCount: Int = 0,
     val inclusions: List<String>? = null,
+    // §690 — partner-driven PRICE RANGE. We never set a service price; partners do.
+    // The catalog returns the min/max of what offering partners charge + how many
+    // offer it. Nullable: a service with no offering won't be returned at all, but
+    // older backends omit these → null (the app falls back to base price).
+    @Json(name = "price_min_paise") val priceMinPaise: Long? = null,
+    @Json(name = "price_max_paise") val priceMaxPaise: Long? = null,
+    @Json(name = "from_price_paise") val fromPricePaise: Long? = null,
+    @Json(name = "partner_count") val partnerCount: Int = 0,
 )
 
 @JsonClass(generateAdapter = true)
@@ -163,6 +171,28 @@ data class GeoDirectionsResp(
     @Json(name = "distance_m") val distanceM: Int = 0,
     @Json(name = "duration_s") val durationS: Int = 0,
     @Json(name = "_disabled") val disabled: Boolean = false,
+)
+
+// ── Geo gateway app-config (§690 — GET /api/geo/app-config?app=nikhatglow) ────
+@JsonClass(generateAdapter = true)
+data class GeoFeaturesDto(
+    val autocomplete: Boolean = true,
+    @Json(name = "reverse_geocode") val reverseGeocode: Boolean = true,
+    val geocode: Boolean = true,
+    val directions: Boolean = true,
+    @Json(name = "live_tracking") val liveTracking: Boolean = true,
+    @Json(name = "map_tiles") val mapTiles: Boolean = true,
+)
+
+@JsonClass(generateAdapter = true)
+data class GeoAppConfigDto(
+    val app: String = "nikhatglow",
+    val enabled: Boolean = true,
+    @Json(name = "maps_enabled") val mapsEnabled: Boolean = false,
+    @Json(name = "weather_enabled") val weatherEnabled: Boolean = false,
+    @Json(name = "tile_key") val tileKey: String = "",
+    @Json(name = "base_url") val baseUrl: String = "https://api.olamaps.io",
+    val features: GeoFeaturesDto = GeoFeaturesDto(),
 )
 
 // ── Addresses ────────────────────────────────────────────────────────────────

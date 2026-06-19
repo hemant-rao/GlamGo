@@ -235,21 +235,36 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
     val activeUser by viewModel.activeUser.collectAsState()
     val addresses by viewModel.addresses.collectAsState()
     val bookings by viewModel.bookings.collectAsState()
-    
+    val deviceLoc by viewModel.deviceLocation.collectAsState()
+
+    // §690 — capture the device fix on entering Home (no-op without permission) so
+    // discovery is distance-sorted ("near me") for returning logged-in users too,
+    // not only after the "use current location" address tap.
+    LaunchedEffect(Unit) { viewModel.captureDeviceLocation() }
+
     val activeAddress = addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull()
     var searchPrompt by remember { mutableStateOf("") }
     var minRatingFilter by remember { mutableStateOf(0.0) }
 
     val q = searchPrompt.trim()
-    val filteredServices = NikhatGlowDataSource.services.filter { service ->
-        // §687 — only start filtering once the query is >= 3 chars (avoids jumpy,
-        // premature results on 1–2 keystrokes); shorter input shows the full list.
-        val matchesSearch = q.length < 3 ||
-            service.name.contains(q, ignoreCase = true) ||
-            service.description.contains(q, ignoreCase = true)
-        val matchesRating = service.rating >= minRatingFilter
-        matchesSearch && matchesRating
+    // §690 — once the query is >= 3 chars, hit the backend search (partner-filtered
+    // + price range), debounced 300ms; fall back to the local in-memory filter when
+    // the query is short or the call fails (remoteResults stays null).
+    var remoteResults by remember { mutableStateOf<List<Service>?>(null) }
+    LaunchedEffect(q) {
+        remoteResults = if (q.length >= 3) {
+            kotlinx.coroutines.delay(300)
+            viewModel.searchServices(q)
+        } else null
     }
+    val baseServices = if (q.length >= 3 && remoteResults != null) remoteResults!!
+        else NikhatGlowDataSource.services.filter { service ->
+            // shorter input shows the full list; 3+ chars filters locally as a fallback.
+            q.length < 3 ||
+                service.name.contains(q, ignoreCase = true) ||
+                service.description.contains(q, ignoreCase = true)
+        }
+    val filteredServices = baseServices.filter { it.rating >= minRatingFilter }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         // TOP Header
@@ -288,6 +303,18 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
+                        }
+                        // §690 — "near you" indicator once a real device fix is known
+                        // (discovery is then distance-sorted). Hidden if no GPS fix.
+                        if (deviceLoc != null) {
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.MyLocation, contentDescription = null,
+                                    tint = SuccessGreen, modifier = Modifier.size(12.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Near you · sorted by distance",
+                                    color = SuccessGreen, fontSize = 10.sp)
+                            }
                         }
                     }
                     IconButton(
@@ -427,14 +454,16 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
             }
         }
 
-        // CATEGORY SECTION
-        Text(
-            text = "EXPLORE CATEGORIES",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 4.dp)
-        )
-        
+        // CATEGORY SECTION — header hidden when the (partner-driven) catalog is empty.
+        if (NikhatGlowDataSource.categories.isNotEmpty()) {
+            Text(
+                text = "EXPLORE CATEGORIES",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 4.dp)
+            )
+        }
+
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -483,63 +512,52 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
             }
         }
         
-        // QUICK ACTION: Booking Form Banner
-        Card(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(16.dp)
-                .clickable { viewModel.currentScreen = Screen.ServiceBookingForm }
-                .testTag("quick_booking_banner"),
-            shape = RoundedCornerShape(24.dp),
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.secondary),
-            border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.5f))
-        ) {
-            Row(
-                modifier = Modifier.padding(16.dp),
-                verticalAlignment = Alignment.CenterVertically
+        // §690 #3 — the "Custom Appointment / Book Any Service" banner routed into
+        // the random-partner ServiceBookingForm (a half-built Flow-B broadcast stub
+        // that picks an arbitrary partner, discards the slot and silently dead-ends
+        // when no partner is available). Flow-B (broadcast → first partner to accept
+        // at their price) is not built yet, so the entry point is removed to avoid a
+        // dead-end. Re-add this banner when Flow-B ships.
+
+        // §690 #4 — Home empty state: when no partner offers anything yet the catalog
+        // is empty; show a single "coming soon" card instead of bare section headers.
+        if (NikhatGlowDataSource.categories.isEmpty() && NikhatGlowDataSource.services.isEmpty()) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(16.dp)
+                    .testTag("home_empty_state"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.4f))
             ) {
-                Column(modifier = Modifier.weight(1f)) {
-                    Text(
-                        text = "CUSTOM APPOINTMENT",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = MaterialTheme.colorScheme.primaryContainer
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "BOOK ANY SERVICE",
-                        style = MaterialTheme.typography.titleLarge,
-                        color = Color.White
-                    )
-                    Spacer(modifier = Modifier.height(2.dp))
-                    Text(
-                        text = "Pick your service, date & time directly.",
-                        color = Color.White.copy(alpha = 0.8f),
-                        fontSize = 11.sp
-                    )
-                }
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .background(Color.White.copy(alpha = 0.15f), CircleShape),
-                    contentAlignment = Alignment.Center
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
                 ) {
-                    Icon(
-                        Icons.Default.Add,
-                        contentDescription = "New booking",
-                        tint = Color.White
-                    )
+                    Icon(Icons.Default.Spa, contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(40.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Services coming soon to your area",
+                        style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Beauty professionals near you are still setting up. Check back shortly.",
+                        style = MaterialTheme.typography.bodySmall, color = Color.Gray,
+                        textAlign = TextAlign.Center)
                 }
             }
         }
 
-        // SERVICES SUGGESTIONS
-        Text(
-            text = "TRENDING SERVICES",
-            style = MaterialTheme.typography.labelMedium,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 8.dp)
-        )
-        
+        // SERVICES SUGGESTIONS — header hidden when there's nothing to show.
+        if (filteredServices.isNotEmpty()) {
+            Text(
+                text = "TRENDING SERVICES",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 16.dp, top = 24.dp, end = 16.dp, bottom = 8.dp)
+            )
+        }
+
         filteredServices.chunked(2).forEach { rowServices ->
             Row(
                 modifier = Modifier
@@ -617,7 +635,7 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
                                 Text(
-                                    "₹${service.pricePaise / 100}",
+                                    service.priceLabel(),
                                     style = MaterialTheme.typography.titleMedium,
                                     color = MaterialTheme.colorScheme.primary
                                 )
@@ -694,7 +712,7 @@ fun CategoryDetailScreen(viewModel: NikhatGlowViewModel, category: Category) {
                                 horizontalArrangement = Arrangement.SpaceBetween,
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Text("₹${service.pricePaise / 100}", fontWeight = FontWeight.Bold, color = NikhatGold, fontSize = 16.sp)
+                                Text(service.priceLabel(), fontWeight = FontWeight.Bold, color = NikhatGold, fontSize = 16.sp)
                                 Button(
                                     onClick = { viewModel.currentScreen = Screen.ServiceDetail(service) },
                                     colors = ButtonDefaults.buttonColors(containerColor = NikhatGold)
@@ -764,7 +782,17 @@ fun ServiceDetailScreen(viewModel: NikhatGlowViewModel, service: Service) {
             ) {
                 Column {
                     Text("Duration: ${service.durationMin} mins", fontWeight = FontWeight.Medium)
-                    Text("₹${service.pricePaise / 100}", fontSize = 22.sp, fontWeight = FontWeight.Bold, color = NikhatGold)
+                    Text(service.priceLabel(), fontSize = 22.sp, fontWeight = FontWeight.Bold, color = NikhatGold)
+                    // §690 — prices are set by partners; show the range source so the
+                    // customer understands "kitne se kitne" and that we don't fix it.
+                    if (service.partnerCount > 0) {
+                        Text(
+                            "Price set by ${service.partnerCount} " +
+                                if (service.partnerCount == 1) "partner" else "partners",
+                            fontSize = 12.sp,
+                            color = Color.Gray
+                        )
+                    }
                 }
                 
                 Button(
@@ -1276,12 +1304,29 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    OutlinedTextField(
-                        value = viewModel.selectedSlot,
-                        onValueChange = { viewModel.selectedSlot = it },
-                        label = { Text("e.g. Tomorrow evening, or a date & time") },
+                    // §690 — real date + time pickers (was a single free-text field).
+                    // Both feed viewModel.selectedSlot as "<date> at <time>".
+                    var bcDate by remember { mutableStateOf("") }
+                    var bcTime by remember { mutableStateOf("") }
+                    fun syncSlot() {
+                        viewModel.selectedSlot = listOfNotNull(
+                            bcDate.ifBlank { null }, bcTime.ifBlank { null }
+                        ).joinToString(" at ")
+                    }
+                    NikhatDateField(
+                        value = bcDate,
+                        onChange = { bcDate = it; syncSlot() },
+                        label = "Preferred date",
+                        iconTint = NikhatGold,
                         modifier = Modifier.fillMaxWidth(),
-                        singleLine = true
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    NikhatTimeField(
+                        value = bcTime,
+                        onChange = { bcTime = it; syncSlot() },
+                        label = "Preferred time",
+                        iconTint = NikhatGold,
+                        modifier = Modifier.fillMaxWidth(),
                     )
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
@@ -1466,7 +1511,21 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
     
     val booking = bookings.firstOrNull { it.id == bookingId }
     var chatText by remember { mutableStateOf("") }
-    
+
+    // §690 — live map state (mutual tracking) + remote geo config (tile key/flags).
+    val geoConfig by viewModel.geoConfig.collectAsState()
+    val trackCustomer by viewModel.trackCustomer.collectAsState()
+    val trackPartner by viewModel.trackPartner.collectAsState()
+    val trackRoute by viewModel.trackRoute.collectAsState()
+    val trackableStates = remember { setOf("accepted", "assigned", "partner_on_the_way", "arrived", "started") }
+    val isTrackable = booking?.status in trackableStates
+    // Open the tracking socket only while the job is in a trackable state; close on
+    // leaving the screen or the state changing.
+    DisposableEffect(bookingId, isTrackable) {
+        if (isTrackable) viewModel.startLiveTracking(bookingId)
+        onDispose { viewModel.stopLiveTracking() }
+    }
+
     var showChatTab by remember { mutableStateOf(false) }
     var reviewRatingSelected by remember { mutableStateOf(5) }
     var reviewCommentText by remember { mutableStateOf("") }
@@ -1541,6 +1600,42 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                             text = booking.status.replace("_", " ").replaceFirstChar { it.uppercase() },
                             color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp
                         )
+                    }
+                }
+
+                // §690 — LIVE MAP (MapLibre + Ola tiles). Shown while the job is in a
+                // trackable state AND the admin has Maps + live-tracking enabled and a
+                // tile key configured. Mutual: blue = you, crimson = partner, line = route.
+                val cfg = geoConfig
+                val mapReady = cfg != null && cfg.mapsEnabled && cfg.features.liveTracking &&
+                    cfg.tileKey.isNotBlank()
+                if (isTrackable && mapReady) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(260.dp)
+                            .padding(horizontal = 12.dp, vertical = 8.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                    ) {
+                        com.example.ui.map.NikhatMapView(
+                            tileKey = cfg!!.tileKey,
+                            tileBaseUrl = cfg.baseUrl,
+                            customer = trackCustomer,
+                            partner = trackPartner,
+                            route = trackRoute,
+                            followCurrent = false,
+                            modifier = Modifier.fillMaxSize(),
+                        )
+                    }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                        horizontalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        Text("● You", color = Color(0xFF3B82F6), fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        Text("● Partner", color = NikhatRose, fontSize = 12.sp, fontWeight = FontWeight.Medium)
+                        if (trackPartner == null) {
+                            Text("Waiting for partner location…", color = Color.Gray, fontSize = 12.sp)
+                        }
                     }
                 }
 
@@ -3209,7 +3304,7 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                                     overflow = TextOverflow.Ellipsis
                                 )
                                 Text(
-                                    text = "₹${service.pricePaise / 100}",
+                                    text = service.priceLabel(),
                                     fontSize = 12.sp,
                                     color = MaterialTheme.colorScheme.primary,
                                     fontWeight = FontWeight.Black
@@ -3228,36 +3323,22 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                     color = MaterialTheme.colorScheme.primary
                 )
                 
-                OutlinedTextField(
+                // §690 — real calendar + time pickers (were free-text; "calendar
+                // never opened"). Tapping opens a Material3 DatePicker / TimePicker.
+                NikhatDateField(
                     value = dateState,
-                    onValueChange = { 
-                        dateState = it 
-                        errorState = null
-                    },
-                    label = { Text("Appointed Date") },
-                    placeholder = { Text("e.g. 25 June 2026") },
-                    leadingIcon = { Icon(Icons.Default.CalendarToday, contentDescription = null, tint = NikhatGold) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("booking_date_input"),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
+                    onChange = { dateState = it; errorState = null },
+                    label = "Appointed Date",
+                    iconTint = NikhatGold,
+                    modifier = Modifier.fillMaxWidth().testTag("booking_date_input"),
                 )
-                
-                OutlinedTextField(
+
+                NikhatTimeField(
                     value = timeState,
-                    onValueChange = { 
-                        timeState = it 
-                        errorState = null
-                    },
-                    label = { Text("Preferred Time Slot") },
-                    placeholder = { Text("e.g. 11:00 AM") },
-                    leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, tint = NikhatGold) },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .testTag("booking_time_input"),
-                    shape = RoundedCornerShape(12.dp),
-                    singleLine = true
+                    onChange = { timeState = it; errorState = null },
+                    label = "Preferred Time Slot",
+                    iconTint = NikhatGold,
+                    modifier = Modifier.fillMaxWidth().testTag("booking_time_input"),
                 )
             }
             

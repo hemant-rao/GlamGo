@@ -44,13 +44,17 @@ object Mappers {
         categoryId = d.categoryId.toString(),
         name = d.name,
         description = d.description ?: "",
-        pricePaise = d.basePricePaise,
+        // base price kept as a fallback; the UI prefers the partner-set range below.
+        pricePaise = d.fromPricePaise ?: d.priceMinPaise ?: d.basePricePaise,
         durationMin = d.durationMin,
         rating = d.ratingAvg,
         reviewsCount = d.ratingCount,
         inclusions = d.inclusions ?: emptyList(),
         faqs = emptyList(),
         imageUrl = d.imageUrl ?: "",
+        priceMinPaise = d.priceMinPaise,
+        priceMaxPaise = d.priceMaxPaise,
+        partnerCount = d.partnerCount,
     )
 
     fun partner(d: PartnerDto): Partner = Partner(

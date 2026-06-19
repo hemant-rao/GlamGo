@@ -8,6 +8,10 @@ import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.data.*
+import com.example.data.remote.GeoAppConfigDto
+import com.example.data.remote.LiveTrackingSocket
+import com.example.ui.map.GeoPoint
+import com.example.ui.map.NikhatMaps
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 
@@ -212,12 +216,82 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /** §690 — server-side service search (price-range + partner-filtered). Returns
+     *  null on failure so the screen falls back to the local in-memory filter. */
+    suspend fun searchServices(q: String): List<Service>? = repository.searchServices(q)
+
     /** Address search-as-you-type via our Ola Maps proxy. */
     suspend fun searchPlaces(q: String) =
         if (q.isBlank()) emptyList() else repository.geoAutocomplete(q, _deviceLocation.value?.first, _deviceLocation.value?.second)
 
     /** Turn a GPS fix into a human-readable address (prefill the manual form). */
     suspend fun reverseGeocode(lat: Double, lon: Double) = repository.geoReverse(lat, lon)
+
+    // ── §690 geo gateway remote config (tile key + base url + feature flags) ───
+    private val _geoConfig = MutableStateFlow<GeoAppConfigDto?>(null)
+    val geoConfig: StateFlow<GeoAppConfigDto?> = _geoConfig.asStateFlow()
+
+    fun refreshGeoConfig() {
+        viewModelScope.launch {
+            val cfg = repository.geoAppConfig()
+            if (cfg != null) _geoConfig.value = cfg
+        }
+    }
+
+    // ── §690 live tracking (mutual: customer device fix + partner via WS) ──────
+    private val _trackCustomer = MutableStateFlow<GeoPoint?>(null)
+    val trackCustomer: StateFlow<GeoPoint?> = _trackCustomer.asStateFlow()
+    private val _trackPartner = MutableStateFlow<GeoPoint?>(null)
+    val trackPartner: StateFlow<GeoPoint?> = _trackPartner.asStateFlow()
+    private val _trackRoute = MutableStateFlow<List<GeoPoint>?>(null)
+    val trackRoute: StateFlow<List<GeoPoint>?> = _trackRoute.asStateFlow()
+    private var trackingSocket: LiveTrackingSocket? = null
+
+    /** Open the live-tracking socket for a booking: our device fix is the customer
+     *  marker (also pushed so the partner sees us); the partner's position arrives
+     *  over the chat WS. Recomputes the route whenever either end moves. */
+    fun startLiveTracking(bookingId: String) {
+        if (trackingSocket != null) return
+        val socket = LiveTrackingSocket(getApplication(), bookingId) { role, lat, lon ->
+            if (role == "partner") {
+                _trackPartner.value = GeoPoint(lat, lon)
+                recomputeTrackRoute()
+            }
+        }
+        trackingSocket = socket
+        socket.connect()
+        viewModelScope.launch {
+            val loc = com.example.data.LocationHelper.current(getApplication())
+            if (loc != null) {
+                _trackCustomer.value = GeoPoint(loc.first, loc.second)
+                socket.sendLocation(loc.first, loc.second)
+                recomputeTrackRoute()
+            }
+        }
+    }
+
+    fun stopLiveTracking() {
+        trackingSocket?.close()
+        trackingSocket = null
+        _trackPartner.value = null
+        _trackRoute.value = null
+    }
+
+    private fun recomputeTrackRoute() {
+        val c = _trackCustomer.value
+        val p = _trackPartner.value
+        if (c == null || p == null) return
+        viewModelScope.launch {
+            val dir = repository.geoDirections(p.latitude, p.longitude, c.latitude, c.longitude)
+            val poly = dir?.polyline?.takeIf { it.isNotBlank() } ?: return@launch
+            _trackRoute.value = runCatching { NikhatMaps.decodePolyline(poly) }.getOrNull()
+        }
+    }
+
+    override fun onCleared() {
+        super.onCleared()
+        stopLiveTracking()
+    }
 
     fun isFavorite(partnerId: String): Flow<Boolean> = repository.isFavoriteFlow(partnerId)
 
@@ -283,6 +357,9 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             currentScreen = if (role == "partner") Screen.PartnerDashboard else Screen.CustomerHome
             viewModelScope.launch { runCatching { repository.hydrateForRole(role) } }
         }
+        // §690 — pull the geo gateway config (tile key + feature flags) so the
+        // live map can render. Public endpoint; safe before/without login.
+        refreshGeoConfig()
     }
 
     fun sendOtp(phone: String, role: String) {
