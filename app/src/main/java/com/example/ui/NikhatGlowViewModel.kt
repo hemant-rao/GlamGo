@@ -960,6 +960,20 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    fun cancelBooking(bookingId: String, reason: String) {
+        viewModelScope.launch {
+            runCatching { repository.cancelBooking(bookingId, reason) }
+                .onSuccess {
+                    notify("Booking cancelled successfully")
+                    refreshActiveBookings()
+                    currentScreen = Screen.MyBookings
+                }
+                .onFailure {
+                    notify("Failed to cancel: ${friendly(it)}", isError = true)
+                }
+        }
+    }
+
     fun submitBookingReview(bookingId: String, rating: Int, comment: String) {
         viewModelScope.launch {
             runCatching { repository.addReview(bookingId, rating, comment) }

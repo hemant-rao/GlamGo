@@ -3586,6 +3586,143 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                                 )
                             }
                         }
+
+                        // Required Booking Cancellation Flow
+                        val activeCancelStates = setOf("pending", "accepted", "assigned", "reassigning", "partner_on_the_way")
+                        if (booking.status in activeCancelStates) {
+                            var showCancelDialog by remember(booking.id) { mutableStateOf(false) }
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = { showCancelDialog = true },
+                                modifier = Modifier.fillMaxWidth().testTag("cancel_booking_trigger_btn"),
+                                colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                shape = RoundedCornerShape(8.dp)
+                            ) {
+                                Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Cancel Appointment", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                            
+                            if (showCancelDialog) {
+                                var selectedReason by remember { mutableStateOf("") }
+                                var dropdownExpanded by remember { mutableStateOf(false) }
+                                val reasons = listOf(
+                                    "Personal delay / Emergency",
+                                    "Schedule conflict / Changed mind",
+                                    "Price is higher than expected",
+                                    "Assigned partner has poor ratings",
+                                    "Found another outlet / better offer",
+                                    "Other beauty service concerns"
+                                )
+                                
+                                AlertDialog(
+                                    onDismissRequest = { showCancelDialog = false },
+                                    title = {
+                                        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                            Text("Cancel This Appointment?", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                        }
+                                    },
+                                    text = {
+                                        Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                                            Text(
+                                                text = "Please help us improve service quality by selecting a cancellation reason below. This feedback is shared anonymously with partners to optimize scheduling.",
+                                                fontSize = 12.sp,
+                                                color = Color.LightGray
+                                            )
+                                            
+                                            Text(
+                                                text = "SELECT CANCELLATION REASON (REQUIRED):",
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = NikhatRose,
+                                                letterSpacing = 1.sp
+                                            )
+                                            
+                                            Box(modifier = Modifier.fillMaxWidth()) {
+                                                OutlinedButton(
+                                                    onClick = { dropdownExpanded = true },
+                                                    modifier = Modifier.fillMaxWidth().testTag("cancel_reason_selector"),
+                                                    shape = RoundedCornerShape(8.dp),
+                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                                    border = BorderStroke(1.dp, if (selectedReason.isNotBlank()) NikhatRose else Color.Gray.copy(alpha = 0.5f))
+                                                ) {
+                                                    Row(
+                                                        modifier = Modifier.fillMaxWidth(),
+                                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                                        verticalAlignment = Alignment.CenterVertically
+                                                    ) {
+                                                        Text(
+                                                            text = selectedReason.ifBlank { "Select Cancellation Reason ▾" },
+                                                            fontSize = 12.sp,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                    }
+                                                }
+                                                
+                                                DropdownMenu(
+                                                    expanded = dropdownExpanded,
+                                                    onDismissRequest = { dropdownExpanded = false },
+                                                    modifier = Modifier.background(DeepPlum).fillMaxWidth(0.85f)
+                                                ) {
+                                                    reasons.forEach { reason ->
+                                                        DropdownMenuItem(
+                                                            text = { Text(reason, color = Color.White, fontSize = 12.sp) },
+                                                            onClick = {
+                                                                selectedReason = reason
+                                                                dropdownExpanded = false
+                                                            },
+                                                            modifier = Modifier.testTag("cancel_reason_item_${reason.replace(" ", "_")}")
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                            
+                                            if (selectedReason.isBlank()) {
+                                                Text(
+                                                    text = "* Selection of a reason is required to submit cancellation.",
+                                                    color = Color.Gray,
+                                                    fontSize = 10.sp
+                                                )
+                                            } else {
+                                                Text(
+                                                    text = "Selected: $selectedReason",
+                                                    color = SuccessGreen,
+                                                    fontSize = 11.sp,
+                                                    fontWeight = FontWeight.Bold
+                                                )
+                                            }
+                                        }
+                                    },
+                                    confirmButton = {
+                                        Button(
+                                            onClick = {
+                                                if (selectedReason.isNotBlank()) {
+                                                    viewModel.cancelBooking(booking.id, selectedReason)
+                                                    showCancelDialog = false
+                                                }
+                                            },
+                                            enabled = selectedReason.isNotBlank(),
+                                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
+                                            modifier = Modifier.testTag("confirm_cancel_booking_btn")
+                                        ) {
+                                            Text("Cancel Booking 🔕", color = Color.White, fontWeight = FontWeight.Bold)
+                                        }
+                                    },
+                                    dismissButton = {
+                                        TextButton(
+                                            onClick = { showCancelDialog = false },
+                                            modifier = Modifier.testTag("dismiss_cancel_booking_btn")
+                                        ) {
+                                            Text("Keep Appointment", color = Color.White)
+                                        }
+                                    },
+                                    containerColor = DeepPlum
+                                )
+                            }
+                        }
                     }
 
                     // REVENUE REVIEWS BOX

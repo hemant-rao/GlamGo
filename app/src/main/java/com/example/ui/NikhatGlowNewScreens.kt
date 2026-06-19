@@ -44,6 +44,14 @@ import com.example.ui.theme.NikhatRose
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.OrderOrange
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.platform.testTag
+import androidx.compose.animation.*
+import androidx.compose.foundation.Canvas
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.ui.text.input.ImeAction
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 
 // ───────────────────────────── small shared header ──────────────────────────
 @Composable
@@ -949,6 +957,12 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                 Divider(color = Color.Gray.copy(alpha = 0.15f))
             }
 
+            // Mock service area coverage map
+            item {
+                PartnerCoverageMap(partner = partner)
+                Divider(color = Color.Gray.copy(alpha = 0.15f))
+            }
+
             // Real Client Satisfaction & Verified Reviews Subsection
             item {
                 Card(
@@ -1273,6 +1287,267 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun PartnerCoverageMap(partner: Partner) {
+    var pinQuery by remember { mutableStateOf("") }
+    var checkingCoverage by remember { mutableStateOf(false) }
+    var coverageResult by remember { mutableStateOf<String?>(null) }
+    var isWithinRange by remember { mutableStateOf(true) }
+    val scope = rememberCoroutineScope()
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(16.dp)
+            .testTag("coverage_map_card_${partner.id}"),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)),
+        border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.15f)),
+        shape = RoundedCornerShape(16.dp)
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            // Header Content
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Favorite,
+                    contentDescription = null,
+                    tint = NikhatRose,
+                    modifier = Modifier.size(20.dp)
+                )
+                Text(
+                    text = "SERVICE AREA COVERAGE MAP",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = NikhatRose,
+                    letterSpacing = 1.sp
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "${partner.name} covers a 15 km doorstep logistics radius around their active service salon hub.",
+                fontSize = 11.sp,
+                color = Color.Gray
+            )
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Realistic Stylized Canvas Map Illustration
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .height(150.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(DarkSlate)
+            ) {
+                Canvas(modifier = Modifier.fillMaxSize()) {
+                    val width = size.width
+                    val height = size.height
+
+                    // Draw street grid lines (schematic map background)
+                    val gridColor = Color.White.copy(alpha = 0.05f)
+                    val streetColor = Color.White.copy(alpha = 0.08f)
+
+                    // Draw grid/terrain lines
+                    for (i in 0..10) {
+                        val x = (width / 10) * i
+                        drawLine(color = gridColor, start = Offset(x, 0f), end = Offset(x, height), strokeWidth = 1f)
+                        val y = (height / 10) * i
+                        drawLine(color = gridColor, start = Offset(0f, y), end = Offset(width, y), strokeWidth = 1f)
+                    }
+
+                    // Draw mock main streets (crossings)
+                    drawLine(color = streetColor, start = Offset(0f, height * 0.3f), end = Offset(width, height * 0.3f), strokeWidth = 8f)
+                    drawLine(color = streetColor, start = Offset(0f, height * 0.75f), end = Offset(width, height * 0.75f), strokeWidth = 12f)
+                    drawLine(color = streetColor, start = Offset(width * 0.4f, 0f), end = Offset(width * 0.4f, height), strokeWidth = 10f)
+                    drawLine(color = streetColor, start = Offset(width * 0.8f, 0f), end = Offset(width * 0.8f, height), strokeWidth = 6f)
+
+                    // Draw service radius circle (centered at width*0.4, height*0.5)
+                    val centerX = width * 0.4f
+                    val centerY = height * 0.5f
+                    val radius = width * 0.35f
+
+                    // Draw service area zone
+                    drawCircle(
+                        color = NikhatRose.copy(alpha = 0.12f),
+                        radius = radius,
+                        center = Offset(centerX, centerY)
+                    )
+                    drawCircle(
+                        color = NikhatRose.copy(alpha = 0.4f),
+                        radius = radius,
+                        center = Offset(centerX, centerY),
+                        style = androidx.compose.ui.graphics.drawscope.Stroke(
+                            width = 2f,
+                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
+                        )
+                    )
+
+                    // Draw pulsing beacon of the Partner center
+                    drawCircle(
+                        color = Color.White,
+                        radius = 16f,
+                        center = Offset(centerX, centerY)
+                    )
+                    drawCircle(
+                        color = NikhatRose,
+                        radius = 8f,
+                        center = Offset(centerX, centerY)
+                    )
+
+                    // Draw customer indicator (represented dynamically as ~2.5km distance)
+                    val customerX = centerX + radius * 0.6f
+                    val customerY = centerY - radius * 0.4f
+                    drawCircle(
+                        color = SuccessGreen.copy(alpha = 0.2f),
+                        radius = 24f,
+                        center = Offset(customerX, customerY)
+                    )
+                    drawCircle(
+                        color = Color(0xFF2ECC71),
+                        radius = 6f,
+                        center = Offset(customerX, customerY)
+                    )
+                }
+
+                // Small Map Floating Overlays
+                Box(
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                        .align(Alignment.TopStart)
+                ) {
+                    Text("Coverage Zone: 15 km Radius", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                }
+
+                Box(
+                    modifier = Modifier
+                        .padding(8.dp)
+                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
+                        .padding(horizontal = 6.dp, vertical = 3.dp)
+                        .align(Alignment.BottomEnd)
+                ) {
+                    Text("Hub Pin: Active ✔", fontSize = 9.sp, color = NikhatRose, fontWeight = FontWeight.Bold)
+                }
+            }
+
+            Spacer(modifier = Modifier.height(12.dp))
+
+            // Address Check Input Field
+            Text(
+                text = "CHECK COURIER/TRANSIT ELIGIBILITY:",
+                fontSize = 10.sp,
+                fontWeight = FontWeight.Bold,
+                color = Color.Gray,
+                letterSpacing = 1.sp
+            )
+            Spacer(modifier = Modifier.height(6.dp))
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                OutlinedTextField(
+                    value = pinQuery,
+                    onValueChange = {
+                        pinQuery = it
+                        coverageResult = null
+                    },
+                    placeholder = { Text("Enter post code / locality...", fontSize = 12.sp, color = Color.Gray) },
+                    singleLine = true,
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedBorderColor = NikhatRose,
+                        unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
+                        focusedContainerColor = Color.Black.copy(alpha = 0.15f),
+                        unfocusedContainerColor = Color.Black.copy(alpha = 0.15f)
+                    ),
+                    modifier = Modifier
+                        .weight(1.3f)
+                        .testTag("coverage_pin_input"),
+                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, color = Color.White),
+                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+                )
+
+                Button(
+                    onClick = {
+                        if (pinQuery.isNotBlank()) {
+                            checkingCoverage = true
+                            scope.launch {
+                                kotlinx.coroutines.delay(1000)
+                                checkingCoverage = false
+                                val sanitized = pinQuery.trim().lowercase()
+                                if (sanitized.contains("out") || sanitized.contains("999") || sanitized.contains("away") || sanitized.startsWith("0")) {
+                                    coverageResult = "Out of premium transit boundaries! Our specialist can only cover up to 15km."
+                                    isWithinRange = false
+                                } else {
+                                    coverageResult = "Within coverage zone! Direct checkout is active. (${partner.name} is ${partner.distanceKm} km away from you). ✅"
+                                    isWithinRange = true
+                                }
+                            }
+                        }
+                    },
+                    enabled = pinQuery.isNotBlank() && !checkingCoverage,
+                    colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
+                    shape = RoundedCornerShape(8.dp),
+                    modifier = Modifier
+                        .weight(1f)
+                        .height(52.dp)
+                        .testTag("coverage_check_btn")
+                ) {
+                    if (checkingCoverage) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
+                    } else {
+                        Text("Check 📡", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                    }
+                }
+            }
+
+            // Interactive results output
+            coverageResult?.let { result ->
+                Spacer(modifier = Modifier.height(8.dp))
+                AnimatedVisibility(
+                    visible = true,
+                    enter = fadeIn() + expandVertically()
+                ) {
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = if (isWithinRange) SuccessGreen.copy(alpha = 0.1f) else MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
+                        ),
+                        border = BorderStroke(
+                            1.dp,
+                            if (isWithinRange) SuccessGreen.copy(alpha = 0.3f) else MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
+                        ),
+                        shape = RoundedCornerShape(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(10.dp),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.CheckCircle,
+                                contentDescription = null,
+                                tint = if (isWithinRange) SuccessGreen else MaterialTheme.colorScheme.error,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Text(
+                                text = result,
+                                fontSize = 11.sp,
+                                color = if (isWithinRange) Color.White else MaterialTheme.colorScheme.onErrorContainer,
+                                fontWeight = FontWeight.Medium
+                            )
+                        }
                     }
                 }
             }
