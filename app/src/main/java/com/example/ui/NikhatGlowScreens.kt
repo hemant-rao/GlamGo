@@ -1240,7 +1240,7 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
     var addrSuggestions by remember { mutableStateOf<List<com.example.data.remote.GeoSuggestionDto>>(emptyList()) }
     val scope = rememberCoroutineScope()
 
-    // §687 — address search-as-you-type via the Ola Maps proxy; only fires after
+    // §687 — address search-as-you-type via the geo proxy (free OSM); only fires after
     // 3 characters, debounced 300ms (per the founder's "show after 3 letters").
     LaunchedEffect(addrQuery) {
         if (addrQuery.trim().length >= 3) {
@@ -1613,12 +1613,13 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                     }
                 }
 
-                // §690 — LIVE MAP (MapLibre + Ola tiles). Shown while the job is in a
-                // trackable state AND the admin has Maps + live-tracking enabled and a
-                // tile key configured. Mutual: blue = you, crimson = partner, line = route.
+                // §690/§692 — LIVE MAP (MapLibre + free OpenStreetMap tiles). Shown
+                // while the job is in a trackable state AND the admin has Maps +
+                // live-tracking enabled. No API key needed (free OpenFreeMap style).
+                // Mutual: blue = you, crimson = partner, line = route.
                 val cfg = geoConfig
                 val mapReady = cfg != null && cfg.mapsEnabled && cfg.features.liveTracking &&
-                    cfg.tileKey.isNotBlank()
+                    cfg.tileStyleUrl.isNotBlank()
                 if (isTrackable && mapReady) {
                     Box(
                         modifier = Modifier
@@ -1628,8 +1629,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                             .clip(RoundedCornerShape(16.dp))
                     ) {
                         com.example.ui.map.NikhatMapView(
-                            tileKey = cfg!!.tileKey,
-                            tileBaseUrl = cfg.baseUrl,
+                            styleUrl = cfg!!.tileStyleUrl,
                             customer = trackCustomer,
                             partner = trackPartner,
                             route = trackRoute,

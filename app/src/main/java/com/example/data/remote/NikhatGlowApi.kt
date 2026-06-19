@@ -48,7 +48,7 @@ interface NikhatGlowApi {
     @GET("catalog/search")
     suspend fun search(@Query("q") q: String? = null, @Query("category") category: Int? = null): ServicesWrap
 
-    // ── Geo (§687 — server-side Ola Maps proxy; the REST key stays on the server) ──
+    // ── Geo (§687/§692 — server-side free OpenStreetMap proxy; no key) ──
     @GET("geo/autocomplete")
     suspend fun geoAutocomplete(
         @Query("q") q: String,

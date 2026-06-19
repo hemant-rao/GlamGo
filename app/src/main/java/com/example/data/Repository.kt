@@ -367,7 +367,7 @@ class NikhatGlowRepository(context: Context) {
         refreshAddresses()
     }
 
-    // §687 — Ola Maps geo proxy passthroughs (server injects the REST key).
+    // §687/§692 — geo proxy passthroughs (server-side free OpenStreetMap: Photon/Nominatim/OSRM).
     suspend fun geoAutocomplete(q: String, lat: Double? = null, lon: Double? = null) =
         runCatching { api.geoAutocomplete(q, lat, lon).suggestions }.getOrDefault(emptyList())
 

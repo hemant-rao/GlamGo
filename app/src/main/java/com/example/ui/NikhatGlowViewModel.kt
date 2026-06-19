@@ -275,7 +275,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
      *  null on failure so the screen falls back to the local in-memory filter. */
     suspend fun searchServices(q: String): List<Service>? = repository.searchServices(q)
 
-    /** Address search-as-you-type via our Ola Maps proxy. */
+    /** Address search-as-you-type via our geo proxy (free OpenStreetMap). */
     suspend fun searchPlaces(q: String) =
         if (q.isBlank()) emptyList() else repository.geoAutocomplete(q, _deviceLocation.value?.first, _deviceLocation.value?.second)
 

@@ -135,7 +135,7 @@ data class SlotDto(
 @JsonClass(generateAdapter = true)
 data class SlotsResp(val slots: List<SlotDto> = emptyList())
 
-// ── Geo (§687 — Ola Maps proxy responses) ────────────────────────────────────
+// ── Geo (§687/§692 — free OpenStreetMap proxy responses) ─────────────────────
 @JsonClass(generateAdapter = true)
 data class GeoSuggestionDto(
     @Json(name = "place_id") val placeId: String? = null,
@@ -195,6 +195,10 @@ data class GeoAppConfigDto(
     val enabled: Boolean = true,
     @Json(name = "maps_enabled") val mapsEnabled: Boolean = false,
     @Json(name = "weather_enabled") val weatherEnabled: Boolean = false,
+    // §692 — free OpenStreetMap: no key. The map renders from this MapLibre style.
+    @Json(name = "tile_style_url") val tileStyleUrl: String = "https://tiles.openfreemap.org/styles/liberty",
+    @Json(name = "map_provider") val mapProvider: String = "osm",
+    // Legacy Ola fields kept so older app builds / payloads still parse; unused.
     @Json(name = "tile_key") val tileKey: String = "",
     @Json(name = "base_url") val baseUrl: String = "https://api.olamaps.io",
     val features: GeoFeaturesDto = GeoFeaturesDto(),

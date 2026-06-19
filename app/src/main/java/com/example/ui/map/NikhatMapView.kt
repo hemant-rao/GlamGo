@@ -1,7 +1,6 @@
 package com.example.ui.map
 
 import android.annotation.SuppressLint
-import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
@@ -34,25 +33,19 @@ import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
 
 /**
- * §690 — Nikhat Glow live tracking map. MapLibre GL engine + Ola vector tiles
- * (ported from the Solaris-Gemini OlaMapView). Renders the customer + partner as
- * markers and the route between them — MUTUAL live tracking. Uses NO Ola .aar SDK;
- * tiles render with the restricted tile key handed back by the geo gateway
- * (/api/geo/app-config), so the secret REST key never reaches the device.
+ * §690/§692 — Nikhat Glow live tracking map. MapLibre GL engine + FREE
+ * OpenStreetMap vector tiles (OpenFreeMap). Renders the customer + partner as
+ * markers and the route between them — MUTUAL live tracking. No API key and no
+ * Ola .aar SDK: the map renders straight from the MapLibre style URL handed back
+ * by the geo gateway (/api/geo/app-config → tile_style_url).
  */
 
 data class GeoPoint(val latitude: Double, val longitude: Double)
 
 object NikhatMaps {
-    const val DEFAULT_TILE_BASE = "https://api.olamaps.io"
+    const val DEFAULT_STYLE_URL = "https://tiles.openfreemap.org/styles/liberty"
 
-    fun styleUrl(tileKey: String, dark: Boolean, tileBase: String = DEFAULT_TILE_BASE): String {
-        val base = tileBase.trim().ifBlank { DEFAULT_TILE_BASE }.trimEnd('/')
-        val style = if (dark) "default-dark-standard" else "default-light-standard"
-        return "$base/tiles/vector/v1/styles/$style/style.json?api_key=$tileKey"
-    }
-
-    /** Decode a Google/Ola precision-5 encoded polyline into points. */
+    /** Decode an OSRM/Google precision-5 encoded polyline into points. */
     fun decodePolyline(encoded: String): List<GeoPoint> {
         val poly = ArrayList<GeoPoint>()
         var index = 0
@@ -99,17 +92,15 @@ private const val COLOR_ROUTE = "#C0334F"
 
 @Volatile private var httpConfigured = false
 
-private fun ensureOlaHttp(tileKey: String) {
+/** A plain OkHttp client with a User-Agent (some free tile hosts require one). No
+ *  API key is injected — OpenFreeMap tiles are open. */
+private fun ensureMapHttp() {
     if (httpConfigured) return
     val client = OkHttpClient.Builder().addInterceptor { chain ->
-        val req = chain.request()
-        val url = req.url
-        if (url.host.contains("olamaps.io") && url.queryParameter("api_key") == null) {
-            val newUrl = url.newBuilder().addQueryParameter("api_key", tileKey).build()
-            chain.proceed(req.newBuilder().url(newUrl).build())
-        } else {
-            chain.proceed(req)
-        }
+        val req = chain.request().newBuilder()
+            .header("User-Agent", "NikhatGlow/1.0 (Android)")
+            .build()
+        chain.proceed(req)
     }.build()
     HttpRequestUtil.setOkHttpClient(client)
     httpConfigured = true
@@ -118,20 +109,18 @@ private fun ensureOlaHttp(tileKey: String) {
 @SuppressLint("MissingPermission")
 @Composable
 fun NikhatMapView(
-    tileKey: String,
+    styleUrl: String,
     modifier: Modifier = Modifier,
-    tileBaseUrl: String = NikhatMaps.DEFAULT_TILE_BASE,
     customer: GeoPoint? = null,
     partner: GeoPoint? = null,
     route: List<GeoPoint>? = null,
-    isDark: Boolean = isSystemInDarkTheme(),
     followCurrent: Boolean = false,
 ) {
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
 
     val mapView = remember {
-        ensureOlaHttp(tileKey)
+        ensureMapHttp()
         MapLibre.getInstance(context.applicationContext)
         val options = MapLibreMapOptions()
         MapView(context, options)
@@ -164,7 +153,8 @@ fun NikhatMapView(
         factory = { mv ->
             mv.getMapAsync { map ->
                 mapRef.value = map
-                map.setStyle(Style.Builder().fromUri(NikhatMaps.styleUrl(tileKey, isDark, tileBaseUrl))) { style ->
+                val uri = styleUrl.trim().ifBlank { NikhatMaps.DEFAULT_STYLE_URL }
+                map.setStyle(Style.Builder().fromUri(uri)) { style ->
                     styleRef.value = style
                     initLayers(style)
                     applyData(map, style, customer, partner, route, followCurrent, firstFit = true)
