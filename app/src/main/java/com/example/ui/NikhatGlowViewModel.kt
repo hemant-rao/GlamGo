@@ -20,6 +20,7 @@ sealed class Screen {
     data class CategoryDetail(val category: Category) : Screen()
     data class ServiceDetail(val service: Service) : Screen()
     data class PartnerSelect(val service: Service) : Screen()
+    data class PartnerStore(val partner: Partner) : Screen(), RouteWithParams
     data class BookingConfirm(val service: Service, val partner: Partner) : Screen(), RouteWithParams
     data class BookingDetail(val bookingId: String) : Screen(), RouteWithParams
     object Cart : Screen()
@@ -729,6 +730,25 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    // Customer beauty profile preferences (replaces simple state with persistent local storage)
+    var customerSkinType by mutableStateOf(getApplication<Application>().getSharedPreferences("nikhat_prefs", Context.MODE_PRIVATE).getString("skin_type", "Normal") ?: "Normal")
+        private set
+    var customerBeautyConcerns by mutableStateOf(getApplication<Application>().getSharedPreferences("nikhat_prefs", Context.MODE_PRIVATE).getString("beauty_concerns", "") ?: "")
+        private set
+    var customerPreferredTime by mutableStateOf(getApplication<Application>().getSharedPreferences("nikhat_prefs", Context.MODE_PRIVATE).getString("pref_time", "No Preference") ?: "No Preference")
+        private set
+
+    fun updateBeautyProfile(skinType: String, concerns: String, prefTime: String) {
+        customerSkinType = skinType
+        customerBeautyConcerns = concerns
+        customerPreferredTime = prefTime
+        getApplication<Application>().getSharedPreferences("nikhat_prefs", Context.MODE_PRIVATE).edit()
+            .putString("skin_type", skinType)
+            .putString("beauty_concerns", concerns)
+            .putString("pref_time", prefTime)
+            .apply()
+    }
+
     // ── §694 booking-time data capture (customer-set on the booking form) ──────
     var bookingNotes by mutableStateOf("")
     var bookingGenderPref by mutableStateOf("any")   // "any" | "male" | "female"
@@ -840,6 +860,55 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             runCatching { repository.setServicePrice(serviceId, pricePaise, active, productsUsed) }
                 .onSuccess { notify("Service updated") }
+        }
+    }
+
+    fun createCustomPartnerService(name: String, categoryName: String, pricePaise: Long, durationMin: Int, description: String, productsUsed: String) {
+        val nextId = "srv_custom_${System.currentTimeMillis()}"
+        
+        // Find or create category if it doesn't exist, else assign to "Salon"
+        val categoryId = when (categoryName.lowercase()) {
+            "salon" -> "cat_salon"
+            "makeup" -> "cat_makeup"
+            "beauty" -> "cat_beauty"
+            "massage" -> "cat_massage"
+            else -> "cat_salon"
+        }
+        
+        val newSrv = Service(
+            id = nextId,
+            categoryId = categoryId,
+            name = name,
+            description = description,
+            pricePaise = pricePaise,
+            durationMin = durationMin,
+            rating = 5.0f,
+            reviewsCount = 1,
+            inclusions = listOf("Expert consult", "Custom service delivery", "Premium seal checked products"),
+            faqs = listOf("Is this verified?" to "Yes, 100% verified by Nikhat Glow quality team."),
+            imageUrl = "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=300",
+            priceMinPaise = pricePaise,
+            priceMaxPaise = pricePaise,
+            partnerCount = 1
+        )
+        
+        // Update global datasource services list
+        NikhatGlowDataSource.services = NikhatGlowDataSource.services + newSrv
+        
+        // Also add to active settings for this partner
+        viewModelScope.launch {
+            val customEntity = PartnerServiceEntity(
+                id = "me_$nextId",
+                serviceId = nextId,
+                name = name,
+                categoryName = categoryName,
+                pricePaise = pricePaise,
+                durationMin = durationMin,
+                active = true,
+                productsUsed = productsUsed
+            )
+            repository.insertLocalPartnerService(customEntity)
+            notify("Custom service '$name' successfully added to your menu!")
         }
     }
 

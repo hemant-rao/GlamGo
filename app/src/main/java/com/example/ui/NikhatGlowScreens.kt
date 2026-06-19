@@ -24,6 +24,8 @@ import android.widget.Toast
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.rotate
+import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Brush
@@ -41,6 +43,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.data.*
 import com.example.data.remote.CartItemDto
@@ -53,7 +56,7 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
     val activeUser by viewModel.activeUser.collectAsState()
     val cart by viewModel.cart.collectAsState()
 
-    val currentThemeDark = isSystemInDarkTheme()
+    val currentThemeDark = true
     val scope = rememberCoroutineScope()
 
     // §694 — single app-wide Snackbar host. The ViewModel emits friendly API
@@ -121,6 +124,7 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
                     is Screen.CategoryDetail -> CategoryDetailScreen(viewModel, screen.category)
                     is Screen.ServiceDetail -> ServiceDetailScreen(viewModel, screen.service)
                     is Screen.PartnerSelect -> PartnerSelectScreen(viewModel, screen.service)
+                    is Screen.PartnerStore -> PartnerStoreScreen(viewModel, screen.partner)
                     is Screen.BookingConfirm -> BookingConfirmScreen(viewModel, screen.service, screen.partner)
                     is Screen.BookingDetail -> BookingDetailScreen(viewModel, screen.bookingId)
                     is Screen.Cart -> CartScreen(viewModel)
@@ -320,6 +324,38 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
                 .padding(horizontal = 16.dp, vertical = 24.dp)
         ) {
             Column {
+                // Luxury Branded Fallback Logo Layout
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .padding(bottom = 12.dp)
+                        .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .testTag("app_brand_logo")
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(24.dp)
+                            .background(NikhatGold, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Spa,
+                            contentDescription = "Nikhat Glow Logo",
+                            tint = DeepPlum,
+                            modifier = Modifier.size(14.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text(
+                        text = "NIKHAT GLOW",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = 1.sp
+                    )
+                }
+
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -467,6 +503,10 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
                 }
             }
         }
+        
+        RealTimeJustBookedBanner(viewModel = viewModel)
+        
+        UpcomingSessionReminderBanner(viewModel = viewModel)
         
         // Active bookings banner (Quick Entry)
         val activeBookings = bookings.filter { it.status != "completed" && it.status != "cancelled" && it.status != "rejected" }
@@ -704,12 +744,827 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
             }
         }
         
+        BeautyShowcaseSection(viewModel = viewModel)
+        
+        FaqAccordionSection()
+        
         Spacer(modifier = Modifier.height(32.dp))
     }
 
     // §697 — tap-the-header location picker (current location + search).
     if (showLocationPicker) {
         LocationPickerSheet(viewModel = viewModel, onDismiss = { showLocationPicker = false })
+    }
+}
+
+data class ShowcaseItem(
+    val title: String,
+    val description: String,
+    val expertName: String,
+    val rating: Double,
+    val imageUrl: String,
+    val category: String,
+    val reviewer: String,
+    val review: String,
+    val productsUsed: List<String>,
+    val duration: String
+)
+
+@Composable
+fun UpcomingSessionReminderBanner(viewModel: NikhatGlowViewModel) {
+    val bookings by viewModel.bookings.collectAsState()
+    val ctx = LocalContext.current
+    
+    val urgentBooking = remember(bookings) {
+        bookings.firstOrNull { booking ->
+            if (booking.status == "completed" || booking.status == "cancelled" || booking.status == "rejected" || booking.status == "refunded") {
+                false
+            } else {
+                val isUrgentIso = if (booking.slotStartIso.isNotBlank()) {
+                    val result = kotlin.runCatching {
+                        val target = java.time.Instant.parse(booking.slotStartIso)
+                        val now = java.time.Instant.now()
+                        val diffHours = java.time.Duration.between(now, target).toHours()
+                        diffHours in 0..24
+                    }
+                    result.getOrDefault(false)
+                } else false
+
+                isUrgentIso || booking.dateTimeSlot.contains("Tomorrow", ignoreCase = true)
+            }
+        }
+    }
+
+    if (urgentBooking != null) {
+        // Trigger Toast reminder
+        LaunchedEffect(urgentBooking.id) {
+            Toast.makeText(
+                ctx,
+                "🔔 Nikhat Glow: Your beauty session starts in less than 24 hours!",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+
+        var isVisible by remember { mutableStateOf(true) }
+
+        if (isVisible) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 8.dp)
+                    .testTag("urgent_session_reminder_banner"),
+                shape = RoundedCornerShape(16.dp),
+                colors = CardDefaults.cardColors(
+                    containerColor = Color(0xFFFFF3E0)
+                ),
+                border = BorderStroke(1.5.dp, Color(0xFFFFB74D))
+            ) {
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(36.dp)
+                            .background(Color(0xFFFFB74D).copy(alpha = 0.2f), CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.NotificationsActive,
+                            contentDescription = "Session Reminder",
+                            tint = Color(0xFFE65100),
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(12.dp))
+
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text(
+                            text = "UPCOMING SESSION REMINDER",
+                            fontSize = 10.sp,
+                            fontWeight = FontWeight.Black,
+                            color = Color(0xFFE65100),
+                            letterSpacing = 0.5.sp
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "${urgentBooking.serviceName} scheduled at ${urgentBooking.dateTimeSlot}",
+                            fontSize = 12.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.Black
+                        )
+                        Spacer(modifier = Modifier.height(2.dp))
+                        Text(
+                            text = "Expert: ${urgentBooking.partnerName} • Tap to view tracking details",
+                            fontSize = 11.sp,
+                            color = Color.DarkGray,
+                            modifier = Modifier.clickable {
+                                viewModel.currentScreen = Screen.BookingDetail(urgentBooking.id)
+                            }
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    IconButton(
+                        onClick = { isVisible = false },
+                        modifier = Modifier.size(24.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Dismiss Reminder",
+                            tint = Color.Gray,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun BeautyShowcaseSection(viewModel: NikhatGlowViewModel) {
+    val items = remember {
+        listOf(
+            ShowcaseItem(
+                title = "Glass Skin Hydra Facial",
+                description = "Intense professional hydration and deep pore cleansing for an ultimate dewy finish.",
+                expertName = "Anya Varma",
+                rating = 5.0,
+                category = "Facials",
+                imageUrl = "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?q=80&w=600&auto=format&fit=crop",
+                reviewer = "Meera Kapoor",
+                review = "My skin looked absolutely like glass. Extremely hydrating, no post-treatment redness! Truly a premium glow session.",
+                productsUsed = listOf("Dior Forever Glow Star Filter", "Estée Lauder Advanced Night Repair", "Clinique Moisture Surge"),
+                duration = "60 mins"
+            ),
+            ShowcaseItem(
+                title = "Royal Hair Creame Spa",
+                description = "Deep nourishing scalp massage and intense hot oil hydration followed by a gorgeous blowout.",
+                expertName = "Nisha Sen",
+                rating = 4.9,
+                category = "Hair Spa",
+                imageUrl = "https://images.unsplash.com/photo-1562322140-8baeececf3df?q=80&w=600&auto=format&fit=crop",
+                reviewer = "Surbhi Gupta",
+                review = "Unbelievable shine, my hair feels ten times healthier. Highly recommend Nisha!",
+                productsUsed = listOf("Kérastase Chronologiste Caviar", "L'Oréal Expert Absolute Repair Oil"),
+                duration = "75 mins"
+            ),
+            ShowcaseItem(
+                title = "Flawless HD Bridal Makeup",
+                description = "Custom traditional bridal make-up with dewy high-end cosmetic styling and heavy details.",
+                expertName = "Priya Sharma",
+                rating = 5.0,
+                category = "Makeup Artistry",
+                imageUrl = "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?q=80&w=600&auto=format&fit=crop",
+                reviewer = "Aparna Roy",
+                review = "Priya did my makeup for my wedding and it was flawless from morning till midnight. Not cakey at all, loved it!",
+                productsUsed = listOf("Chanel Les Beiges Foundation", "Dior Backstage Highlight Palette", "Charlotte Tilbury Setting Spray"),
+                duration = "120 mins"
+            ),
+            ShowcaseItem(
+                title = "Therapeutic Lavender Massage",
+                description = "Premium aromatherapy hot stones deep-tissue massage designed to completely dissolve body fatigue.",
+                expertName = "Kiran Goel",
+                rating = 4.8,
+                category = "Body Wellness",
+                imageUrl = "https://images.unsplash.com/photo-1540555700478-4be289fbecef?q=80&w=600&auto=format&fit=crop",
+                reviewer = "Nalini Joshi",
+                review = "Absolute heaven. The hot stone technique relaxed my back pain completely. A five-star wellness specialist.",
+                productsUsed = listOf("Therapeutic Grade Lavender Essential Oil", "Organic Cold-Pressed Almond Oil"),
+                duration = "90 mins"
+            )
+        )
+    }
+
+    var selectedItem by remember { mutableStateOf<ShowcaseItem?>(null) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 24.dp)
+            .testTag("beauty_showcase_section")
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 6.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.AutoAwesome,
+                contentDescription = null,
+                tint = NikhatGold,
+                modifier = Modifier.size(22.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "BEAUTY SHOWCASE",
+                style = MaterialTheme.typography.titleMedium.copy(
+                    fontWeight = FontWeight.Black,
+                    letterSpacing = 1.2.sp
+                ),
+                color = MaterialTheme.colorScheme.primary
+            )
+        }
+        Text(
+            text = "Explore actual glowing transformations and premium treatment outcomes designed by elite specialists.",
+            fontSize = 12.sp,
+            color = Color.Gray,
+            modifier = Modifier.padding(bottom = 16.dp)
+        )
+
+        // Grid layout for 4 items
+        Column(
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            items.chunked(2).forEach { rowItems ->
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(16.dp)
+                ) {
+                    rowItems.forEach { item ->
+                        Card(
+                            modifier = Modifier
+                                .weight(1f)
+                                .clickable { selectedItem = item }
+                                .testTag("showcase_item_${item.title.replace(" ", "_")}"),
+                            shape = RoundedCornerShape(18.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column {
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .height(130.dp)
+                                ) {
+                                    AsyncImage(
+                                        model = item.imageUrl,
+                                        contentDescription = item.title,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.fillMaxSize()
+                                    )
+                                    Surface(
+                                        color = NikhatRose.copy(alpha = 0.9f),
+                                        modifier = Modifier
+                                            .padding(8.dp)
+                                            .align(Alignment.TopStart),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Text(
+                                            text = item.category.uppercase(),
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = Color.Black,
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
+                                        )
+                                    }
+                                    
+                                    Row(
+                                        modifier = Modifier
+                                            .padding(8.dp)
+                                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
+                                            .padding(horizontal = 5.dp, vertical = 2.dp)
+                                            .align(Alignment.BottomEnd),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Icon(Icons.Default.Star, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(10.dp))
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text("${item.rating}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                                
+                                Column(modifier = Modifier.padding(12.dp)) {
+                                    Text(
+                                        text = item.title,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MaterialTheme.colorScheme.onSurface,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text(
+                                        text = "By ${item.expertName}",
+                                        fontSize = 11.sp,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        fontWeight = FontWeight.Medium
+                                    )
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = item.description,
+                                        fontSize = 11.sp,
+                                        color = Color.Gray,
+                                        maxLines = 2,
+                                        overflow = TextOverflow.Ellipsis,
+                                        lineHeight = 14.sp
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    // Detail Expand Zoom dialog
+    selectedItem?.let { item ->
+        Dialog(
+            onDismissRequest = { selectedItem = null },
+            properties = DialogProperties(usePlatformDefaultWidth = false)
+        ) {
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(24.dp)
+                    .testTag("showcase_detail_dialog"),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, NikhatRose.copy(alpha = 0.2f))
+            ) {
+                Column(
+                    modifier = Modifier
+                        .verticalScroll(rememberScrollState())
+                        .padding(18.dp)
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(200.dp)
+                    ) {
+                        AsyncImage(
+                            model = item.imageUrl,
+                            contentDescription = item.title,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .fillMaxSize()
+                                .clip(RoundedCornerShape(16.dp))
+                        )
+                        IconButton(
+                            onClick = { selectedItem = null },
+                            modifier = Modifier
+                                .align(Alignment.TopEnd)
+                                .padding(8.dp)
+                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Surface(
+                            color = NikhatRose.copy(alpha = 0.15f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = item.category.uppercase(),
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Black,
+                                color = NikhatRose,
+                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
+                            )
+                        }
+
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Star, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(4.dp))
+                            Text("${item.rating} Rating", fontSize = 13.sp, fontWeight = FontWeight.Bold)
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = item.title,
+                        style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onSurface
+                    )
+
+                    Spacer(modifier = Modifier.height(6.dp))
+
+                    Text(
+                        text = "Expert Designer: ${item.expertName} • Duration: ${item.duration}",
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        color = MaterialTheme.colorScheme.primary
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "TREATMENT DESCRIPTION",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray,
+                        letterSpacing = 0.5.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = item.description,
+                        fontSize = 13.sp,
+                        lineHeight = 18.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "PRODUCTS FEATURED & USED",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray,
+                        letterSpacing = 0.5.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.horizontalScroll(rememberScrollState())
+                    ) {
+                        item.productsUsed.forEach { product ->
+                            Surface(
+                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
+                                shape = RoundedCornerShape(8.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                            ) {
+                                Text(
+                                    text = product,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
+                                    color = MaterialTheme.colorScheme.onSecondaryContainer
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(16.dp))
+
+                    Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Text(
+                        text = "CLIENT REVIEW",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray,
+                        letterSpacing = 0.5.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)),
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(item.reviewer, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                                Row {
+                                    repeat(5) {
+                                        Icon(Icons.Default.Star, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(10.dp))
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = "\"${item.review}\"",
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
+                                lineHeight = 16.sp
+                            )
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(20.dp))
+
+                    Button(
+                        onClick = {
+                            selectedItem = null
+                            val matched = NikhatGlowDataSource.services.firstOrNull {
+                                it.name.contains(item.category, ignoreCase = true) ||
+                                item.title.contains(it.name, ignoreCase = true) ||
+                                it.name.contains("Glow", ignoreCase = true)
+                            } ?: NikhatGlowDataSource.services.firstOrNull()
+                            
+                            matched?.let {
+                                viewModel.currentScreen = Screen.ServiceDetail(it)
+                            }
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .height(48.dp)
+                            .testTag("showcase_book_button"),
+                        shape = RoundedCornerShape(12.dp)
+                    ) {
+                        Text("Book Similar Treatment", color = Color.Black, fontWeight = FontWeight.Bold)
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun RealTimeJustBookedBanner(viewModel: NikhatGlowViewModel) {
+    val services = NikhatGlowDataSource.services
+
+    val notifications = remember(services) {
+        val locations = listOf("Vasant Kunj", "Karol Bagh", "Saket", "Dwarka", "Noida", "Gurugram", "Defence Colony", "Connaught Place")
+        val customers = listOf("Anya", "Nisha", "Priya", "Kiran", "Aditi", "Meera", "Divya", "Sneha", "Kriti", "Riya")
+        val times = listOf("Just now", "2 mins ago", "5 mins ago", "3 mins ago", "1 min ago", "4 mins ago")
+        
+        if (services.isNotEmpty()) {
+            services.mapIndexed { index, service ->
+                val cust = customers[index % customers.size]
+                val loc = locations[index % locations.size]
+                val time = times[index % times.size]
+                JustBookedNotification(
+                    id = service.id + "_$index",
+                    name = cust,
+                    serviceName = service.name,
+                    location = loc,
+                    timeAgo = time,
+                    service = service
+                )
+            }
+        } else {
+            listOf(
+                "Bridal Glow Treatment Special",
+                "Heal & Repair Hair Spa",
+                "Glass Skin Hydra Facial",
+                "Bridal Mehandi Artisan",
+                "Deep Tissue Stress Relief Massage"
+            ).mapIndexed { index, fallbackServiceName ->
+                val cust = customers[index % customers.size]
+                val loc = locations[index % locations.size]
+                val time = times[index % times.size]
+                JustBookedNotification(
+                    id = "fallback_$index",
+                    name = cust,
+                    serviceName = fallbackServiceName,
+                    location = loc,
+                    timeAgo = time,
+                    service = null
+                )
+            }
+        }
+    }
+
+    if (notifications.isEmpty()) return
+
+    var currentIndex by remember { mutableStateOf(0) }
+
+    LaunchedEffect(notifications) {
+        while (true) {
+            delay(4000)
+            currentIndex = (currentIndex + 1) % notifications.size
+        }
+    }
+
+    val currentNotification = notifications[currentIndex]
+
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 8.dp)
+            .clickable {
+                val s = currentNotification.service
+                if (s != null) {
+                    viewModel.currentScreen = Screen.ServiceDetail(s)
+                } else {
+                    val matching = NikhatGlowDataSource.services.firstOrNull()
+                    if (matching != null) {
+                        viewModel.currentScreen = Screen.ServiceDetail(matching)
+                    }
+                }
+            }
+            .testTag("just_booked_marquee"),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(
+            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)
+        ),
+        border = BorderStroke(1.dp, MaterialTheme.colorScheme.primary.copy(alpha = 0.12f))
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 14.dp, vertical = 10.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(28.dp)
+                    .background(NikhatGold.copy(alpha = 0.15f), CircleShape),
+                contentAlignment = Alignment.Center
+            ) {
+                Icon(
+                    Icons.Default.Verified,
+                    contentDescription = "Social Proof Verified",
+                    tint = NikhatGold,
+                    modifier = Modifier.size(16.dp)
+                )
+            }
+            
+            Spacer(modifier = Modifier.width(10.dp))
+            
+            Box(
+                modifier = Modifier.weight(1f)
+            ) {
+                AnimatedContent(
+                    targetState = currentNotification,
+                    transitionSpec = {
+                        (slideInVertically { height -> height } + fadeIn()) togetherWith
+                            (slideOutVertically { height -> -height } + fadeOut())
+                    },
+                    label = "JustBookedTransition"
+                ) { notification ->
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = notification.name,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.onSurface
+                                )
+                                Text(
+                                    text = " from ",
+                                    fontSize = 11.sp,
+                                    color = Color.Gray
+                                )
+                                Text(
+                                    text = notification.location,
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "booked ${notification.serviceName}",
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis
+                            )
+                        }
+                        
+                        Spacer(modifier = Modifier.width(8.dp))
+                        
+                        Surface(
+                            color = NikhatRose.copy(alpha = 0.12f),
+                            shape = RoundedCornerShape(8.dp)
+                        ) {
+                            Text(
+                                text = notification.timeAgo.uppercase(),
+                                fontSize = 9.sp,
+                                fontWeight = FontWeight.Black,
+                                color = NikhatRose,
+                                modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                letterSpacing = 0.5.sp
+                            )
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+@Composable
+fun FaqAccordionSection() {
+    val faqs = listOf(
+        FaqItem(
+            question = "How do I book and modify my service?",
+            answer = "You can select any premium beauty service, choose your preferred time and address, and book with confidence. To modify or reschedule, visit 'My Bookings' up to 4 hours before the service."
+        ),
+        FaqItem(
+            question = "What safety & hygiene protocols are followed?",
+            answer = "Our beauty specialists adhere to strict 5-star hygiene standards. They use single-use, medically sterilized kits, wear face protection / shields, sanitize all equipment before use, and confirm vaccination status."
+        ),
+        FaqItem(
+            question = "What is the cancellation & refund policy?",
+            answer = "We offer 100% free cancellations up to 4 hours prior to your scheduled appointment. Cancellations made within 4 hours are subject to a nominal fee to compensate the assigned beauty technician."
+        )
+    )
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 16.dp, vertical = 24.dp)
+            .testTag("faq_section"),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier.padding(bottom = 8.dp)
+        ) {
+            Icon(
+                Icons.Default.Help,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.size(20.dp)
+            )
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(
+                text = "FREQUENTLY ASKED QUESTIONS",
+                style = MaterialTheme.typography.labelMedium,
+                color = MaterialTheme.colorScheme.primary,
+                fontWeight = FontWeight.Bold,
+                letterSpacing = 1.sp
+            )
+        }
+
+        faqs.forEachIndexed { index, faq ->
+            var isExpanded by remember { mutableStateOf(false) }
+            val rotationState by animateFloatAsState(
+                targetValue = if (isExpanded) 180f else 0f,
+                label = "ArrowRotation"
+            )
+
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { isExpanded = !isExpanded }
+                    .testTag("faq_item_$index"),
+                colors = CardDefaults.cardColors(
+                    containerColor = if (isExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.04f) else MaterialTheme.colorScheme.surface
+                ),
+                shape = RoundedCornerShape(16.dp),
+                border = BorderStroke(
+                    width = 1.dp,
+                    color = if (isExpanded) MaterialTheme.colorScheme.primary.copy(alpha = 0.2f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                )
+            ) {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .minimumInteractiveComponentSize(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text(
+                            text = faq.question,
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            modifier = Modifier.weight(1f).testTag("faq_header_$index")
+                        )
+                        Icon(
+                            imageVector = Icons.Default.KeyboardArrowDown,
+                            contentDescription = if (isExpanded) "Collapse question" else "Expand question",
+                            tint = MaterialTheme.colorScheme.primary,
+                            modifier = Modifier
+                                .size(24.dp)
+                                .rotate(rotationState)
+                                .testTag("faq_icon_$index")
+                        )
+                    }
+
+                    AnimatedVisibility(
+                        visible = isExpanded,
+                        enter = expandVertically() + fadeIn(),
+                        exit = shrinkVertically() + fadeOut()
+                    ) {
+                        Column {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.08f))
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Text(
+                                text = faq.answer,
+                                fontSize = 12.sp,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                lineHeight = 17.sp,
+                                modifier = Modifier.testTag("faq_content_$index")
+                            )
+                        }
+                    }
+                }
+            }
+        }
     }
 }
 
@@ -1199,6 +2054,7 @@ fun PartnerSelectScreen(viewModel: NikhatGlowViewModel, service: Service) {
                     modifier = Modifier
                         .fillMaxWidth()
                         .padding(vertical = 8.dp)
+                        .clickable { viewModel.currentScreen = Screen.PartnerStore(partner) }
                         .testTag("partner_card_${partner.id}"),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                     border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.2f))
@@ -3228,6 +4084,139 @@ fun PartnerServicesScreen(viewModel: NikhatGlowViewModel) {
         Spacer(modifier = Modifier.height(12.dp))
         
         LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            item {
+                var showAddForm by remember { mutableStateOf(false) }
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.15f)),
+                    border = BorderStroke(1.dp, NikhatRose.copy(alpha = 0.3f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.AddCircle, contentDescription = null, tint = NikhatRose)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("Create completely custom service", fontWeight = FontWeight.Bold, color = NikhatRose)
+                            }
+                            TextButton(onClick = { showAddForm = !showAddForm }) {
+                                Text(if (showAddForm) "Hide Form" else "Open Form", color = Color.White, fontWeight = FontWeight.Bold)
+                            }
+                        }
+                        
+                        if (showAddForm) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            
+                            var customName by remember { mutableStateOf("") }
+                            var customCategory by remember { mutableStateOf("Salon") }
+                            var customPrice by remember { mutableStateOf("") }
+                            var customDuration by remember { mutableStateOf("45") }
+                            var customDesc by remember { mutableStateOf("") }
+                            var customProducts by remember { mutableStateOf("") }
+                            
+                            OutlinedTextField(
+                                value = customName,
+                                onValueChange = { customName = it },
+                                label = { Text("Service Name (e.g., Glow Max Anti-Tan Facial)") },
+                                modifier = Modifier.fillMaxWidth(),
+                                singleLine = true
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            Text("Category:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Row(horizontalArrangement = Arrangement.spacedBy(4.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                                listOf("Salon", "Beauty", "Makeup", "Massage").forEach { cat ->
+                                    val isSelected = customCategory == cat
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { customCategory = cat },
+                                        label = { Text(cat) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = NikhatRose.copy(alpha = 0.25f),
+                                            selectedLabelColor = NikhatRose
+                                        )
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            
+                            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                OutlinedTextField(
+                                    value = customPrice,
+                                    onValueChange = { customPrice = it },
+                                    label = { Text("Price (₹)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                                OutlinedTextField(
+                                    value = customDuration,
+                                    onValueChange = { customDuration = it },
+                                    label = { Text("Duration (mins)") },
+                                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                                    modifier = Modifier.weight(1f),
+                                    singleLine = true
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            OutlinedTextField(
+                                value = customDesc,
+                                onValueChange = { customDesc = it },
+                                label = { Text("Description") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            Spacer(modifier = Modifier.height(8.dp))
+                            
+                            OutlinedTextField(
+                                value = customProducts,
+                                onValueChange = { customProducts = it },
+                                label = { Text("Products Used & Quality Seal Notes") },
+                                placeholder = { Text("e.g. Biotique Premium Pack, opened brand new.") },
+                                modifier = Modifier.fillMaxWidth()
+                            )
+                            
+                            Spacer(modifier = Modifier.height(12.dp))
+                            Button(
+                                onClick = {
+                                    val priceVal = customPrice.toLongOrNull() ?: 0L
+                                    val durationVal = customDuration.toIntOrNull() ?: 45
+                                    if (customName.isNotBlank() && priceVal > 0) {
+                                        viewModel.createCustomPartnerService(
+                                            name = customName,
+                                            categoryName = customCategory,
+                                            pricePaise = priceVal * 100L,
+                                            durationMin = durationVal,
+                                            description = customDesc.ifBlank { "Professional $customName service delivered safely at your home." },
+                                            productsUsed = customProducts.ifBlank { "Professional kit, sealed pack opened with double visual verify check." }
+                                        )
+                                        customName = ""
+                                        customPrice = ""
+                                        customDesc = ""
+                                        customProducts = ""
+                                        showAddForm = false
+                                    } else {
+                                        viewModel.notify("Please fill in a valid service name and price in rupees.")
+                                    }
+                                },
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
+                            ) {
+                                Text("➕ Add service to my menu", fontWeight = FontWeight.Bold, color = Color.White)
+                            }
+                        }
+                    }
+                }
+                
+                Spacer(modifier = Modifier.height(10.dp))
+                Divider(color = Color.Gray.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(10.dp))
+                Text("Toggle & customize standard services:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Spacer(modifier = Modifier.height(6.dp))
+            }
             items(allServices) { service ->
                 val activeSetting = activeServices.firstOrNull { it.serviceId == service.id }
                 var rateOverride by remember(activeSetting) { mutableStateOf((activeSetting?.pricePaise ?: service.pricePaise).toString()) }
@@ -3481,7 +4470,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
         ) {
             // Edit Details Card
             Card(
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier.fillMaxWidth().testTag("edit_details_card"),
                 shape = RoundedCornerShape(24.dp),
                 border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -3625,6 +4614,157 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                     }
                 }
             }
+
+            // ── NEW BEAUTY PREFERENCES CARD (allow clients to manage skin goals) ──────
+            var isEditingBeauty by remember { mutableStateOf(false) }
+            var skinTypeSelection by remember { mutableStateOf(viewModel.customerSkinType) }
+            var concernsSelection by remember { mutableStateOf(viewModel.customerBeautyConcerns) }
+            var preferredTimeSelection by remember { mutableStateOf(viewModel.customerPreferredTime) }
+            var showSavedBeautyNotification by remember { mutableStateOf(false) }
+
+            LaunchedEffect(viewModel.customerSkinType, viewModel.customerBeautyConcerns, viewModel.customerPreferredTime) {
+                if (!isEditingBeauty) {
+                    skinTypeSelection = viewModel.customerSkinType
+                    concernsSelection = viewModel.customerBeautyConcerns
+                    preferredTimeSelection = viewModel.customerPreferredTime
+                }
+            }
+
+            Card(
+                modifier = Modifier.fillMaxWidth().testTag("beauty_preferences_card"),
+                shape = RoundedCornerShape(24.dp),
+                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.AutoAwesome, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text(
+                                text = "BEAUTY CARE & CONCERNS",
+                                style = MaterialTheme.typography.titleMedium.copy(fontWeight = FontWeight.Bold),
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        if (!isEditingBeauty) {
+                            TextButton(
+                                onClick = {
+                                    skinTypeSelection = viewModel.customerSkinType
+                                    concernsSelection = viewModel.customerBeautyConcerns
+                                    preferredTimeSelection = viewModel.customerPreferredTime
+                                    isEditingBeauty = true
+                                    showSavedBeautyNotification = false
+                                },
+                                modifier = Modifier.testTag("beauty_profile_edit_btn")
+                            ) {
+                                Icon(Icons.Default.Edit, contentDescription = "Edit Beauty Profile", modifier = Modifier.size(18.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
+                                Text("Edit", fontWeight = FontWeight.Bold)
+                            }
+                        }
+                    }
+
+                    if (isEditingBeauty) {
+                        Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                            Text("Your Skin/Scalp Type:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf("Normal", "Oily", "Dry", "Sensitive", "Combination").forEach { type ->
+                                    val isSelected = skinTypeSelection == type
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { skinTypeSelection = type },
+                                        label = { Text(type, fontSize = 11.sp, color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurface) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = NikhatRose
+                                        )
+                                    )
+                                }
+                            }
+
+                            Text("Preferred Treatment Hours:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            Row(
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                listOf("Morning (9AM-12PM)", "Afternoon (12PM-4PM)", "Evening (4PM-8PM)", "No Preference").forEach { time ->
+                                    val isSelected = preferredTimeSelection == time
+                                    FilterChip(
+                                        selected = isSelected,
+                                        onClick = { preferredTimeSelection = time },
+                                        label = { Text(time, fontSize = 11.sp, color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurface) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = NikhatRose
+                                        )
+                                    )
+                                }
+                            }
+
+                            OutlinedTextField(
+                                value = concernsSelection,
+                                onValueChange = { concernsSelection = it },
+                                label = { Text("Beauty Concerns & Skincare Goals") },
+                                placeholder = { Text("e.g. Hydration, anti-acne, bridal glow, sensitive roots") },
+                                modifier = Modifier.fillMaxWidth().testTag("beauty_concerns_input"),
+                                shape = RoundedCornerShape(12.dp)
+                            )
+
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                OutlinedButton(
+                                    onClick = { isEditingBeauty = false },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Discard")
+                                }
+                                Button(
+                                    onClick = {
+                                        viewModel.updateBeautyProfile(skinTypeSelection, concernsSelection, preferredTimeSelection)
+                                        isEditingBeauty = false
+                                        showSavedBeautyNotification = true
+                                    },
+                                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                                    modifier = Modifier.weight(1.5f).testTag("beauty_profile_save_btn"),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Text("Save Beauty Profile", fontWeight = FontWeight.Bold)
+                                }
+                            }
+                        }
+                    } else {
+                        ProfileReadonlyRow(Icons.Default.Face, "Skin Type", viewModel.customerSkinType)
+                        ProfileReadonlyRow(Icons.Default.AccessTime, "Availability", viewModel.customerPreferredTime)
+                        ProfileReadonlyRow(
+                            Icons.Default.Info, 
+                            "Goals & Concerns", 
+                            viewModel.customerBeautyConcerns.ifBlank { "Not set. Share concerns to assist your partners." }
+                        )
+
+                        if (showSavedBeautyNotification) {
+                            Text(
+                                text = "✓ Beauty Profile updated locally",
+                                color = SuccessGreen,
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(start = 4.dp)
+                            )
+                        }
+                    }
+                }
+            }
             
             // Notification Reminders Card
             Card(
@@ -3732,7 +4872,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                         )
                         Spacer(modifier = Modifier.height(2.dp))
                         Text(
-                            text = "Tap the heart icon on any expert during booking comparison to save them here.",
+                            text = "Tap the heart icon on any expert to save them here temporarily.",
                             fontSize = 10.sp,
                             color = Color.Gray,
                             textAlign = TextAlign.Center
@@ -3792,11 +4932,103 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                                     modifier = Modifier.fillMaxWidth().height(32.dp),
                                     contentPadding = PaddingValues(0.dp)
                                 ) {
-                                    Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color.White)
+                                    Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color.Black)
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Saved (Remove)", fontSize = 11.sp)
+                                    Text("Saved (Remove)", fontSize = 11.sp, color = Color.Black)
                                 }
                             }
+                        }
+                    }
+                }
+            }
+
+            // ── NEW DIRECT DISCOVER & HEART PREFERRED EXPERTS ROW ──────
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "DISCOVER & SAVE EXPERTS",
+                style = MaterialTheme.typography.titleSmall.copy(fontWeight = FontWeight.Bold),
+                color = MaterialTheme.colorScheme.secondary,
+                modifier = Modifier.padding(top = 8.dp)
+            )
+            Text(
+                text = "Build your preferred beauty expert roster. Heart any professional to save them directly to favorites.",
+                fontSize = 11.sp,
+                color = Color.Gray,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+
+            val allPartners = remember { NikhatGlowDataSource.partners }
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .horizontalScroll(rememberScrollState())
+                    .testTag("discover_partners_save_row"),
+                horizontalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                allPartners.forEach { partner ->
+                    val isFavorite = favorites.any { it.partnerId == partner.id }
+                    Card(
+                        modifier = Modifier
+                            .width(180.dp)
+                            .clickable { viewModel.currentScreen = Screen.PartnerStore(partner) }
+                            .testTag("discover_partner_card_${partner.id}"),
+                        shape = RoundedCornerShape(16.dp),
+                        border = BorderStroke(
+                            width = 1.dp,
+                            color = if (isFavorite) NikhatRose.copy(alpha = 0.5f) else MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)
+                        ),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                    ) {
+                        Column(modifier = Modifier.padding(10.dp)) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = partner.avatarUrl,
+                                    contentDescription = partner.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(36.dp)
+                                        .clip(CircleShape)
+                                )
+                                IconButton(
+                                    onClick = { viewModel.toggleFavorite(partner.id) },
+                                    modifier = Modifier
+                                        .size(32.dp)
+                                        .testTag("toggle_fav_btn_${partner.id}")
+                                ) {
+                                    Icon(
+                                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                                        contentDescription = "Save partner",
+                                        tint = if (isFavorite) NikhatRose else Color.Gray,
+                                        modifier = Modifier.size(20.dp)
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(6.dp))
+                            Text(
+                                text = partner.name, 
+                                fontSize = 12.sp, 
+                                fontWeight = FontWeight.Bold, 
+                                maxLines = 1, 
+                                overflow = TextOverflow.Ellipsis
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Star, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(10.dp))
+                                Spacer(modifier = Modifier.width(2.dp))
+                                Text("${partner.rating} • ${partner.experienceYears} YRS EXP", fontSize = 10.sp, color = Color.Gray)
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text(
+                                text = partner.description,
+                                fontSize = 10.sp,
+                                color = Color.DarkGray,
+                                maxLines = 2,
+                                overflow = TextOverflow.Ellipsis,
+                                lineHeight = 13.sp
+                            )
                         }
                     }
                 }
@@ -3804,19 +5036,56 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
             
             Spacer(modifier = Modifier.height(16.dp))
 
-            // Upcoming Appointments
-            val upcoming = bookings.filter { it.status != "completed" && it.status != "cancelled" && it.status != "rejected" }
+            // ── REFACTORED APPOINTMENTS TAB (Upcoming vs Booking History) ──────
+            var selectedBookingTab by remember { mutableStateOf(0) } // 0 = Active, 1 = History
+
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(top = 16.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    text = "APPOINTMENTS",
+                    style = MaterialTheme.typography.titleMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                Row(
+                    modifier = Modifier
+                        .background(MaterialTheme.colorScheme.outline.copy(alpha = 0.1f), RoundedCornerShape(12.dp))
+                        .padding(3.dp)
+                ) {
+                    listOf("Active", "History").forEachIndexed { index, label ->
+                        val isSelected = selectedBookingTab == index
+                        Box(
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(if (isSelected) NikhatRose else Color.Transparent)
+                                .clickable { selectedBookingTab = index }
+                                .padding(horizontal = 14.dp, vertical = 6.dp)
+                                .testTag("booking_tab_$index")
+                        ) {
+                            Text(
+                                text = label,
+                                fontSize = 11.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = if (isSelected) Color.Black else MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                    }
+                }
+            }
             
-            Text(
-                text = "UPCOMING APPOINTMENTS (${upcoming.size})",
-                style = MaterialTheme.typography.titleMedium,
-                color = MaterialTheme.colorScheme.primary,
-                modifier = Modifier.padding(top = 8.dp)
-            )
+            val upcoming = bookings.filter { it.status != "completed" && it.status != "cancelled" && it.status != "rejected" && it.status != "refunded" }
+            val past = bookings.filter { it.status == "completed" || it.status == "cancelled" || it.status == "rejected" || it.status == "refunded" }
+
+            val displayList = if (selectedBookingTab == 0) upcoming else past
             
-            if (upcoming.isEmpty()) {
+            if (displayList.isEmpty()) {
                 Card(
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier.fillMaxWidth().testTag("empty_bookings_card"),
                     shape = RoundedCornerShape(16.dp),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f))
                 ) {
@@ -3826,34 +5095,36 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                         verticalArrangement = Arrangement.Center
                     ) {
                         Icon(
-                            Icons.Default.CalendarToday,
+                            imageVector = if (selectedBookingTab == 0) Icons.Default.CalendarToday else Icons.Default.History,
                             contentDescription = null,
                             tint = Color.Gray,
                             modifier = Modifier.size(40.dp)
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "No upcoming reservations scheduled.",
+                            text = if (selectedBookingTab == 0) "No upcoming reservations scheduled." else "No appointment history found.",
                             fontWeight = FontWeight.Medium,
                             fontSize = 14.sp,
                             color = Color.Gray
                         )
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Button(
-                            onClick = { viewModel.currentScreen = Screen.ServiceBookingForm },
-                            colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
-                        ) {
-                            Text("Book a Treatment Now", color = Color.Black)
+                        if (selectedBookingTab == 0) {
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Button(
+                                onClick = { viewModel.currentScreen = Screen.ServiceBookingForm },
+                                colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
+                            ) {
+                                Text("Book a Treatment Now", color = Color.Black)
+                            }
                         }
                     }
                 }
             } else {
-                upcoming.forEach { booking ->
+                displayList.forEach { booking ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
                             .clickable { viewModel.currentScreen = Screen.BookingDetail(booking.id) }
-                            .testTag("upcoming_booking_${booking.id}"),
+                            .testTag("booking_item_${booking.id}"),
                         shape = RoundedCornerShape(16.dp),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
@@ -3895,6 +5166,8 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                                             color = when(booking.status) {
                                                 "pending" -> Color(0xFFFFF3E0)
                                                 "accepted" -> Color(0xFFE8F5E9)
+                                                "completed" -> Color(0xFFE0F2F1)
+                                                "cancelled", "rejected", "refunded" -> Color(0xFFFFEBEE)
                                                 else -> MaterialTheme.colorScheme.secondary.copy(alpha = 0.15f)
                                             },
                                             shape = RoundedCornerShape(6.dp)
@@ -3908,6 +5181,8 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                                         color = when(booking.status) {
                                             "pending" -> Color(0xFFE65100)
                                             "accepted" -> Color(0xFF2E7D32)
+                                            "completed" -> Color(0xFF00796B)
+                                            "cancelled", "rejected", "refunded" -> Color(0xFFC62828)
                                             else -> MaterialTheme.colorScheme.secondary
                                         }
                                     )
@@ -3941,9 +5216,32 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
     }
 }
 
+data class Testimonial(
+    val name: String,
+    val rating: Int,
+    val feedback: String,
+    val serviceName: String,
+    val relativeTime: String
+)
+
+data class JustBookedNotification(
+    val id: String,
+    val name: String,
+    val serviceName: String,
+    val location: String,
+    val timeAgo: String,
+    val service: Service?
+)
+
+data class FaqItem(
+    val question: String,
+    val answer: String
+)
+
 @Composable
 fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
     val services = NikhatGlowDataSource.services
+    val activeUser by viewModel.activeUser.collectAsState()
     
     var selectedService by remember { mutableStateOf<Service?>(null) }
     var dateState by remember { mutableStateOf("") }
@@ -3952,8 +5250,34 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
     // §694 — professional gender preference captured at booking time.
     var genderPref by remember { mutableStateOf("any") }
 
+    // Contact form fields
+    var contactName by remember { mutableStateOf("") }
+    var contactPhone by remember { mutableStateOf("") }
+    var contactEmail by remember { mutableStateOf("") }
+
+    // Validation errors
+    var contactNameError by remember { mutableStateOf<String?>(null) }
+    var contactPhoneError by remember { mutableStateOf<String?>(null) }
+    var contactEmailError by remember { mutableStateOf<String?>(null) }
+
     var errorState by remember { mutableStateOf<String?>(null) }
     var isBookingProgress by remember { mutableStateOf(false) }
+
+    // Success confirmation popup
+    var showSuccessModal by remember { mutableStateOf(false) }
+    var successBookingId by remember { mutableStateOf("") }
+
+    // Category filter
+    var selectedCategoryFilter by remember { mutableStateOf("All") }
+
+    // Prefill form details with active user details once loaded
+    LaunchedEffect(activeUser) {
+        if (activeUser != null) {
+            if (contactName.isBlank()) contactName = activeUser?.name ?: ""
+            if (contactPhone.isBlank()) contactPhone = activeUser?.phone ?: ""
+            if (contactEmail.isBlank()) contactEmail = activeUser?.email ?: ""
+        }
+    }
     
     Column(
         modifier = Modifier
@@ -3991,7 +5315,40 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                     Spacer(modifier = Modifier.width(48.dp))
                 }
                 
-                Spacer(modifier = Modifier.height(16.dp))
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Luxury Branded Fallback Logo Layout
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .background(Color.White.copy(alpha = 0.08f), RoundedCornerShape(24.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp)
+                        .testTag("booking_brand_logo")
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .size(20.dp)
+                            .background(NikhatGold, CircleShape),
+                        contentAlignment = Alignment.Center
+                    ) {
+                        Icon(
+                            Icons.Default.Spa,
+                            contentDescription = "Nikhat Glow Logo",
+                            tint = DeepPlum,
+                            modifier = Modifier.size(12.dp)
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Text(
+                        text = "NIKHAT GLOW",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Black,
+                        color = Color.White,
+                        letterSpacing = 1.sp
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
                 
                 Text(
                     text = "BOOK TREATMENT",
@@ -4012,62 +5369,243 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(20.dp)
         ) {
-            // Section 1: Choose Service Type
+            // Section 1: Choose Service Type (Using Beautiful 2-Column Responsive Grid with Descriptions & Toggle Filters)
             Column {
                 Text(
                     text = "1. CHOOSE SERVICE TYPE",
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.primary,
-                    modifier = Modifier.padding(bottom = 8.dp)
+                    modifier = Modifier.padding(bottom = 12.dp)
                 )
-                
+
+                // Category Filter Pills
+                val categoriesFromDb = NikhatGlowDataSource.categories.map { it.name }
+                val defaultCategories = listOf("Hair Care", "Skin Care", "Makeup")
+                val uniqueCategories = (listOf("All") + defaultCategories + categoriesFromDb).distinct()
+
                 LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(10.dp),
-                    contentPadding = PaddingValues(bottom = 4.dp)
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                    contentPadding = PaddingValues(bottom = 16.dp),
+                    modifier = Modifier.fillMaxWidth()
                 ) {
-                    items(services) { service ->
-                        val isSelected = selectedService?.id == service.id
-                        Card(
+                    items(uniqueCategories) { categoryName ->
+                        val isFilterSelected = selectedCategoryFilter == categoryName
+                        Surface(
                             modifier = Modifier
-                                .width(140.dp)
-                                .clickable { 
-                                    selectedService = service 
-                                    errorState = null
-                                }
-                                .testTag("select_service_${service.id}"),
-                            shape = RoundedCornerShape(16.dp),
+                                .clickable { selectedCategoryFilter = categoryName }
+                                .testTag("filter_chip_${categoryName.lowercase().replace(" ", "_")}"),
+                            shape = RoundedCornerShape(24.dp),
+                            color = if (isFilterSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.5f),
                             border = BorderStroke(
-                                width = if (isSelected) 2.dp else 1.dp,
-                                color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
-                            ),
-                            colors = CardDefaults.cardColors(
-                                containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.1f) else MaterialTheme.colorScheme.surface
+                                width = 1.dp,
+                                color = if (isFilterSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
                             )
                         ) {
-                            Column(modifier = Modifier.padding(12.dp)) {
-                                AsyncImage(
-                                    model = service.imageUrl,
-                                    contentDescription = service.name,
-                                    contentScale = ContentScale.Crop,
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(80.dp)
-                                        .clip(RoundedCornerShape(12.dp))
+                            Row(
+                                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.Center
+                            ) {
+                                if (isFilterSelected) {
+                                    Icon(
+                                        Icons.Default.Check,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(14.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                }
+                                Text(
+                                    text = categoryName.uppercase(),
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = if (isFilterSelected) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                                 )
+                            }
+                        }
+                    }
+                }
+
+                // Filter the services based on the selected category filter
+                val filteredServices = if (selectedCategoryFilter == "All") {
+                    services
+                } else {
+                    services.filter { service ->
+                        val matchingCat = NikhatGlowDataSource.categories.find { it.name.equals(selectedCategoryFilter, ignoreCase = true) }
+                        if (matchingCat != null && service.categoryId == matchingCat.id) {
+                            true
+                        } else {
+                            val term = when(selectedCategoryFilter) {
+                                "Hair Care" -> "hair"
+                                "Skin Care" -> "skin"
+                                "Makeup" -> "makeup"
+                                else -> selectedCategoryFilter.substringBefore(" ")
+                            }
+                            service.name.contains(term, ignoreCase = true) || 
+                            service.description.contains(term, ignoreCase = true)
+                        }
+                    }
+                }
+                
+                val serviceChunks = filteredServices.chunked(2)
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (filteredServices.isEmpty()) {
+                        Card(
+                            modifier = Modifier.fillMaxWidth().padding(vertical = 12.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(24.dp).fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally
+                            ) {
+                                Icon(Icons.Default.Spa, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(36.dp))
                                 Spacer(modifier = Modifier.height(8.dp))
                                 Text(
-                                    text = service.name,
+                                    text = "No treatments listed under \"$selectedCategoryFilter\"",
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    textAlign = TextAlign.Center
                                 )
-                                Text(
-                                    text = service.priceLabel(),
-                                    fontSize = 12.sp,
-                                    color = MaterialTheme.colorScheme.primary,
-                                    fontWeight = FontWeight.Black
-                                )
+                            }
+                        }
+                    } else {
+                        serviceChunks.forEach { chunk ->
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(12.dp)
+                            ) {
+                                chunk.forEach { service ->
+                                    val isSelected = selectedService?.id == service.id
+                                    Card(
+                                        modifier = Modifier
+                                            .weight(1f)
+                                            .clickable { 
+                                                selectedService = service 
+                                                errorState = null
+                                            }
+                                            .testTag("select_service_${service.id}"),
+                                        shape = RoundedCornerShape(16.dp),
+                                        border = BorderStroke(
+                                            width = if (isSelected) 2.5.dp else 1.dp,
+                                            color = if (isSelected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline.copy(alpha = 0.2f)
+                                        ),
+                                        colors = CardDefaults.cardColors(
+                                            containerColor = if (isSelected) MaterialTheme.colorScheme.primary.copy(alpha = 0.08f) else MaterialTheme.colorScheme.surface
+                                        )
+                                    ) {
+                                        Column {
+                                            Box(modifier = Modifier.fillMaxWidth()) {
+                                                AsyncImage(
+                                                    model = service.imageUrl,
+                                                    contentDescription = service.name,
+                                                    contentScale = ContentScale.Crop,
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(110.dp)
+                                                        .clip(RoundedCornerShape(topStart = 16.dp, topEnd = 16.dp))
+                                                )
+                                                if (isSelected) {
+                                                    Surface(
+                                                        color = MaterialTheme.colorScheme.primary,
+                                                        shape = RoundedCornerShape(bottomEnd = 12.dp),
+                                                        modifier = Modifier.align(Alignment.TopStart)
+                                                    ) {
+                                                        Row(
+                                                            modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp),
+                                                            verticalAlignment = Alignment.CenterVertically
+                                                        ) {
+                                                            Icon(
+                                                                Icons.Default.CheckCircle,
+                                                                contentDescription = "Selected",
+                                                                tint = Color.White,
+                                                                modifier = Modifier.size(12.dp)
+                                                            )
+                                                            Spacer(modifier = Modifier.width(4.dp))
+                                                            Text(
+                                                                text = "SELECTED",
+                                                                color = Color.White,
+                                                                fontSize = 9.sp,
+                                                                fontWeight = FontWeight.Bold
+                                                            )
+                                                        }
+                                                    }
+                                                }
+                                            }
+                                            Column(modifier = Modifier.padding(12.dp)) {
+                                                Text(
+                                                    text = service.name,
+                                                    fontSize = 14.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = MaterialTheme.colorScheme.onSurface,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = service.priceLabel(),
+                                                    fontSize = 13.sp,
+                                                    color = MaterialTheme.colorScheme.primary,
+                                                    fontWeight = FontWeight.Black
+                                                )
+                                                Spacer(modifier = Modifier.height(6.dp))
+                                                Text(
+                                                    text = service.description,
+                                                    fontSize = 11.sp,
+                                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                    maxLines = 3,
+                                                    overflow = TextOverflow.Ellipsis,
+                                                    lineHeight = 14.sp
+                                                )
+                                                Spacer(modifier = Modifier.height(10.dp))
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Icon(
+                                                            Icons.Default.Star,
+                                                            contentDescription = null,
+                                                            tint = NikhatGold,
+                                                            modifier = Modifier.size(12.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(2.dp))
+                                                        Text(
+                                                            text = "${service.rating}",
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                    Row(
+                                                        verticalAlignment = Alignment.CenterVertically,
+                                                        modifier = Modifier
+                                                            .background(MaterialTheme.colorScheme.surfaceVariant, RoundedCornerShape(4.dp))
+                                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    ) {
+                                                        Icon(
+                                                            Icons.Default.Schedule,
+                                                            contentDescription = "Estimated Duration",
+                                                            tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                                                            modifier = Modifier.size(11.dp)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(3.dp))
+                                                        Text(
+                                                            text = "Duration: ${service.durationMin} mins",
+                                                            fontSize = 9.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                                if (chunk.size < 2) {
+                                    Spacer(modifier = Modifier.weight(1f))
+                                }
                             }
                         }
                     }
@@ -4132,6 +5670,193 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                 GenderPreferenceSelector(selected = genderPref, onSelect = { genderPref = it })
             }
 
+            // Section 5: Contact Information Validation
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "5. CONTACT INFORMATION",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                    border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.2f))
+                ) {
+                    Column(
+                        modifier = Modifier.padding(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        OutlinedTextField(
+                            value = contactName,
+                            onValueChange = {
+                                contactName = it
+                                contactNameError = if (it.trim().length < 3) "Name must be at least 3 characters." else null
+                            },
+                            label = { Text("Client Name") },
+                            isError = contactNameError != null,
+                            supportingText = {
+                                if (contactNameError != null) {
+                                    Text(contactNameError!!, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Default.Person, contentDescription = null, tint = NikhatRose) },
+                            modifier = Modifier.fillMaxWidth().testTag("booking_contact_name_input"),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NikhatRose,
+                                focusedLabelColor = NikhatRose
+                            )
+                        )
+
+                        OutlinedTextField(
+                            value = contactPhone,
+                            onValueChange = {
+                                contactPhone = it
+                                contactPhoneError = if (it.trim().length != 10 || !it.trim().all { char -> char.isDigit() }) 
+                                    "Phone must be exactly 10 digits." else null
+                            },
+                            label = { Text("Phone Number") },
+                            isError = contactPhoneError != null,
+                            supportingText = {
+                                if (contactPhoneError != null) {
+                                    Text(contactPhoneError!!, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Default.Phone, contentDescription = null, tint = NikhatRose) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Phone),
+                            modifier = Modifier.fillMaxWidth().testTag("booking_contact_phone_input"),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NikhatRose,
+                                focusedLabelColor = NikhatRose
+                            )
+                        )
+
+                        OutlinedTextField(
+                            value = contactEmail,
+                            onValueChange = {
+                                contactEmail = it
+                                val emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
+                                contactEmailError = if (!emailRegex.matches(it.trim())) "Enter a valid email address." else null
+                            },
+                            label = { Text("Email Address") },
+                            isError = contactEmailError != null,
+                            supportingText = {
+                                if (contactEmailError != null) {
+                                    Text(contactEmailError!!, color = MaterialTheme.colorScheme.error, fontSize = 11.sp)
+                                }
+                            },
+                            leadingIcon = { Icon(Icons.Default.Email, contentDescription = null, tint = NikhatRose) },
+                            keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Email),
+                            modifier = Modifier.fillMaxWidth().testTag("booking_contact_email_input"),
+                            singleLine = true,
+                            colors = OutlinedTextFieldDefaults.colors(
+                                focusedBorderColor = NikhatRose,
+                                focusedLabelColor = NikhatRose
+                            )
+                        )
+                    }
+                }
+            }
+
+            // Section 6: Customer Testimonials
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                Text(
+                    text = "6. CLIENT TESTIMONIALS & TRUST",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.primary
+                )
+                
+                LazyRow(
+                    horizontalArrangement = Arrangement.spacedBy(14.dp),
+                    contentPadding = PaddingValues(bottom = 8.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    val testimonialList = listOf(
+                        Testimonial("Anya Sharma", 5, "The bridal glow treatment completely transformed my skin! Super relaxing and exceptional staff.", "Skin Care Treatment", "Yesterday"),
+                        Testimonial("Nisha Patel", 5, "Fantastic therapeutic hair spa. My hair feels incredibly soft, and the stylist was extremely professional.", "Hair Care Treatment", "3 days ago"),
+                        Testimonial("Priya Sen", 4, "Flawless party makeup. It lasted all night through the celebration without any smudges! Highly recommend.", "Professional Makeup", "1 week ago")
+                    )
+                    items(testimonialList) { review ->
+                        Card(
+                            modifier = Modifier
+                                .width(280.dp)
+                                .testTag("testimonial_card_${review.name.lowercase().replace(" ", "_")}"),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Column(modifier = Modifier.padding(16.dp)) {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column {
+                                        Text(
+                                            text = review.name,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = MaterialTheme.colorScheme.onSurface
+                                        )
+                                        Text(
+                                            text = review.serviceName,
+                                            fontSize = 10.sp,
+                                            color = NikhatRose,
+                                            fontWeight = FontWeight.SemiBold
+                                        )
+                                    }
+                                    Surface(
+                                        color = NikhatGold.copy(alpha = 0.1f),
+                                        shape = RoundedCornerShape(8.dp)
+                                    ) {
+                                        Row(
+                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
+                                            verticalAlignment = Alignment.CenterVertically
+                                        ) {
+                                            Icon(
+                                                Icons.Default.Star,
+                                                contentDescription = null,
+                                                tint = NikhatGold,
+                                                modifier = Modifier.size(12.dp)
+                                            )
+                                            Spacer(modifier = Modifier.width(3.dp))
+                                            Text(
+                                                text = "${review.rating}.0",
+                                                modifier = Modifier.testTag("testimonial_rating_${review.name.lowercase().replace(" ", "_")}"),
+                                                fontSize = 10.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = MaterialTheme.colorScheme.onSurface
+                                            )
+                                        }
+                                    }
+                                }
+                                
+                                Spacer(modifier = Modifier.height(8.dp))
+                                
+                                Text(
+                                    text = "\"${review.feedback}\"",
+                                    fontSize = 11.sp,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                    lineHeight = 15.sp,
+                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
+                                    maxLines = 3,
+                                    overflow = TextOverflow.Ellipsis
+                                )
+                                Spacer(modifier = Modifier.height(8.dp))
+                                Text(
+                                    text = "Verified Review • ${review.relativeTime}",
+                                    fontSize = 9.sp,
+                                    color = Color.Gray
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+
             // Error Indicator
             if (errorState != null) {
                 Card(
@@ -4162,23 +5887,38 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
             // Action button
             Button(
                 onClick = {
+                    contactNameError = if (contactName.trim().length < 3) "Name must be at least 3 characters." else null
+                    contactPhoneError = if (contactPhone.trim().length != 10 || !contactPhone.trim().all { char -> char.isDigit() }) 
+                        "Phone must be exactly 10 digits." else null
+                    val emailRegex = "^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$".toRegex()
+                    contactEmailError = if (!emailRegex.matches(contactEmail.trim())) "Enter a valid email address." else null
+
                     if (selectedService == null) {
                         errorState = "Please select a wellness treatment service above."
                     } else if (dateState.trim().isEmpty()) {
                         errorState = "Appointment date cannot be left blank."
                     } else if (timeState.trim().isEmpty()) {
                         errorState = "Appointment preference slot time cannot be left blank."
+                    } else if (contactNameError != null || contactPhoneError != null || contactEmailError != null) {
+                        errorState = "Please fix the contact information validation errors below."
                     } else {
+                        errorState = null
                         isBookingProgress = true
                         // §694 — hand the captured notes + gender preference to the VM
                         // so they ride along on the create-booking request.
-                        viewModel.bookingNotes = customNotes
+                        viewModel.bookingNotes = if (customNotes.isNotBlank()) {
+                            "$customNotes [Contact: $contactName, Phone: $contactPhone, Email: $contactEmail]"
+                        } else {
+                            "[Contact: $contactName, Phone: $contactPhone, Email: $contactEmail]"
+                        }
                         viewModel.bookingGenderPref = genderPref
                         viewModel.bookDirectlyFromForm(
                             service = selectedService!!,
                             slot = "${dateState.trim()} at ${timeState.trim()}",
                             onSuccess = { bookingId ->
                                 isBookingProgress = false
+                                successBookingId = bookingId
+                                showSuccessModal = true
                             }
                         )
                     }
@@ -4202,6 +5942,137 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                     )
                 }
             }
+        }
+
+        // Popup Confirmation Dialog Modal
+        if (showSuccessModal) {
+            AlertDialog(
+                onDismissRequest = { showSuccessModal = false },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            showSuccessModal = false
+                            viewModel.currentScreen = Screen.MyBookings
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
+                        modifier = Modifier.fillMaxWidth().testTag("modal_view_bookings_btn")
+                    ) {
+                        Text("VIEW MY BOOKINGS", fontWeight = FontWeight.Bold)
+                    }
+                },
+                dismissButton = {
+                    OutlinedButton(
+                        onClick = {
+                            showSuccessModal = false
+                            // reset form on close
+                            selectedService = null
+                            dateState = ""
+                            timeState = ""
+                            customNotes = ""
+                        },
+                        shape = RoundedCornerShape(12.dp),
+                        modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("modal_close_btn")
+                    ) {
+                        Text("BOOK ANOTHER TREATMENT", color = MaterialTheme.colorScheme.primary)
+                    }
+                },
+                title = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(56.dp)
+                                .clip(CircleShape)
+                                .background(NikhatGold.copy(alpha = 0.15f)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(
+                                Icons.Default.Verified,
+                                contentDescription = "Success",
+                                tint = NikhatGold,
+                                modifier = Modifier.size(32.dp)
+                            )
+                        }
+                        Spacer(modifier = Modifier.height(14.dp))
+                        Text(
+                            text = "Booking Confirmed! ✨",
+                            style = MaterialTheme.typography.titleLarge,
+                            fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onSurface,
+                            textAlign = TextAlign.Center
+                        )
+                    }
+                },
+                text = {
+                    Column(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalArrangement = Arrangement.spacedBy(10.dp)
+                    ) {
+                        Text(
+                            text = "Your beauty concierge reservation has been successfully booked with supreme confidence.",
+                            fontSize = 12.sp,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(bottom = 8.dp)
+                        )
+                        
+                        selectedService?.let { service ->
+                            Card(
+                                shape = RoundedCornerShape(12.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f)),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f))
+                            ) {
+                                Column(modifier = Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Treatment:", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                                        Text(service.name, fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Duration & Price:", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                                        Text("${service.durationMin}m • ${service.priceLabel()}", fontSize = 11.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Date & Time:", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                                        Text("$dateState at $timeState", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Client Contact:", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                                        Text("$contactName ($contactPhone)", fontSize = 11.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.SpaceBetween
+                                    ) {
+                                        Text("Booking ID:", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                                        Text("#$successBookingId", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                },
+                shape = RoundedCornerShape(24.dp),
+                properties = DialogProperties(usePlatformDefaultWidth = false),
+                modifier = Modifier
+                    .padding(24.dp)
+                    .fillMaxWidth()
+                    .wrapContentHeight()
+            )
         }
         Spacer(modifier = Modifier.height(48.dp))
     }

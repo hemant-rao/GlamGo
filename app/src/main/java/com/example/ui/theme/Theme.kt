@@ -55,22 +55,13 @@ private val LightColorScheme =
 
 @Composable
 fun MyApplicationTheme(
-  darkTheme: Boolean = isSystemInDarkTheme(),
-  // Dynamic colour is intentionally OFF so Nikhat Glow's brand palette is
-  // consistent across devices (Material You would override our Google Blue).
+  darkTheme: Boolean = true,
   dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
-  val colorScheme =
-    when {
-      dynamicColor && Build.VERSION.SDK_INT >= Build.VERSION_CODES.S -> {
-        val context = LocalContext.current
-        if (darkTheme) dynamicDarkColorScheme(context) else dynamicLightColorScheme(context)
-      }
-
-      darkTheme -> DarkColorScheme
-      else -> LightColorScheme
-    }
+  // Always use the custom DarkColorScheme to enforce Nikhat Glow's dark luxury theme
+  // across all devices and prevent any accidental white/light background overrides.
+  val colorScheme = DarkColorScheme
 
   MaterialTheme(colorScheme = colorScheme, typography = Typography, content = content)
 }

@@ -113,6 +113,13 @@ class NikhatGlowRepository(context: Context) {
     @Volatile private var lastQuoteId: String? = null
 
     private val customProductsUsed = mutableMapOf<String, String>()
+    private val localCustomPartnerServices = mutableListOf<PartnerServiceEntity>()
+
+    fun insertLocalPartnerService(service: PartnerServiceEntity) {
+        localCustomPartnerServices.add(service)
+        customProductsUsed[service.serviceId] = service.productsUsed
+        _partnerServices.value = _partnerServices.value + service
+    }
 
     fun isFavoriteFlow(partnerId: String): Flow<Boolean> =
         _favorites.map { list -> list.any { it.partnerId == partnerId } }
@@ -353,7 +360,7 @@ class NikhatGlowRepository(context: Context) {
     }
 
     suspend fun refreshPartnerServices() {
-        _partnerServices.value = api.partnerServices().items.map {
+        val remoteList = api.partnerServices().items.map {
             PartnerServiceEntity(
                 id = it.id.toString(),
                 serviceId = it.serviceId.toString(),
@@ -365,6 +372,7 @@ class NikhatGlowRepository(context: Context) {
                 productsUsed = customProductsUsed[it.serviceId.toString()] ?: ""
             )
         }
+        _partnerServices.value = remoteList + localCustomPartnerServices
     }
 
     // ── Customer actions ───────────────────────────────────────────────────────

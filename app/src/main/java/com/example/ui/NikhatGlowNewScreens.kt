@@ -41,6 +41,7 @@ import com.example.ui.theme.DarkSlate
 import com.example.ui.theme.DeepPlum
 import com.example.ui.theme.NikhatGold
 import com.example.ui.theme.NikhatRose
+import com.example.ui.theme.SuccessGreen
 
 // ───────────────────────────── small shared header ──────────────────────────
 @Composable
@@ -671,5 +672,364 @@ fun PartnerPortfolioScreen(viewModel: NikhatGlowViewModel) {
                 TextButton(onClick = { showAdd = false }) { Text("Cancel") }
             }
         )
+    }
+}
+
+// ───────────────────────────── PARTNER STOREFRONT & MENU (restaurant-style) ────────────────────────
+@Composable
+fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
+    val cart by viewModel.cart.collectAsState()
+    val allServices = NikhatGlowDataSource.services
+    var selectedCategory by remember { mutableStateOf("All") }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text(partner.name, fontWeight = FontWeight.Bold) },
+            navigationIcon = {
+                IconButton(onClick = { viewModel.goBack() }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            },
+            colors = TopAppBarDefaults.topAppBarColors(
+                containerColor = MaterialTheme.colorScheme.background
+            )
+        )
+
+        LazyColumn(
+            modifier = Modifier.weight(1f),
+            contentPadding = PaddingValues(bottom = 80.dp)
+        ) {
+            // Hero Profile Card Header
+            item {
+                Box(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .background(Brush.verticalGradient(listOf(DeepPlum, DarkSlate)))
+                        .padding(16.dp)
+                ) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        AsyncImage(
+                            model = partner.avatarUrl.ifBlank { "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200" },
+                            contentDescription = partner.name,
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier
+                                .size(70.dp)
+                                .clip(CircleShape)
+                                .background(Color.White.copy(alpha = 0.1f))
+                        )
+                        Spacer(modifier = Modifier.width(16.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = partner.name,
+                                    fontSize = 18.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Icon(
+                                    imageVector = Icons.Default.CheckCircle,
+                                    contentDescription = "Verified",
+                                    tint = NikhatGold,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(2.dp))
+                            Text(
+                                text = "⭐ ${partner.rating} (${partner.reviewsCount} jobs completed)",
+                                color = Color.White.copy(alpha = 0.9f),
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                            Text(
+                                text = "${partner.experienceYears} Years Experience • Independent Expert",
+                                color = Color.White.copy(alpha = 0.7f),
+                                fontSize = 11.sp
+                            )
+                        }
+                    }
+                }
+            }
+
+            // Quick Info & Chat Button
+            item {
+                Column(modifier = Modifier.padding(16.dp)) {
+                    Text(
+                        text = "ABOUT THE PROFESSIONAL:",
+                        fontSize = 10.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = NikhatRose,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = partner.description.ifBlank { "Providing elite professional parlor and makeup services at your doorstep. Specializes in customized facials, therapeutic massages with organic skin-seal checking." },
+                        fontSize = 13.sp,
+                        color = Color.LightGray,
+                        lineHeight = 18.sp
+                    )
+                    Spacer(modifier = Modifier.height(12.dp))
+                    
+                    // Chat trigger
+                    Button(
+                        onClick = {
+                            val dummyService = allServices.firstOrNull() ?: com.example.data.Service(
+                                id = "srv_default",
+                                categoryId = "cat_salon",
+                                name = "Consultation",
+                                description = "",
+                                pricePaise = 50000L,
+                                durationMin = 30,
+                                rating = 5f,
+                                reviewsCount = 1,
+                                inclusions = emptyList(),
+                                faqs = emptyList(),
+                                imageUrl = ""
+                            )
+                            viewModel.currentScreen = Screen.PreBookingChat(dummyService, partner)
+                        },
+                        colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
+                        shape = RoundedCornerShape(8.dp)
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(16.dp))
+                        Spacer(modifier = Modifier.width(6.dp))
+                        val firstName = partner.name.substringBefore(" ")
+                        Text("Chat with $firstName Pre-Booking", color = NikhatRose, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    }
+                }
+                Divider(color = Color.Gray.copy(alpha = 0.15f))
+            }
+
+            // Category Selector Filter Chips
+            item {
+                Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                    Text(
+                        text = "SELECT SERVICES MENU:",
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = Color.Gray,
+                        letterSpacing = 1.sp
+                    )
+                    Spacer(modifier = Modifier.height(6.dp))
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        listOf("All", "Salon", "Beauty", "Makeup", "Massage").forEach { cat ->
+                            val isSelected = selectedCategory == cat
+                            FilterChip(
+                                selected = isSelected,
+                                onClick = { selectedCategory = cat },
+                                label = { Text(cat, fontSize = 11.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = NikhatRose.copy(alpha = 0.25f),
+                                    selectedLabelColor = NikhatRose,
+                                    labelColor = Color.Gray
+                                )
+                            )
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+            }
+
+            // Menu Items List
+            val filteredServices = allServices.filter { srv ->
+                if (selectedCategory == "All") true
+                else srv.categoryId.lowercase().contains(selectedCategory.lowercase()) ||
+                     srv.name.lowercase().contains(selectedCategory.lowercase())
+            }
+
+            if (filteredServices.isEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Text("No services matches this category selection", color = Color.Gray, fontSize = 13.sp)
+                    }
+                }
+            } else {
+                items(filteredServices) { service ->
+                    // Resolve partner custom rate
+                    val resolvedPrice = if (partner.fromPricePaise > 0) partner.fromPricePaise else service.pricePaise
+                    
+                    // Check if this item is in the cart
+                    val cartItem = cart?.items?.firstOrNull { 
+                        it.serviceId.toString() == service.id || it.serviceId == service.id.toIntOrNull() 
+                    }
+                    val isSamePartnerCart = cart?.partnerId == partner.id.toIntOrNull() || cart?.partnerId.toString() == partner.id
+
+                    Card(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 6.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.3f)),
+                        border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.1f))
+                    ) {
+                        Row(
+                            modifier = Modifier.padding(12.dp),
+                            verticalAlignment = Alignment.Top
+                        ) {
+                            Column(modifier = Modifier.weight(1f)) {
+                                Text(
+                                    text = service.name,
+                                    fontWeight = FontWeight.Bold,
+                                    fontSize = 15.sp,
+                                    color = Color.White
+                                )
+                                Spacer(modifier = Modifier.height(2.dp))
+                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                    Text(
+                                        text = "₹${resolvedPrice / 100}",
+                                        fontSize = 14.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = SuccessGreen
+                                    )
+                                    Spacer(modifier = Modifier.width(6.dp))
+                                    Text(
+                                        text = "⏱️ ${service.durationMin} mins",
+                                        fontSize = 11.sp,
+                                        color = Color.Gray
+                                    )
+                                }
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = service.description,
+                                    fontSize = 11.sp,
+                                    color = Color.Gray,
+                                    lineHeight = 15.sp,
+                                    maxLines = 2
+                                )
+                            }
+                            Spacer(modifier = Modifier.width(12.dp))
+                            
+                            // Right side: image + add controls
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.Center
+                            ) {
+                                AsyncImage(
+                                    model = service.imageUrl,
+                                    contentDescription = service.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(8.dp))
+                                        .background(Color.Gray.copy(alpha = 0.1f))
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                
+                                if (cartItem != null && isSamePartnerCart) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.Center,
+                                        modifier = Modifier
+                                            .background(NikhatRose, RoundedCornerShape(4.dp))
+                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                    ) {
+                                        Text(
+                                            text = "-",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 16.sp,
+                                            modifier = Modifier
+                                                .clickable {
+                                                    if (cartItem.qty <= 1) {
+                                                        viewModel.removeCartItem(cartItem.id)
+                                                    } else {
+                                                        viewModel.updateCartQty(cartItem.id, cartItem.qty - 1)
+                                                    }
+                                                }
+                                                .padding(horizontal = 6.dp)
+                                        )
+                                        Text(
+                                            text = "${cartItem.qty}",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 12.sp,
+                                            modifier = Modifier.padding(horizontal = 4.dp)
+                                        )
+                                        Text(
+                                            text = "+",
+                                            color = Color.White,
+                                            fontWeight = FontWeight.Bold,
+                                            fontSize = 14.sp,
+                                            modifier = Modifier
+                                                .clickable {
+                                                    viewModel.updateCartQty(cartItem.id, cartItem.qty + 1)
+                                                }
+                                                .padding(horizontal = 6.dp)
+                                        )
+                                    }
+                                } else {
+                                    OutlinedButton(
+                                        onClick = {
+                                            viewModel.addToCart(partner.id, service.id)
+                                        },
+                                        modifier = Modifier
+                                            .width(72.dp)
+                                            .height(28.dp),
+                                        contentPadding = PaddingValues(0.dp),
+                                        border = BorderStroke(1.dp, NikhatRose),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose)
+                                    ) {
+                                        Text("ADD", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Checkout Cart float footer bar
+        val hasCartItems = cart != null && cart!!.items.isNotEmpty() &&
+                (cart!!.partnerId.toString() == partner.id || cart!!.partnerId == partner.id.toIntOrNull())
+                
+        if (hasCartItems) {
+            Box(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(MaterialTheme.colorScheme.background)
+                    .padding(horizontal = 16.dp, vertical = 10.dp)
+            ) {
+                Button(
+                    onClick = {
+                        viewModel.currentScreen = Screen.Cart
+                    },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(48.dp),
+                    colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
+                    shape = RoundedCornerShape(8.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(horizontal = 8.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(horizontalAlignment = Alignment.Start) {
+                            Text(
+                                text = "🛒 ${cart!!.count} items in basket",
+                                fontSize = 11.sp,
+                                color = Color.White.copy(alpha = 0.8f)
+                            )
+                            Text(
+                                text = "Subtotal: Rs ${cart!!.subtotalPaise / 100}",
+                                fontSize = 13.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                        }
+                        Text(
+                            text = "View Cart & Book ➔",
+                            fontSize = 13.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = Color.White
+                        )
+                    }
+                }
+            }
+        }
     }
 }
