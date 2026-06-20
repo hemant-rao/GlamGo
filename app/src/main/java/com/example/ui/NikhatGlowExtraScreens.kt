@@ -124,7 +124,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                 modifier = Modifier.weight(1f),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(items, key = { it.id }) { item ->
+                items(items) { item ->
                     Card(
                         modifier = Modifier.fillMaxWidth(),
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -135,7 +135,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                         ) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(item.name ?: "Service", fontWeight = FontWeight.Bold)
-                                Text("Rs ${"%.2f".format(item.unitPricePaise / 100.0)} each", fontSize = 12.sp, color = Color.Gray)
+                                Text("Rs ${item.unitPricePaise / 100} each", fontSize = 12.sp, color = Color.Gray)
                             }
                             IconButton(onClick = {
                                 if (item.qty <= 1) viewModel.removeCartItem(item.id)
@@ -145,7 +145,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                             IconButton(onClick = { viewModel.updateCartQty(item.id, item.qty + 1) }) {
                                 Icon(Icons.Default.Add, contentDescription = "More")
                             }
-                            Text("Rs ${"%.2f".format(item.lineTotalPaise / 100.0)}", fontWeight = FontWeight.Bold, color = NikhatRose)
+                            Text("Rs ${item.lineTotalPaise / 100}", fontWeight = FontWeight.Bold, color = NikhatRose)
                             IconButton(onClick = { viewModel.removeCartItem(item.id) }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color.Gray)
                             }
@@ -271,7 +271,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Estimated subtotal", fontWeight = FontWeight.Bold)
-                        Text("Rs ${"%.2f".format((cart?.subtotalPaise ?: 0L) / 100.0)}", fontWeight = FontWeight.Bold, color = NikhatRose)
+                        Text("Rs ${(cart?.subtotalPaise ?: 0L) / 100}", fontWeight = FontWeight.Bold, color = NikhatRose)
                     }
                     Text(
                         "Estimate only - you pay the professional directly after the service.",
@@ -279,9 +279,6 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                     )
                     if (selectedSlotId == null) {
                         Text("Select a time slot to send your request.", fontSize = 11.sp, color = NikhatRose)
-                    }
-                    if (selectedAddressId == null) {
-                        Text("Add and select a delivery address to send your request.", fontSize = 11.sp, color = NikhatRose)
                     }
                     checkoutError?.let {
                         Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
@@ -295,7 +292,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                                 checkoutError = err
                             }
                         },
-                        enabled = !placing && selectedSlotId != null && selectedAddressId != null,
+                        enabled = !placing && selectedSlotId != null,
                         modifier = Modifier.fillMaxWidth().height(50.dp).testTag("send_booking_request_btn"),
                         colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                     ) {
@@ -408,7 +405,7 @@ fun MyBookingsScreen(viewModel: NikhatGlowViewModel) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                items(filteredBookings, key = { it.id }) { booking ->
+                items(filteredBookings) { booking ->
                     Card(
                         modifier = Modifier
                             .fillMaxWidth()
@@ -431,7 +428,7 @@ fun MyBookingsScreen(viewModel: NikhatGlowViewModel) {
                                     color = Color.White
                                 )
                                 Text(
-                                    text = "₹${"%.2f".format(booking.totalPaise / 100.0)}",
+                                    text = "₹${booking.totalPaise / 100}",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp,
                                     color = NikhatRose
@@ -1023,8 +1020,8 @@ fun ComplaintDetailScreen(viewModel: NikhatGlowViewModel, complaintId: String) {
             Card(colors = CardDefaults.cardColors(containerColor = NikhatRose.copy(alpha = 0.15f))) {
                 Text(status, color = NikhatRose, fontWeight = FontWeight.Bold, fontSize = 11.sp, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
             }
-            detail?.message?.takeIf { it.isNotBlank() }?.let {
-                Text(it, fontSize = 13.sp, color = Color.Gray)
+            if (!detail?.message.isNullOrBlank()) {
+                Text(detail!!.message!!, fontSize = 13.sp, color = Color.Gray)
             }
         }
         Divider()
@@ -1040,7 +1037,7 @@ fun ComplaintDetailScreen(viewModel: NikhatGlowViewModel, complaintId: String) {
                     )
                 }
             }
-            items(messages, key = { it.id }) { msg ->
+            items(messages) { msg ->
                 val mine = msg.senderType == "customer" || msg.senderType == "partner"
                 Column(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 6.dp),
@@ -1191,14 +1188,14 @@ fun NotificationsScreen(viewModel: NikhatGlowViewModel) {
                                     fontWeight = if (unread) FontWeight.Bold else FontWeight.SemiBold,
                                     color = Color.White
                                 )
-                                n.body?.takeIf { it.isNotBlank() }?.let { body ->
+                                if (!n.body.isNullOrBlank()) {
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text(body, fontSize = 13.sp, color = Color.White.copy(alpha = 0.82f), lineHeight = 18.sp)
+                                    Text(n.body!!, fontSize = 13.sp, color = Color.White.copy(alpha = 0.82f), lineHeight = 18.sp)
                                 }
-                                n.createdAt?.takeIf { it.isNotBlank() }?.let { createdAt ->
+                                if (!n.createdAt.isNullOrBlank()) {
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
-                                        notificationTimeShort(createdAt),
+                                        notificationTimeShort(n.createdAt!!),
                                         fontSize = 11.sp,
                                         color = Color.White.copy(alpha = 0.55f)
                                     )

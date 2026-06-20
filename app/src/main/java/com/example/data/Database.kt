@@ -4,7 +4,6 @@ import android.content.Context
 import androidx.room.Database
 import androidx.room.Room
 import androidx.room.RoomDatabase
-import androidx.room.migration.Migration
 import androidx.sqlite.db.SupportSQLiteDatabase
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -38,16 +37,6 @@ abstract class AppDatabase : RoomDatabase() {
         @Volatile
         private var INSTANCE: AppDatabase? = null
 
-        // §707 — UserEntity gained `profileId: Int` (non-null, default 0). Migrate
-        // v5→v6 by adding the column WITHOUT dropping any tables, so existing
-        // bookings/addresses/etc. survive the upgrade (a destructive fallback
-        // would silently wipe all local data).
-        private val MIGRATION_5_6 = object : Migration(5, 6) {
-            override fun migrate(db: SupportSQLiteDatabase) {
-                db.execSQL("ALTER TABLE users ADD COLUMN profileId INTEGER NOT NULL DEFAULT 0")
-            }
-        }
-
         fun getDatabase(context: Context): AppDatabase {
             return INSTANCE ?: synchronized(this) {
                 val instance = Room.databaseBuilder(
@@ -55,12 +44,6 @@ abstract class AppDatabase : RoomDatabase() {
                     AppDatabase::class.java,
                     "nikhatglow_database"
                 )
-                    .addMigrations(MIGRATION_5_6)
-                    // Last-resort net: this Room DB is a pure server-refreshed CACHE
-                    // (see NikhatGlowRepository) — no source-of-truth data lives only
-                    // here, so re-creating it merely forces a re-sync. Keep this so an
-                    // UNCOVERED version gap (dev schema churn) rebuilds the DB instead
-                    // of crashing the app at launch with "missing migration".
                     .fallbackToDestructiveMigration()
                     .addCallback(object : Callback() {
                         override fun onCreate(db: SupportSQLiteDatabase) {

@@ -123,7 +123,7 @@ fun FavouritesScreen(viewModel: NikhatGlowViewModel) {
             modifier = Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(favPartners, key = { it.id }) { partner ->
+            items(favPartners) { partner ->
                 Card(
                     modifier = Modifier.fillMaxWidth(),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -194,7 +194,7 @@ fun PartnerReviewsScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
             modifier = Modifier.fillMaxSize().padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(10.dp)
         ) {
-            items(reviews, key = { it.id }) { r ->
+            items(reviews) { r ->
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -210,7 +210,7 @@ fun PartnerReviewsScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                             Text((r.createdAt ?: "").take(10), fontSize = 11.sp, color = Color.Gray)
                         }
                         if (!r.comment.isNullOrBlank()) {
-                            Text(r.comment ?: "", fontSize = 13.sp)
+                            Text(r.comment!!, fontSize = 13.sp)
                         }
                     }
                 }
@@ -713,7 +713,7 @@ fun PartnerPortfolioScreen(viewModel: NikhatGlowViewModel) {
                 modifier = Modifier.fillMaxSize().padding(16.dp),
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
-                items(items, key = { it.id }) { item ->
+                items(items) { item ->
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                         Column {
                             if (!item.imageUrl.isNullOrBlank()) {
@@ -919,7 +919,7 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                         },
                         enabled = myServices.isNotEmpty(),
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.surfaceVariant),
-                        modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp),
+                        modifier = Modifier.fillMaxWidth().height(42.dp),
                         shape = RoundedCornerShape(8.dp)
                     ) {
                         Icon(Icons.Default.Add, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(16.dp))
@@ -1101,7 +1101,7 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                     }
                 }
             } else {
-                items(filteredServices, key = { it.id }) { service ->
+                items(filteredServices) { service ->
                     // Resolve partner custom rate
                     val resolvedPrice = if (partner.fromPricePaise > 0) partner.fromPricePaise else service.pricePaise
                     
@@ -1236,11 +1236,10 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
         }
 
         // Checkout Cart float footer bar
-        val cartSnapshot = cart
-        val hasCartItems = cartSnapshot != null && cartSnapshot.items.isNotEmpty() &&
-                (cartSnapshot.partnerId?.toString() == partner.id || cartSnapshot.partnerId == partner.id.toIntOrNull())
-
-        if (hasCartItems && cartSnapshot != null) {
+        val hasCartItems = cart != null && cart!!.items.isNotEmpty() &&
+                (cart!!.partnerId.toString() == partner.id || cart!!.partnerId == partner.id.toIntOrNull())
+                
+        if (hasCartItems) {
             Box(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -1264,12 +1263,12 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                     ) {
                         Column(horizontalAlignment = Alignment.Start) {
                             Text(
-                                text = "🛒 ${cartSnapshot.count} items in basket",
+                                text = "🛒 ${cart!!.count} items in basket",
                                 fontSize = 11.sp,
                                 color = Color.White.copy(alpha = 0.8f)
                             )
                             Text(
-                                text = "Subtotal: Rs ${cartSnapshot.subtotalPaise / 100}",
+                                text = "Subtotal: Rs ${cart!!.subtotalPaise / 100}",
                                 fontSize = 13.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = Color.White

@@ -165,8 +165,7 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                             if (!viewModel.otpSent) viewModel.sendOtp(phone, role)
                             else viewModel.verifyOtp(phone, code)
                         },
-                        enabled = !viewModel.authBusy &&
-                            (if (!viewModel.otpSent) phone.length == 10 else code.length == 6),
+                        enabled = !viewModel.authBusy,
                         shape = RoundedCornerShape(14.dp),
                         colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                         modifier = Modifier.fillMaxWidth().height(52.dp),

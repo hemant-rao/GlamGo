@@ -1,8 +1,6 @@
 package com.example.data.remote
 
 import android.content.Context
-import android.os.Handler
-import android.os.Looper
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -33,41 +31,18 @@ class LiveTrackingSocket(
         .build()
     @Volatile private var socket: WebSocket? = null
 
-    // §707 — reconnect with exponential backoff. `closed` guards against
-    // reconnecting after a deliberate close(); `attempt` caps the delay.
-    private val mainHandler = Handler(Looper.getMainLooper())
-    @Volatile private var closed = false
-    @Volatile private var attempt = 0
-    private val reconnectRunnable = Runnable { reconnect() }
-
-    /** Build the WS URL WITHOUT the token (token now travels in an Authorization header). */
-    private fun wsUrl(): String {
+    private fun wsUrl(): String? {
+        val token = tokenStore.accessToken() ?: return null
         val root = NetworkConfig.baseUrl.substringBefore("/api/")  // https://host
         val ws = root.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
-        return "$ws/ws/nikhatglow/chat?booking_id=$bookingId"
+        return "$ws/ws/nikhatglow/chat?token=$token&booking_id=$bookingId"
     }
 
     fun connect() {
-        closed = false
-        attempt = 0
-        reconnect()
-    }
-
-    /** Open a fresh socket. Reused by [connect] and by the failure/close handlers. */
-    private fun reconnect() {
-        if (closed || socket != null) return
-        // Token in the Authorization header — never in the URL query (avoids
-        // leaking the JWT into proxy/access/device logs).
-        val token = tokenStore.accessToken() ?: return
-        val req = Request.Builder()
-            .url(wsUrl())
-            .header("Authorization", "Bearer $token")
-            .build()
+        if (socket != null) return
+        val url = wsUrl() ?: return
+        val req = Request.Builder().url(url).build()
         socket = client.newWebSocket(req, object : WebSocketListener() {
-            override fun onOpen(webSocket: WebSocket, response: Response) {
-                attempt = 0  // healthy connection → reset backoff
-            }
-
             override fun onMessage(webSocket: WebSocket, text: String) {
                 try {
                     val obj = JSONObject(text)
@@ -80,25 +55,7 @@ class LiveTrackingSocket(
                 } catch (_: Exception) {
                 }
             }
-
-            override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                scheduleReconnect()
-            }
-
-            override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                scheduleReconnect()
-            }
         })
-    }
-
-    /** Drop the dead socket and queue a reconnect with capped exponential backoff. */
-    private fun scheduleReconnect() {
-        socket = null
-        if (closed) return
-        val delay = (1000L shl attempt.coerceAtMost(5)).coerceAtMost(30_000L)  // 1s,2s,4s,8s,16s,30s
-        attempt++
-        mainHandler.removeCallbacks(reconnectRunnable)
-        mainHandler.postDelayed(reconnectRunnable, delay)
     }
 
     /** Push our own position so the counterparty sees us move (server stamps role). */
@@ -111,8 +68,6 @@ class LiveTrackingSocket(
     }
 
     fun close() {
-        closed = true
-        mainHandler.removeCallbacks(reconnectRunnable)
         try {
             socket?.close(1000, null)
         } catch (_: Exception) {

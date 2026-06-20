@@ -120,14 +120,11 @@ object Mappers {
     fun booking(d: BookingDto): BookingEntity = BookingEntity(
         id = d.id.toString(),
         status = d.status,
-        // §708 — never coerce a missing id to "0": that produces a booking that
-        // looks like the real booking #0 and propagates silently. Use a "-1"
-        // sentinel so downstream code/UI can detect and reject the invalid value.
-        serviceId = (d.serviceId ?: -1).toString(),
+        serviceId = (d.serviceId ?: 0).toString(),
         serviceName = d.serviceName ?: "Service",
         serviceImageUrl = d.serviceImageUrl ?: "",
         categoryName = d.categoryName ?: "",
-        partnerId = (d.partnerId ?: -1).toString(),
+        partnerId = (d.partnerId ?: 0).toString(),
         partnerName = d.partnerName ?: "Assigning…",
         partnerAvatar = d.partnerAvatar ?: "",
         dateTimeSlot = prettySlot(d.slotStart),
@@ -158,17 +155,9 @@ object Mappers {
         reason = d.reason ?: "",
     )
 
-    /**
-     * §708 — `threadId` lets the caller stamp the owning thread directly in the
-     * mapper, so pre-booking messages (synthetic "pre_<pid>_<sid>" thread) no
-     * longer have to be patched with `.copy(bookingId = …)` at the call site.
-     * When `threadId` is null we fall back to the DTO's bookingId; a missing
-     * bookingId becomes "-1" (an impossible id) instead of "0", so pre-booking
-     * and real booking-0 messages can never collide in the chat cache.
-     */
-    fun chat(d: ChatMessageDto, threadId: String? = null): ChatMessageEntity = ChatMessageEntity(
+    fun chat(d: ChatMessageDto): ChatMessageEntity = ChatMessageEntity(
         id = d.id.toLong(),
-        bookingId = threadId ?: (d.bookingId?.toString() ?: "-1"),
+        bookingId = (d.bookingId ?: 0).toString(),
         senderRole = d.senderType,
         text = d.text ?: "",
         kind = d.kind,
