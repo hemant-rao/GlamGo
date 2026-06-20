@@ -186,6 +186,13 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    /** §709 — true while ANY tracked action is in flight. Drives the global thin
+     *  top loading bar in the app shell ("something is loading"). Reading these
+     *  State-backed flags here makes the shell recompose as they flip. */
+    val anyBusy: Boolean
+        get() = authBusy || subscriptionBusy || reassignmentBusy || portfolioBusy ||
+                availabilityBusy || complaintReplyBusy
+
     // partner ₹99/month subscription
     val subscription = repository.subscriptionFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
@@ -1434,9 +1441,19 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     // ── Live booking detail refresh ─────────────────────────────────────────────
+    /** §709 — true while the FIRST load of a booking-detail screen is in flight, so
+     *  a deep-link (e.g. notification tap) shows a loader instead of flashing
+     *  "Booking Not Found" before the fetch lands. */
+    var bookingDetailLoading by mutableStateOf(false); private set
+
     /** Pull fresh status for the open booking-detail screen. */
     fun loadBookingDetail(id: String) {
-        viewModelScope.launch { runCatching { repository.refreshBooking(id) } }
+        val haveIt = repository.bookingsFlow.value.any { it.id == id }
+        if (!haveIt) bookingDetailLoading = true
+        viewModelScope.launch {
+            runCatching { repository.refreshBooking(id) }
+            bookingDetailLoading = false
+        }
     }
 
     // ── Partner: delete a listed service ────────────────────────────────────────

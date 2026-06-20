@@ -190,6 +190,13 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
                 }
                 }
             }
+
+            // §709 — global thin loading bar pinned to the top of the content area:
+            // shows whenever any tracked action is in flight ("the app is working").
+            NikhatTopLoadingBar(
+                visible = viewModel.anyBusy,
+                modifier = Modifier.align(Alignment.TopCenter)
+            )
         }
     }
 }
@@ -3954,10 +3961,16 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
     var authenticityRating by remember { mutableStateOf(5) }
 
     if (booking == null) {
-        Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
-            Text("Booking Not Found")
-            Button(onClick = { viewModel.currentScreen = Screen.CustomerHome }) {
-                Text("Go Home", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+        // §709 — a deep-link (notification tap) may land here before the booking
+        // has been fetched: show a themed loader, not a "Not Found" flash.
+        if (viewModel.bookingDetailLoading) {
+            NikhatFullScreenLoader(message = "Loading your booking…")
+        } else {
+            Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
+                Text("Booking Not Found")
+                Button(onClick = { viewModel.currentScreen = Screen.CustomerHome }) {
+                    Text("Go Home", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                }
             }
         }
         return
