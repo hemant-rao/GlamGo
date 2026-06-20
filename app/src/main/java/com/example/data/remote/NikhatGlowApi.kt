@@ -84,6 +84,8 @@ interface NikhatGlowApi {
     @GET("customer/partners")
     suspend fun partners(
         @Query("service_id") serviceId: Int? = null,
+        // §707 — search by partner ID (all digits) or name/code.
+        @Query("q") q: String? = null,
         @Query("lat") lat: Double? = null,
         @Query("lon") lon: Double? = null,
         @Query("sort") sort: String? = null,

@@ -25,7 +25,10 @@ data class UserEntity(
     val phone: String = "",
     val gender: String = "", // "", "male", "female", "any"
     val minimumOrderPaise: Long = 0,
-    val travelRadiusKm: Double = 0.0
+    val travelRadiusKm: Double = 0.0,
+    // §707 — the backend profile ID (customer or partner). For a partner this is
+    // also their public bookable ID a customer can search to find + book them.
+    val profileId: Int = 0
 )
 
 @Entity(tableName = "addresses")

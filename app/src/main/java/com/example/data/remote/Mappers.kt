@@ -96,6 +96,7 @@ object Mappers {
         gender = d.gender ?: "",
         minimumOrderPaise = d.minimumOrderPaise ?: 0,
         travelRadiusKm = d.travelRadiusKm ?: 0.0,
+        profileId = d.id,
     )
 
     fun address(d: AddressDto): AddressEntity = AddressEntity(

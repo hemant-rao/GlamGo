@@ -402,6 +402,9 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
      *  null on failure so the screen falls back to the local in-memory filter. */
     suspend fun searchServices(q: String): List<Service>? = repository.searchServices(q)
 
+    /** §707 — search professionals by ID or name (results page "Experts" section). */
+    suspend fun searchPartners(q: String): List<Partner> = repository.searchPartners(q)
+
     /** Address search-as-you-type via our geo proxy (free OpenStreetMap). */
     suspend fun searchPlaces(q: String) =
         if (q.isBlank()) emptyList() else repository.geoAutocomplete(q, _deviceLocation.value?.first, _deviceLocation.value?.second)
@@ -908,7 +911,12 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             runCatching {
                 val chosenAddrId = addressId
                     ?: (addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull())?.id
-                repository.cartQuote(couponCode, chosenAddrId, selectedSlotId)
+                val total = repository.cartQuote(couponCode, chosenAddrId, selectedSlotId)
+                // §707 — enforce the ₹599 minimum on the cart total before booking.
+                val min = repository.minBookingPaise()
+                require(total >= min) {
+                    "Minimum booking amount is ₹${min / 100}. Please add more services to reach ₹${min / 100}."
+                }
                 repository.createBookingFromLastQuote(
                     customerNotes = bookingNotes,
                     genderPreference = bookingGenderPref,
@@ -1085,7 +1093,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
                 // quote was built at PartnerSelect BEFORE any slot existed (so its
                 // slot_id was null); without this the booking would be stored
                 // time-less and "Change partner" would never unlock.
-                repository.createQuote(
+                val quote = repository.createQuote(
                     partnerId = partner.id,
                     serviceId = service.id,
                     slotId = selectedSlotId,
@@ -1093,6 +1101,13 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
                     couponCode = couponCode,
                     useWallet = false,
                 ).also { quoteBreakdown = it }
+                // §707 — founder rule: no booking below ₹599. Pre-check the
+                // authoritative quote total so the customer is told here instead of
+                // after submitting (the server enforces the same floor as backstop).
+                val min = repository.minBookingPaise()
+                require(quote.totalPaise >= min) {
+                    "Minimum booking amount is ₹${min / 100}. Please add more services to reach ₹${min / 100}."
+                }
                 repository.createBookingFromLastQuote(
                     customerNotes = bookingNotes,
                     genderPreference = bookingGenderPref,
@@ -1102,7 +1117,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
                 bookingNotes = ""; bookingGenderPref = "any"
                 notify("Booking request sent")
                 currentScreen = Screen.BookingDetail(booking.id)
-            }
+            }.onFailure { friendly(it) }
         }
     }
 
@@ -1114,7 +1129,12 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             if (partner == null) return@launch
             val addr = addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull()
             runCatching {
-                repository.createQuote(partner.id, service.id, null, addr?.id, null, false)
+                val quote = repository.createQuote(partner.id, service.id, null, addr?.id, null, false)
+                // §707 — enforce the ₹599 minimum before creating the booking.
+                val min = repository.minBookingPaise()
+                require(quote.totalPaise >= min) {
+                    "Minimum booking amount is ₹${min / 100}. Please add more services to reach ₹${min / 100}."
+                }
                 repository.createBookingFromLastQuote(
                     customerNotes = bookingNotes,
                     genderPreference = bookingGenderPref,
@@ -1125,7 +1145,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
                 notify("Booking request sent")
                 currentScreen = Screen.BookingDetail(booking.id)
                 onSuccess(booking.id)
-            }
+            }.onFailure { friendly(it) }
         }
     }
 

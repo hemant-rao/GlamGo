@@ -831,6 +831,8 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
 fun SearchResultsScreen(viewModel: NikhatGlowViewModel, initialQuery: String) {
     var query by remember { mutableStateOf(initialQuery) }
     var results by remember { mutableStateOf<List<Service>>(emptyList()) }
+    // §707 — partner (expert) matches, incl. lookup by partner ID.
+    var partnerResults by remember { mutableStateOf<List<Partner>>(emptyList()) }
     var isLoading by remember { mutableStateOf(false) }
     val focusRequester = remember { FocusRequester() }
 
@@ -848,6 +850,7 @@ fun SearchResultsScreen(viewModel: NikhatGlowViewModel, initialQuery: String) {
     LaunchedEffect(q) {
         if (q.length < 2) {
             results = emptyList()
+            partnerResults = emptyList()
             isLoading = false
             return@LaunchedEffect
         }
@@ -858,6 +861,9 @@ fun SearchResultsScreen(viewModel: NikhatGlowViewModel, initialQuery: String) {
             service.name.contains(q, ignoreCase = true) ||
                 service.description.contains(q, ignoreCase = true)
         }
+        // §707 — also look up professionals by ID or name so a customer handed a
+        // partner ID can find + book that exact expert.
+        partnerResults = viewModel.searchPartners(q)
         isLoading = false
     }
 
@@ -920,7 +926,7 @@ fun SearchResultsScreen(viewModel: NikhatGlowViewModel, initialQuery: String) {
                     Text("Search for facials, makeup, mehndi…", color = Color.Gray, textAlign = TextAlign.Center, maxLines = 2)
                 }
             }
-            results.isEmpty() -> {
+            results.isEmpty() && partnerResults.isEmpty() -> {
                 Column(
                     modifier = Modifier.fillMaxSize().padding(32.dp).testTag("search_results_empty"),
                     horizontalAlignment = Alignment.CenterHorizontally,
@@ -930,7 +936,7 @@ fun SearchResultsScreen(viewModel: NikhatGlowViewModel, initialQuery: String) {
                     Spacer(modifier = Modifier.height(12.dp))
                     Text("No results for \"$q\"", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Spacer(modifier = Modifier.height(4.dp))
-                    Text("Try a different service or expert name.", color = Color.Gray, fontSize = 13.sp, textAlign = TextAlign.Center, maxLines = 2)
+                    Text("Try a different service, expert name or expert ID.", color = Color.Gray, fontSize = 13.sp, textAlign = TextAlign.Center, maxLines = 2)
                 }
             }
             else -> {
@@ -939,6 +945,71 @@ fun SearchResultsScreen(viewModel: NikhatGlowViewModel, initialQuery: String) {
                     contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
                     verticalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
+                    // §707 — "Experts" section first (so an ID lookup lands on top),
+                    // each row opens the partner's store to book.
+                    if (partnerResults.isNotEmpty()) {
+                        item {
+                            Text(
+                                "Experts",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.Gray,
+                                modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
+                            )
+                        }
+                        items(partnerResults) { partner ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { viewModel.currentScreen = Screen.PartnerStore(partner) }
+                                    .testTag("search_partner_${partner.id}"),
+                                shape = RoundedCornerShape(16.dp),
+                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    AsyncImage(
+                                        model = partner.avatarUrl,
+                                        contentDescription = partner.name,
+                                        contentScale = ContentScale.Crop,
+                                        modifier = Modifier.size(56.dp).clip(CircleShape)
+                                    )
+                                    Spacer(modifier = Modifier.width(12.dp))
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = partner.name,
+                                            style = MaterialTheme.typography.titleMedium,
+                                            maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis
+                                        )
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text("ID: ${partner.id}", fontSize = 11.sp, color = Color.Gray, maxLines = 1)
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Star, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(12.dp))
+                                            Spacer(modifier = Modifier.width(2.dp))
+                                            Text("${partner.rating}", fontSize = 11.sp, color = Color.Gray, maxLines = 1)
+                                        }
+                                    }
+                                    Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
+                                }
+                            }
+                        }
+                        if (results.isNotEmpty()) {
+                            item {
+                                Text(
+                                    "Services",
+                                    style = MaterialTheme.typography.titleSmall,
+                                    fontWeight = FontWeight.Bold,
+                                    color = Color.Gray,
+                                    modifier = Modifier.padding(top = 8.dp, bottom = 2.dp)
+                                )
+                            }
+                        }
+                    }
                     items(results) { service ->
                         Card(
                             modifier = Modifier
@@ -6772,6 +6843,14 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                             fontSize = 12.sp,
                             color = Color.White.copy(alpha = 0.7f)
                         )
+                        Spacer(modifier = Modifier.height(6.dp))
+                        // §707 — explicit role badge (a customer account, not a partner).
+                        Surface(color = NikhatRose.copy(alpha = 0.25f), shape = RoundedCornerShape(12.dp)) {
+                            Text(
+                                "CUSTOMER", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                            )
+                        }
                     }
                 }
             }

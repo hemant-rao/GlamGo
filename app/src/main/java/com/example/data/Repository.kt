@@ -272,6 +272,12 @@ class NikhatGlowRepository(context: Context) {
     suspend fun searchServices(q: String): List<Service>? =
         runCatching { api.search(q).services.map { Mappers.service(it) } }.getOrNull()
 
+    /** §707 — search professionals by their public ID (all digits) or name. Lets a
+     *  customer who's been handed a partner's ID look them up directly and book.
+     *  Only bookable (subscribed + KYC-approved) partners are ever returned. */
+    suspend fun searchPartners(q: String): List<Partner> =
+        runCatching { api.partners(q = q).items.map { Mappers.partner(it) } }.getOrDefault(emptyList())
+
     /** Discovery for a single service — used by the partner-select screen so the
      *  list reflects who actually offers that service right now (blank until a
      *  subscribed partner adds it). §687 — accepts the device fix for near-me. */
@@ -432,7 +438,9 @@ class NikhatGlowRepository(context: Context) {
 
     /** Build a single multi-line quote from the whole cart; stores quote_id so
      *  [createBookingFromLastQuote] can place the booking request. */
-    suspend fun cartQuote(couponCode: String?, addressId: Long?, slotId: String? = null) {
+    /** Returns the quote's total (paise) so the caller can pre-check the ₹599
+     *  minimum before placing the booking (§707). */
+    suspend fun cartQuote(couponCode: String?, addressId: Long?, slotId: String? = null): Long {
         val resp = api.cartQuote(
             CartQuoteReq(
                 slotId = slotId?.ifBlank { null },
@@ -441,6 +449,7 @@ class NikhatGlowRepository(context: Context) {
             )
         )
         lastQuoteId = resp.quoteId
+        return resp.totalPaise
     }
 
     /** §702 — real availability slots for the booking-time picker. Null-safe. */
@@ -642,6 +651,13 @@ class NikhatGlowRepository(context: Context) {
 
     fun womenHelpline(): String =
         _appConfig.value?.params?.get("women_helpline")?.toString() ?: "1091"
+
+    /** §707 — admin-configurable minimum booking value in paise (founder rule:
+     *  no booking below ₹599). Moshi decodes JSON numbers to Double, so coerce via
+     *  Number. Falls back to ₹599 until /config loads. The server is the final
+     *  authority; this drives the review-screen pre-check + the floor message. */
+    fun minBookingPaise(): Long =
+        (_appConfig.value?.params?.get("min_booking_paise") as? Number)?.toLong() ?: 59900L
 
     // ── §704 post-booking talk-request + partner inbox ──────────────────────────
     suspend fun getTalkRequest(bookingId: String) = api.getTalkRequest(bookingId.toInt())

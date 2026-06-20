@@ -691,6 +691,29 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                     "Rating ${activeUser?.averageRating ?: 0f}  ·  ${activeUser?.completedJobs ?: 0} jobs done",
                     color = NikhatRose, fontSize = 13.sp
                 )
+                Spacer(modifier = Modifier.height(8.dp))
+                // §707 — make the role explicit + show this partner's bookable ID
+                // (a client can search this exact ID to find and book them).
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Surface(color = NikhatRose.copy(alpha = 0.25f), shape = RoundedCornerShape(12.dp)) {
+                        Text(
+                            "PARTNER", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Bold,
+                            modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                        )
+                    }
+                    val pid = activeUser?.profileId ?: 0
+                    if (pid > 0) {
+                        Surface(color = Color.White.copy(alpha = 0.14f), shape = RoundedCornerShape(12.dp)) {
+                            Text(
+                                "Your ID: $pid", color = Color.White, fontSize = 11.sp, fontWeight = FontWeight.Medium,
+                                modifier = Modifier.padding(horizontal = 10.dp, vertical = 3.dp)
+                            )
+                        }
+                    }
+                }
             }
         }
 

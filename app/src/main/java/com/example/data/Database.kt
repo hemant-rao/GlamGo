@@ -20,7 +20,7 @@ import kotlinx.coroutines.launch
         ComplaintEntity::class,
         FavoritePartnerEntity::class
     ],
-    version = 5, // §698 — BookingEntity gained addressLat/addressLon (live-tracking destination)
+    version = 6, // §707 — UserEntity gained profileId (partner's bookable/search ID)
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
