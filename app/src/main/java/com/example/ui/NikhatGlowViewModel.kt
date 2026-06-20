@@ -1145,11 +1145,11 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun submitKyc(aadhaar: String, pan: String) {
+    fun submitKyc(aadhaar: String, pan: String, legalName: String? = null) {
         viewModelScope.launch {
             runCatching {
-                // Backend KYC stores only aadhaar_no + pan_no; no real selfie capture here.
-                repository.submitKyc(aadhaar, pan)
+                // §704 — legalName is the name on her ID; admin locks display name to it.
+                repository.submitKyc(aadhaar, pan, legalName)
             }.onSuccess { notify("KYC submitted — pending admin approval") }
                 .onFailure { friendly(it) }
         }

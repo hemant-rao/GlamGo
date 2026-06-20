@@ -3757,6 +3757,27 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                         }
                     }
 
+                    // §704 — after the booking ends, chat is LOCKED. Either party can
+                    // request to talk again (forgot something / need help); the other
+                    // person accepts or declines (response arrives in notifications).
+                    if (booking.status in setOf("completed", "cancelled", "refunded")) {
+                        var talkSent by remember(booking.id) { mutableStateOf(false) }
+                        Spacer(modifier = Modifier.height(16.dp))
+                        OutlinedButton(
+                            onClick = { viewModel.requestToTalk(booking.id, null) { talkSent = true } },
+                            enabled = !talkSent,
+                            modifier = Modifier.fillMaxWidth().testTag("request_talk_btn"),
+                            border = BorderStroke(1.dp, NikhatRose),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
+                        ) {
+                            Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text(if (talkSent) "Request sent" else "Request to talk")
+                        }
+                        Text("Chat is closed after a booking. Send a request and the other person can accept.",
+                            fontSize = 11.sp, color = Color.Gray, modifier = Modifier.padding(top = 4.dp))
+                    }
+
                     // §691 — customer reassignment. While reassigning, show a
                     // "finding…" banner; otherwise (accepted/assigned, >3h before the
                     // slot) offer a "Change Partner" action that re-broadcasts the job.
@@ -5706,6 +5727,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
 fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
     var aadhaar by remember { mutableStateOf("") }
     var pan by remember { mutableStateOf("") }
+    var legalName by remember { mutableStateOf("") }   // §704 — name on the ID
     var success by remember { mutableStateOf(false) }
 
     // §704 — surface the admin rejection reason on the form itself.
@@ -5747,6 +5769,17 @@ fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
                 }
             }
 
+            // §704 — the name EXACTLY as printed on the ID. The admin verifies it and
+            // your display name is locked to it, so customers can trust who's at the door.
+            OutlinedTextField(
+                value = legalName,
+                onValueChange = { legalName = it.take(120) },
+                placeholder = { Text("Full name as on your ID") },
+                singleLine = true,
+                supportingText = { Text("This becomes your verified name once approved.", color = Color.Gray, fontSize = 11.sp) },
+                modifier = Modifier.fillMaxWidth().testTag("legal_name_field")
+            )
+
             OutlinedTextField(
                 value = aadhaar,
                 onValueChange = { aadhaar = it.filter { c -> c.isDigit() }.take(12) },
@@ -5769,10 +5802,10 @@ fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
 
             Button(
                 onClick = {
-                    viewModel.submitKyc(aadhaarDigits, panUpper)
+                    viewModel.submitKyc(aadhaarDigits, panUpper, legalName.trim())
                     success = true
                 },
-                enabled = aadhaarValid && panValid,
+                enabled = aadhaarValid && panValid && legalName.isNotBlank(),
                 modifier = Modifier.fillMaxWidth().testTag("kyc_submit_action_btn"),
                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
             ) {

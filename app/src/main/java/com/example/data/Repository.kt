@@ -852,9 +852,9 @@ class NikhatGlowRepository(context: Context) {
     }
 
     // ── Partner actions ──────────────────────────────────────────────────────
-    suspend fun submitKyc(aadhaar: String, pan: String) {
-        // Backend KYC persists only aadhaar_no + pan_no; selfie is not captured.
-        api.submitKyc(KycReq(aadhaar, pan))
+    suspend fun submitKyc(aadhaar: String, pan: String, legalName: String? = null) {
+        // §704 — legalName = the name on her ID; the admin locks her display name to it.
+        api.submitKyc(KycReq(aadhaar, pan, legalName = legalName?.trim()?.ifBlank { null }))
         refreshProfile("partner")
     }
 
