@@ -58,6 +58,7 @@ import com.example.data.*
 import com.example.data.remote.CartItemDto
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlin.math.roundToInt
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
@@ -149,6 +150,9 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
                 },
                 label = "ScreenTransition"
             ) { screen ->
+                // §708 — pull-to-refresh for every hosted screen via one wrapper.
+                // The dispatcher re-fetches whatever `screen` shows (and the profile).
+                NikhatPullRefresh(onRefresh = { viewModel.refreshForScreen(screen) }) {
                 saveableStateHolder.SaveableStateProvider(screen.toString()) {
                 when (screen) {
                     is Screen.CustomerHome -> CustomerHomeScreen(viewModel)
@@ -182,6 +186,7 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
                     is Screen.PartnerOffers -> PartnerOffersScreen(viewModel)
                     is Screen.PreBookingChat -> PreBookingChatScreen(viewModel, screen.service, screen.partner)
                     is Screen.Notifications -> NotificationsScreen(viewModel)
+                }
                 }
                 }
             }
@@ -957,7 +962,7 @@ fun SearchResultsScreen(viewModel: NikhatGlowViewModel, initialQuery: String) {
                                 modifier = Modifier.padding(top = 4.dp, bottom = 2.dp)
                             )
                         }
-                        items(partnerResults) { partner ->
+                        items(partnerResults, key = { it.id }) { partner ->
                             Card(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1010,7 +1015,7 @@ fun SearchResultsScreen(viewModel: NikhatGlowViewModel, initialQuery: String) {
                             }
                         }
                     }
-                    items(results) { service ->
+                    items(results, key = { it.id }) { service ->
                         Card(
                             modifier = Modifier
                                 .fillMaxWidth()
@@ -1567,8 +1572,8 @@ fun PartnerComparisonModal(
 
                             // Dynamic list of combined services offered by selected partners
                             val comparisonServices = allServices.filter { s ->
-                                (partner1 != null && partner1!!.servicesOffered.contains(s.id)) ||
-                                (partner2 != null && partner2!!.servicesOffered.contains(s.id))
+                                (partner1?.servicesOffered?.contains(s.id) == true) ||
+                                (partner2?.servicesOffered?.contains(s.id) == true)
                             }
 
                             if (comparisonServices.isEmpty()) {
@@ -2524,7 +2529,7 @@ fun LocationPickerSheet(
                         color = MaterialTheme.colorScheme.primary,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(onClick = onDismiss, modifier = Modifier.size(28.dp)) {
+                    IconButton(onClick = onDismiss) {
                         Icon(Icons.Default.Close, contentDescription = "Close")
                     }
                 }
@@ -2666,7 +2671,7 @@ fun CategoryDetailScreen(viewModel: NikhatGlowViewModel, category: Category) {
                 }
             }
             
-            items(services) { service ->
+            items(services, key = { it.id }) { service ->
                 Card(
                     modifier = Modifier
                         .fillMaxWidth()
@@ -3032,7 +3037,7 @@ fun PartnerSelectScreen(viewModel: NikhatGlowViewModel, service: Service) {
                     }
                 }
             }
-            items(marketplaceOffers) { offer ->
+            items(marketplaceOffers, key = { it.first.id }) { offer ->
                 val (partner, resolvedPrice, resolvedProducts) = offer
                 Card(
                     modifier = Modifier
@@ -3238,11 +3243,13 @@ fun PartnerSelectScreen(viewModel: NikhatGlowViewModel, service: Service) {
                                     ) {
                                         Column(modifier = Modifier.padding(8.dp)) {
                                             Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Row {
-                                                    val intRate = rate.toInt()
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    val intRate = rate.roundToInt().coerceIn(0, 5)
                                                     repeat(intRate) {
                                                         Icon(Icons.Default.Star, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(12.dp))
                                                     }
+                                                    Spacer(modifier = Modifier.width(4.dp))
+                                                    Text("${rate}/5", fontSize = 9.sp, color = Color.Gray)
                                                 }
                                                 Spacer(modifier = Modifier.weight(1f))
                                                 Text("Client feedback", fontSize = 9.sp, color = Color.Gray)
@@ -3365,6 +3372,13 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
     // §694 — booking-time data capture for this flow.
     var bookingNotes by remember { mutableStateOf("") }
     var genderPref by remember { mutableStateOf("any") }
+    // Guard against duplicate submissions: confirmAndBook() navigates away on
+    // success (this composable is disposed) but stays put + emits a uiMessage on
+    // failure, so we re-enable the button whenever a message arrives.
+    var bookingBusy by remember { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        viewModel.uiMessages.collect { bookingBusy = false }
+    }
 
     // §687 — address search-as-you-type via the geo proxy (free OSM); only fires after
     // 3 characters, debounced 300ms (per the founder's "show after 3 letters").
@@ -3449,7 +3463,9 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        for (offset in 0..6) {
+                        // §707 — 1-day advance minimum (matches OpenBookingDialog):
+                        // offer the next 7 days starting tomorrow, never today.
+                        for (offset in 1..7) {
                             val d = today.plusDays(offset.toLong())
                             val iso = d.toString()
                             val isSel = iso == selectedDate
@@ -3638,20 +3654,35 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
-                    if (defaultAddress != null && viewModel.selectedSlotId != null) {
+                    if (!bookingBusy && defaultAddress != null && viewModel.selectedSlotId != null) {
+                        bookingBusy = true
                         viewModel.bookingNotes = bookingNotes
                         viewModel.bookingGenderPref = genderPref
                         viewModel.confirmAndBook(service, partner, defaultAddress)
                     }
                 },
-                enabled = defaultAddress != null && viewModel.selectedSlotId != null,
+                enabled = !bookingBusy && defaultAddress != null && viewModel.selectedSlotId != null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("pay_book_action_btn"),
                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                 shape = RoundedCornerShape(12.dp)
             ) {
-                Text("Confirm & Pay", fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                if (bookingBusy) {
+                    CircularProgressIndicator(
+                        modifier = Modifier.size(18.dp),
+                        strokeWidth = 2.dp,
+                        color = Color.White,
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                }
+                Text(
+                    if (bookingBusy) "Sending…" else "Confirm & Pay",
+                    fontWeight = FontWeight.Bold,
+                    color = Color.White,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                )
             }
             Spacer(modifier = Modifier.height(24.dp))
         }
@@ -3734,8 +3765,14 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                         singleLine = true
                     )
                     OutlinedTextField(
+                        value = cityInput,
+                        onValueChange = { cityInput = it },
+                        label = { Text("City") },
+                        singleLine = true
+                    )
+                    OutlinedTextField(
                         value = pincodeInput,
-                        onValueChange = { pincodeInput = it },
+                        onValueChange = { pincodeInput = it.filter { c -> c.isDigit() }.take(6) },
                         label = { Text("Pincode") },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
@@ -3747,7 +3784,7 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                         }
                         Button(
                             onClick = {
-                                if (line1Input.isNotBlank() && pincodeInput.isNotBlank()) {
+                                if (line1Input.isNotBlank() && cityInput.isNotBlank() && pincodeInput.length == 6) {
                                     viewModel.addNewAddress(labelInput, line1Input, line2Input, cityInput, pincodeInput, capturedLat, capturedLon)
                                     showNewAddressDialog = false
                                 }
@@ -3787,8 +3824,14 @@ fun BookingStatusStepper(status: String) {
         "accepted", "assigned" -> 1
         "partner_on_the_way", "on_the_way", "enroute", "arrived" -> 2
         "in_progress", "started" -> 3
-        "completed" -> 4
-        else -> 0
+        "completed", "refunded" -> 4
+        else -> {
+            // Unknown status (new server state shipped without a UI update, or a
+            // typo). Fail loud instead of silently masquerading as "Requested":
+            // -1 leaves every step gray so the drift is visible, and we log it.
+            android.util.Log.e("BookingStatusStepper", "Unmapped booking status: '$status'")
+            -1
+        }
     }
     Row(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 12.dp),
@@ -4019,8 +4062,9 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                         when {
                             trackPartner == null ->
                                 Text("Waiting for partner location…", color = Color.Gray, fontSize = 12.sp)
-                            trackEta != null ->
-                                Text(trackEta!!, color = NikhatRose, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            else -> trackEta?.let { eta ->
+                                Text(eta, color = NikhatRose, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            }
                         }
                     }
                 }
@@ -4576,11 +4620,16 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                                     modifier = Modifier.fillMaxWidth().testTag("review_input_comment")
                                 )
                                 Button(
-                                    onClick = {
+                                    onClick = onClick@{
+                                        if (reviewCommentText.trim().isEmpty()) {
+                                            viewModel.notify("Please write a comment before submitting.", isError = true)
+                                            return@onClick
+                                        }
                                         val roundedAverage = kotlin.math.round((skillRating + hygieneRating + authenticityRating) / 3.0).toInt()
-                                        val structuredComment = "[Skill: $skillRating/5, Hygiene: $hygieneRating/5, Products: $authenticityRating/5] $reviewCommentText"
+                                        val structuredComment = "[Skill: $skillRating/5, Hygiene: $hygieneRating/5, Products: $authenticityRating/5] ${reviewCommentText.trim()}"
                                         viewModel.submitBookingReview(booking.id, roundedAverage, structuredComment)
                                     },
+                                    enabled = reviewCommentText.trim().isNotEmpty(),
                                     colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                                     modifier = Modifier.align(Alignment.End).testTag("submit_triple_review_btn")
                                 ) {
@@ -4835,7 +4884,7 @@ fun ComplaintsListScreen(viewModel: NikhatGlowViewModel) {
                             }
                         }
                     }
-                    items(complaints) { ticket ->
+                    items(complaints, key = { it.id }) { ticket ->
                         Card(
                             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp)
                                 .clickable { viewModel.currentScreen = Screen.ComplaintDetail(ticket.id.toString()) },
@@ -5090,7 +5139,7 @@ fun PartnerOffersScreen(viewModel: NikhatGlowViewModel) {
                 modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                items(offers) { offer ->
+                items(offers, key = { it.offerId }) { offer ->
                     Card(
                         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
                         border = BorderStroke(1.dp, NikhatRose.copy(alpha = 0.4f)),
@@ -5153,6 +5202,12 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
 
     // §691 — keep the Rescue Board badge fresh while the dashboard is shown.
     LaunchedEffect(Unit) { viewModel.loadOffers() }
+
+    // §708 — re-fetch the profile on entry so an admin KYC approval (or any
+    // server-side status change) reflects immediately. Without this the dashboard
+    // kept showing the login-time cached kyc_status, so an approved partner was
+    // still nagged to "complete KYC" until the next re-login.
+    LaunchedEffect(Unit) { viewModel.refreshProfile() }
 
     // In-app notifications: pull on entry, then poll every ~30s while on the
     // dashboard. Auto-cancels when the dashboard leaves composition.
@@ -5752,7 +5807,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                             OutlinedTextField(
                                 value = customSvcPrice,
-                                onValueChange = { customSvcPrice = it },
+                                onValueChange = { customSvcPrice = it.filter { c -> c.isDigit() }.take(7) },
                                 label = { Text("Price (₹)") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.weight(1f).testTag("custom_svc_price"),
@@ -5760,7 +5815,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                             )
                             OutlinedTextField(
                                 value = customSvcDuration,
-                                onValueChange = { customSvcDuration = it },
+                                onValueChange = { customSvcDuration = it.filter { c -> c.isDigit() }.take(3) },
                                 label = { Text("Duration (mins)") },
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                                 modifier = Modifier.weight(1f).testTag("custom_svc_duration"),
@@ -6177,8 +6232,20 @@ fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
 
     // §704 — surface the admin rejection reason on the form itself.
     val activeUser by viewModel.activeUser.collectAsState()
-    LaunchedEffect(Unit) { viewModel.loadPartnerKyc() }
+    // §708 — load the saved KYC (reason + fields) AND refresh the profile so the
+    // current kyc_status is authoritative (admin approvals show without re-login).
+    LaunchedEffect(Unit) { viewModel.loadPartnerKyc(); viewModel.refreshProfile() }
+    // §708 — pre-fill the form from the last saved submission so it never looks
+    // "unsaved" on return. Only fills empty fields (won't stomp live typing).
+    LaunchedEffect(viewModel.kycPrefill) {
+        viewModel.kycPrefill?.let { f ->
+            if (aadhaar.isBlank()) f.aadhaarNo?.let { aadhaar = it.filter { c -> c.isDigit() }.take(12) }
+            if (pan.isBlank()) f.panNo?.let { pan = it.uppercase().take(10) }
+            if (legalName.isBlank()) f.legalName?.let { legalName = it.take(120) }
+        }
+    }
     val rejectionReason = viewModel.partnerKycReason ?: activeUser?.kycReason
+    val kycStatus = activeUser?.kycStatus ?: "not_started"
 
     // PAN [A-Z]{5}[0-9]{4}[A-Z]; Aadhaar exactly 12 digits.
     val panPattern = remember { Regex("^[A-Z]{5}[0-9]{4}[A-Z]$") }
@@ -6256,6 +6323,20 @@ fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
         ) {
             Text("Complete this legal form to get registered as an authorized service provider.", color = Color.Gray, fontSize = 13.sp)
 
+            // §708 — reflect the current KYC status so a partner who already
+            // submitted/was approved doesn't see a blank form and think nothing saved.
+            if (kycStatus == "approved" || kycStatus == "submitted" || kycStatus == "under_review") {
+                val approved = kycStatus == "approved"
+                val bannerColor = if (approved) SuccessGreen else NikhatGold
+                val bannerText = if (approved)
+                    "✓ Your KYC is approved — you're a verified provider. No further action needed."
+                else
+                    "⏳ KYC submitted — verification is in progress. You'll be notified once it's reviewed. You can re-submit below if you need to update your details."
+                Card(colors = CardDefaults.cardColors(containerColor = bannerColor.copy(alpha = 0.12f))) {
+                    Text(bannerText, color = bannerColor, fontWeight = FontWeight.Bold, fontSize = 13.sp, modifier = Modifier.padding(14.dp))
+                }
+            }
+
             if (!rejectionReason.isNullOrBlank()) {
                 Card(colors = CardDefaults.cardColors(containerColor = Color.Red.copy(alpha = 0.1f))) {
                     Column(modifier = Modifier.padding(14.dp)) {
@@ -6272,7 +6353,7 @@ fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
             // your display name is locked to it, so customers can trust who's at the door.
             OutlinedTextField(
                 value = legalName,
-                onValueChange = { legalName = it.take(120) },
+                onValueChange = { legalName = it.trimStart().take(120) },
                 placeholder = { Text("Full name as on your ID") },
                 singleLine = true,
                 supportingText = { Text("This becomes your verified name once approved.", color = Color.Gray, fontSize = 11.sp) },
@@ -6574,15 +6655,19 @@ fun PartnerServicesScreen(viewModel: NikhatGlowViewModel) {
                 Text("Toggle & customize standard services:", fontWeight = FontWeight.Bold, fontSize = 14.sp)
                 Spacer(modifier = Modifier.height(6.dp))
             }
-            items(allServices) { service ->
+            items(allServices, key = { it.id }) { service ->
                 val activeSetting = activeServices.firstOrNull { it.serviceId == service.id }
                 // Rupee-denominated input (money is stored as paise; ₹ = paise / 100).
                 var rateOverride by remember(activeSetting) { mutableStateOf(((activeSetting?.pricePaise ?: service.pricePaise) / 100).toString()) }
                 var productsOverride by remember(activeSetting) { mutableStateOf(activeSetting?.productsUsed ?: "Premium salon kit (L'Oreal/O3+), 100% seal-packed & verified prior to use.") }
                 var activatedState by remember(activeSetting) { mutableStateOf(activeSetting?.active ?: (activeSetting != null)) }
                 // Save once via an explicit action: PATCH if listed, else create once.
-                val saveService = {
+                val saveService = saveService@{
                     val finalPrice = (rateOverride.trim().toLongOrNull() ?: 0L) * 100L
+                    if (finalPrice <= 0L) {
+                        viewModel.notify("Please enter a rate greater than ₹0.", isError = true)
+                        return@saveService
+                    }
                     viewModel.setPartnerServicePrice(service.id, service.name, service.categoryId, finalPrice, activatedState, productsOverride)
                 }
 
@@ -6635,8 +6720,8 @@ fun PartnerServicesScreen(viewModel: NikhatGlowViewModel) {
                             Text("Set Custom Rate: ₹ ", fontWeight = FontWeight.Bold)
                             OutlinedTextField(
                                 value = rateOverride,
-                                onValueChange = { rateOverride = it },
-                                modifier = Modifier.weight(1f).height(50.dp),
+                                onValueChange = { rateOverride = it.filter { c -> c.isDigit() }.take(7) },
+                                modifier = Modifier.weight(1f).heightIn(min = 56.dp),
                                 singleLine = true,
                                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
                             )
@@ -6969,7 +7054,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                                 onClick = {
                                     if (nameState.trim().isEmpty()) {
                                         validationError = "Name field cannot be left blank."
-                                    } else if (!emailState.contains("@") || !emailState.contains(".")) {
+                                    } else if (!Regex("^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\\.[A-Za-z]{2,}$").matches(emailState.trim())) {
                                         validationError = "Please enter a valid email address."
                                     } else {
                                         viewModel.updateProfile(nameState.trim(), emailState.trim())
@@ -8144,10 +8229,10 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
 
                         OutlinedTextField(
                             value = contactPhone,
-                            onValueChange = {
-                                contactPhone = it
-                                contactPhoneError = if (it.trim().length != 10 || !it.trim().all { char -> char.isDigit() }) 
-                                    "Phone must be exactly 10 digits." else null
+                            onValueChange = { newValue ->
+                                val filtered = newValue.filter { c -> c.isDigit() }.take(10)
+                                contactPhone = filtered
+                                contactPhoneError = if (filtered.length != 10) "Phone must be exactly 10 digits." else null
                             },
                             label = { Text("Phone Number") },
                             isError = contactPhoneError != null,
@@ -8564,7 +8649,7 @@ fun PreBookingChatScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                     }
                 }
             } else {
-                items(localMessages) { msg ->
+                items(localMessages, key = { it.id }) { msg ->
                     val isMe = msg.senderRole == (activeUser?.role ?: "customer")
                     Row(
                         modifier = Modifier.fillMaxWidth(),
@@ -8650,6 +8735,7 @@ fun PreBookingChatScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                         chatText = ""
                     }
                 },
+                enabled = chatText.isNotBlank(),
                 modifier = Modifier
                     .background(NikhatRose, CircleShape)
                     .size(48.dp)

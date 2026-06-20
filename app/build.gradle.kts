@@ -106,7 +106,7 @@ dependencies {
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   implementation(libs.play.services.location)  // §687 — FusedLocationProviderClient (device GPS)
-  implementation(libs.maplibre.android)  // §690 — MapLibre GL engine + Ola vector tiles (live map; no Ola .aar)
+  implementation(libs.maplibre.android)  // §690 — MapLibre GL engine + OpenFreeMap free vector tiles (live map; no proprietary tile SDK)
   implementation(libs.retrofit)
   testImplementation(libs.androidx.compose.ui.test.junit4)
   testImplementation(libs.androidx.core)

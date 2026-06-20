@@ -612,9 +612,19 @@ data class KycReq(
 )
 
 @JsonClass(generateAdapter = true)
+data class KycFields(
+    @Json(name = "aadhaar_no") val aadhaarNo: String? = null,
+    @Json(name = "pan_no") val panNo: String? = null,
+    @Json(name = "legal_name") val legalName: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
 data class KycStatusResp(
     val status: String = "not_started",
     val reason: String? = null,
+    // §708 — last-saved KYC fields so the form can pre-fill on return (so a
+    // resubmit/edit doesn't start blank and "look unsaved").
+    val fields: KycFields? = null,
     // §704 — once approved, the verified (locked) name.
     @Json(name = "name_locked") val nameLocked: Boolean = false,
     @Json(name = "verified_name") val verifiedName: String? = null,
@@ -736,14 +746,14 @@ data class AnalyticsFunnelDto(
 
 @JsonClass(generateAdapter = true)
 data class AnalyticsDto(
-    @Json(name = "accept_rate") val acceptRate: Float = 0f,
+    @Json(name = "accept_rate") val acceptRate: Float? = null,
     val accepted: Int = 0,
     val rejected: Int = 0,
-    @Json(name = "avg_response_min") val avgResponseMin: Float = 0f,
+    @Json(name = "avg_response_min") val avgResponseMin: Float? = null,
     @Json(name = "profile_views_total") val profileViewsTotal: Int = 0,
     @Json(name = "profile_views_30d") val profileViews30d: Int = 0,
     @Json(name = "profile_views_trend") val profileViewsTrend: List<ProfileViewPointDto> = emptyList(),
-    @Json(name = "rating_avg") val ratingAvg: Float = 0f,
+    @Json(name = "rating_avg") val ratingAvg: Float? = null,
     @Json(name = "rating_count") val ratingCount: Int = 0,
     @Json(name = "rating_distribution") val ratingDistribution: Map<String, Int> = emptyMap(),
     val funnel: AnalyticsFunnelDto = AnalyticsFunnelDto(),

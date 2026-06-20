@@ -45,6 +45,13 @@ data class QuoteBreakdown(
  * StateFlows act purely as a UI cache, refreshed from the server after each
  * mutation. The (untouched) Compose screens collect these flows exactly as
  * they did against the old Room repository.
+ *
+ * ID-conversion contract: server entity ids are ALWAYS numeric. Methods here
+ * convert id strings with `.toInt()` on that contract; user-supplied/synthetic
+ * ids that may be non-numeric (e.g. "pre_…" threads, locally-added custom
+ * services, optional booking refs) use `.toIntOrNull()` and handle the null.
+ * Do NOT introduce a bare `.toInt()` on any id whose source is not a backend
+ * entity — use `.toIntOrNull()` (with a fallback / early return) instead.
  */
 class NikhatGlowRepository(context: Context) {
 
@@ -142,7 +149,7 @@ class NikhatGlowRepository(context: Context) {
 
     // ── Session / auth ─────────────────────────────────────────────────────────
     fun isAuthenticated(): Boolean =
-        tokenStore.activeRole != null && tokenStore.accessToken() != null
+        tokenStore.activeRole != null && !tokenStore.accessToken().isNullOrBlank()
 
     fun activeRole(): String? = tokenStore.activeRole
     fun hasSession(role: String): Boolean = tokenStore.hasSession(role)
@@ -156,6 +163,11 @@ class NikhatGlowRepository(context: Context) {
 
     suspend fun verifyOtp(phone: String, role: String, otpToken: String, code: String): Boolean {
         val resp = api.otpVerify(mapOf("otp_token" to otpToken, "code" to code))
+        // Guard against a backend bug returning empty tokens: persisting blanks
+        // would leave the user "logged in" while every authed request fails.
+        if (resp.accessToken.isBlank() || resp.refreshToken.isBlank()) {
+            throw IllegalStateException("Invalid tokens from server")
+        }
         tokenStore.save(role, resp.accessToken, resp.refreshToken, makeActive = true)
         // Login is COMPLETE the moment the token is persisted. Hydration is
         // best-effort: a transient failure on any profile/bookings/catalog call
@@ -212,6 +224,10 @@ class NikhatGlowRepository(context: Context) {
         _offers.value = emptyList()
         _notifications.value = emptyList()
         _unreadCount.value = 0
+        // §704 account-bleed: also drop the resolved app config (feature flags /
+        // role visibility / policies) so the next account can't see the previous
+        // user's config before refreshAppConfig() repopulates it.
+        _appConfig.value = null
     }
 
     // ── Notifications (in-app inbox + FCM device registration) ─────────────────
@@ -395,6 +411,14 @@ class NikhatGlowRepository(context: Context) {
         _activeUser.value = Mappers.user(profile, role, 0L)
     }
 
+    /** Public, null-safe re-fetch of the signed-in identity (refreshes kyc_status,
+     *  name-lock, etc.). Used by pull-to-refresh and on-entry refresh so an admin
+     *  KYC approval shows up WITHOUT forcing a re-login. No-op if not signed in. */
+    suspend fun refreshActiveProfile() {
+        val role = activeRole() ?: return
+        runCatching { refreshProfile(role) }
+    }
+
     suspend fun refreshAddresses() {
         _addresses.value = api.addresses().items.map { Mappers.address(it) }
     }
@@ -504,7 +528,11 @@ class NikhatGlowRepository(context: Context) {
     }
 
     suspend fun refreshPartnerServices() {
-        val remoteList = api.partnerServices().items.map {
+        // Null-safe like the other refreshers: if the remote fetch fails we leave
+        // the cache untouched rather than wiping it, and — critically — we do NOT
+        // re-surface localCustomPartnerServices (unsaved, never reached the server)
+        // as if they were persisted backend data.
+        val remoteList = runCatching { api.partnerServices().items }.getOrNull()?.map {
             PartnerServiceEntity(
                 id = it.id.toString(),
                 serviceId = it.serviceId.toString(),
@@ -515,7 +543,7 @@ class NikhatGlowRepository(context: Context) {
                 active = it.active,
                 productsUsed = customProductsUsed[it.serviceId.toString()] ?: ""
             )
-        }
+        } ?: return
         _partnerServices.value = remoteList + localCustomPartnerServices
     }
 
@@ -831,8 +859,11 @@ class NikhatGlowRepository(context: Context) {
         } else {
             api.bookingMessages(threadId.toInt()).items.map { Mappers.chat(it) }
         }
-        _chat.value = _chat.value.filter { it.bookingId != threadId } + msgs
-        if (pre != null) _preBooking.value = msgs
+        _chat.value = (_chat.value.filter { it.bookingId != threadId } + msgs).distinctBy { it.id }
+        // Clear stale pre-booking messages when this is a real (numeric) booking
+        // thread — otherwise a thread that graduated from "pre_…" to a booking id
+        // keeps surfacing the old pre-booking chat.
+        if (pre != null) _preBooking.value = msgs else _preBooking.value = emptyList()
     }
 
     suspend fun sendThread(threadId: String, text: String) {

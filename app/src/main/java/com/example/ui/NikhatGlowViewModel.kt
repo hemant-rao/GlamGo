@@ -14,6 +14,8 @@ import com.example.ui.map.GeoPoint
 import com.example.ui.map.NikhatMaps
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 
 sealed class Screen {
     object CustomerHome : Screen()
@@ -64,6 +66,13 @@ interface RouteWithParams
  */
 class NikhatGlowViewModel(application: Application) : AndroidViewModel(application) {
     val repository = NikhatGlowRepository(application)
+
+    // Serialises the createQuote()+createBookingFromLastQuote() sequence against
+    // any other quote call. createQuote stores its result in the repository's
+    // shared `lastQuoteId`; without this lock an updateBookingQuote() coroutine
+    // could re-quote (clobbering lastQuoteId) in between confirmAndBook's quote
+    // and booking calls, so the booking would consume the wrong quote.
+    private val quoteMutex = Mutex()
 
     // ── Server-backed state flows ──────────────────────────────────────────────
     val activeUser = repository.activeUserFlow.stateIn(
@@ -590,7 +599,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             } else {
                 if (value != _currentScreen) {
                     _navStack.addLast(_currentScreen)
-                    if (_navStack.size > 30) _navStack.removeFirst()
+                    if (_navStack.size > 50) _navStack.removeFirst()
                 }
                 _currentScreen = value
             }
@@ -673,6 +682,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
 
     fun sendOtp(phone: String, role: String) {
         if (phone.isBlank()) { authError = "Enter your phone number."; return }
+        if (phone.trim().length != 10) { authError = "Phone number must be exactly 10 digits."; return }
         authBusy = true; authError = null
         viewModelScope.launch {
             runCatching { repository.requestOtp(phone.trim(), role) }
@@ -852,9 +862,42 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
 
     /** §702 — partner KYC rejection reason (Mapper never populates kycReason). */
     var partnerKycReason by mutableStateOf<String?>(null)
+    /** §708 — last-saved KYC fields so the form pre-fills on return. */
+    var kycPrefill by mutableStateOf<com.example.data.remote.KycFields?>(null)
+        private set
     fun loadPartnerKyc() {
         viewModelScope.launch {
-            repository.fetchKyc()?.let { partnerKycReason = it.reason }
+            repository.fetchKyc()?.let { partnerKycReason = it.reason; kycPrefill = it.fields }
+        }
+    }
+
+    /** §708 — re-fetch the signed-in profile (kyc_status, name-lock, …). Used on
+     *  screen entry + pull-to-refresh so an admin KYC approval (or any server-side
+     *  change) shows up without a re-login. Fire-and-forget, null-safe. */
+    fun refreshProfile() {
+        viewModelScope.launch { repository.refreshActiveProfile() }
+    }
+
+    /** §708 — pull-to-refresh dispatcher: re-fetch whatever the given screen shows.
+     *  Always refreshes the profile too (cheap, keeps kyc/name in sync). */
+    fun refreshForScreen(screen: Screen) {
+        refreshProfile()
+        when (screen) {
+            is Screen.CustomerHome -> { loadAppConfig(); refreshActiveBookings(); viewModelScope.launch { repository.refreshFavorites() } }
+            is Screen.MyBookings -> refreshActiveBookings()
+            is Screen.BookingDetail -> loadBookingDetail(screen.bookingId)
+            is Screen.Notifications -> loadNotifications()
+            is Screen.Favourites -> viewModelScope.launch { repository.refreshFavorites() }
+            is Screen.Cart -> viewModelScope.launch { repository.refreshCart() }
+            is Screen.ComplaintsList -> refreshComplaints()
+            is Screen.PartnerDashboard -> { loadOffers(); loadNotifications(); refreshActiveBookings() }
+            is Screen.PartnerOffers -> loadOffers()
+            is Screen.PartnerServices -> viewModelScope.launch { repository.refreshPartnerServices() }
+            is Screen.PartnerEarnings -> loadEarnings()
+            is Screen.PartnerAnalytics -> loadAnalytics()
+            is Screen.PartnerPortfolio -> loadPortfolio()
+            is Screen.PartnerKyc -> loadPartnerKyc()
+            else -> {}
         }
     }
 
@@ -911,17 +954,21 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             runCatching {
                 val chosenAddrId = addressId
                     ?: (addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull())?.id
-                val total = repository.cartQuote(couponCode, chosenAddrId, selectedSlotId)
-                // §707 — enforce the ₹599 minimum on the cart total before booking.
-                val min = repository.minBookingPaise()
-                require(total >= min) {
-                    "Minimum booking amount is ₹${min / 100}. Please add more services to reach ₹${min / 100}."
+                // cartQuote also writes the shared lastQuoteId, so hold the lock
+                // across quote+book to stop a concurrent re-quote clobbering it.
+                quoteMutex.withLock {
+                    val total = repository.cartQuote(couponCode, chosenAddrId, selectedSlotId)
+                    // §707 — enforce the ₹599 minimum on the cart total before booking.
+                    val min = repository.minBookingPaise()
+                    require(total >= min) {
+                        "Minimum booking amount is ₹${min / 100}. Please add more services to reach ₹${min / 100}."
+                    }
+                    repository.createBookingFromLastQuote(
+                        customerNotes = bookingNotes,
+                        genderPreference = bookingGenderPref,
+                        deviceInfo = deviceInfoJson(),
+                    )
                 }
-                repository.createBookingFromLastQuote(
-                    customerNotes = bookingNotes,
-                    genderPreference = bookingGenderPref,
-                    deviceInfo = deviceInfoJson(),
-                )
             }.onSuccess { booking ->
                 bookingNotes = ""; bookingGenderPref = "any"
                 notify("Booking request sent")
@@ -1074,14 +1121,16 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             val defaultAddr = addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull()
             runCatching {
-                repository.createQuote(
-                    partnerId = partner.id,
-                    serviceId = service.id,
-                    slotId = selectedSlotId,
-                    addressId = defaultAddr?.id,
-                    couponCode = couponCode,
-                    useWallet = false,
-                )
+                quoteMutex.withLock {
+                    repository.createQuote(
+                        partnerId = partner.id,
+                        serviceId = service.id,
+                        slotId = selectedSlotId,
+                        addressId = defaultAddr?.id,
+                        couponCode = couponCode,
+                        useWallet = false,
+                    )
+                }
             }.onSuccess { quoteBreakdown = it }
         }
     }
@@ -1089,30 +1138,35 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
     fun confirmAndBook(service: Service, partner: Partner, address: AddressEntity) {
         viewModelScope.launch {
             runCatching {
-                // Re-quote with the slot the user actually picked. The initial
-                // quote was built at PartnerSelect BEFORE any slot existed (so its
-                // slot_id was null); without this the booking would be stored
-                // time-less and "Change partner" would never unlock.
-                val quote = repository.createQuote(
-                    partnerId = partner.id,
-                    serviceId = service.id,
-                    slotId = selectedSlotId,
-                    addressId = address.id,
-                    couponCode = couponCode,
-                    useWallet = false,
-                ).also { quoteBreakdown = it }
-                // §707 — founder rule: no booking below ₹599. Pre-check the
-                // authoritative quote total so the customer is told here instead of
-                // after submitting (the server enforces the same floor as backstop).
-                val min = repository.minBookingPaise()
-                require(quote.totalPaise >= min) {
-                    "Minimum booking amount is ₹${min / 100}. Please add more services to reach ₹${min / 100}."
+                // Hold the lock across BOTH the quote and the booking so a
+                // concurrent updateBookingQuote() can't clobber the shared
+                // lastQuoteId in between and make us book the wrong quote.
+                quoteMutex.withLock {
+                    // Re-quote with the slot the user actually picked. The initial
+                    // quote was built at PartnerSelect BEFORE any slot existed (so its
+                    // slot_id was null); without this the booking would be stored
+                    // time-less and "Change partner" would never unlock.
+                    val quote = repository.createQuote(
+                        partnerId = partner.id,
+                        serviceId = service.id,
+                        slotId = selectedSlotId,
+                        addressId = address.id,
+                        couponCode = couponCode,
+                        useWallet = false,
+                    ).also { quoteBreakdown = it }
+                    // §707 — founder rule: no booking below ₹599. Pre-check the
+                    // authoritative quote total so the customer is told here instead of
+                    // after submitting (the server enforces the same floor as backstop).
+                    val min = repository.minBookingPaise()
+                    require(quote.totalPaise >= min) {
+                        "Minimum booking amount is ₹${min / 100}. Please add more services to reach ₹${min / 100}."
+                    }
+                    repository.createBookingFromLastQuote(
+                        customerNotes = bookingNotes,
+                        genderPreference = bookingGenderPref,
+                        deviceInfo = deviceInfoJson(),
+                    )
                 }
-                repository.createBookingFromLastQuote(
-                    customerNotes = bookingNotes,
-                    genderPreference = bookingGenderPref,
-                    deviceInfo = deviceInfoJson(),
-                )
             }.onSuccess { booking ->
                 bookingNotes = ""; bookingGenderPref = "any"
                 notify("Booking request sent")
@@ -1121,31 +1175,43 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun bookDirectlyFromForm(service: Service, slot: String, onSuccess: (String) -> Unit) {
+    fun bookDirectlyFromForm(
+        service: Service,
+        slot: String,
+        onSuccess: (String) -> Unit,
+        onError: (String) -> Unit = {},
+    ) {
         selectedSlot = slot
         viewModelScope.launch {
             val partner = NikhatGlowDataSource.partners.firstOrNull { it.servicesOffered.contains(service.id) }
                 ?: NikhatGlowDataSource.partners.firstOrNull()
-            if (partner == null) return@launch
+            if (partner == null) {
+                onError("No professional is available right now.")
+                return@launch
+            }
             val addr = addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull()
             runCatching {
-                val quote = repository.createQuote(partner.id, service.id, null, addr?.id, null, false)
-                // §707 — enforce the ₹599 minimum before creating the booking.
-                val min = repository.minBookingPaise()
-                require(quote.totalPaise >= min) {
-                    "Minimum booking amount is ₹${min / 100}. Please add more services to reach ₹${min / 100}."
+                // Atomic quote+book so a concurrent re-quote can't clobber the
+                // shared lastQuoteId between these two calls.
+                quoteMutex.withLock {
+                    val quote = repository.createQuote(partner.id, service.id, null, addr?.id, null, false)
+                    // §707 — enforce the ₹599 minimum before creating the booking.
+                    val min = repository.minBookingPaise()
+                    require(quote.totalPaise >= min) {
+                        "Minimum booking amount is ₹${min / 100}. Please add more services to reach ₹${min / 100}."
+                    }
+                    repository.createBookingFromLastQuote(
+                        customerNotes = bookingNotes,
+                        genderPreference = bookingGenderPref,
+                        deviceInfo = deviceInfoJson(),
+                    )
                 }
-                repository.createBookingFromLastQuote(
-                    customerNotes = bookingNotes,
-                    genderPreference = bookingGenderPref,
-                    deviceInfo = deviceInfoJson(),
-                )
             }.onSuccess { booking ->
                 bookingNotes = ""; bookingGenderPref = "any"
                 notify("Booking request sent")
                 currentScreen = Screen.BookingDetail(booking.id)
                 onSuccess(booking.id)
-            }.onFailure { friendly(it) }
+            }.onFailure { onError(friendly(it)) }
         }
     }
 

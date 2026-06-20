@@ -93,7 +93,7 @@ class ApiClient private constructor(private val tokenStore: TokenStore) {
                 val json = JSONObject(resp.body?.string() ?: return null)
                 val access = json.optString("access_token", "")
                 val newRefresh = json.optString("refresh_token", "")
-                if (access.isEmpty()) return null
+                if (access.isEmpty() || newRefresh.isEmpty()) return null
                 tokenStore.updateAccess(role, access, newRefresh.ifEmpty { null })
                 access
             }
