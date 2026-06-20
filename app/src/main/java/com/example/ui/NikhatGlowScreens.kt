@@ -56,6 +56,17 @@ import kotlinx.coroutines.launch
 fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
     val activeUser by viewModel.activeUser.collectAsState()
     val cart by viewModel.cart.collectAsState()
+    // §705 — keep the partner "Open Jobs" pool badge live across every tab by
+    // polling the offers list at a low frequency while the partner is signed in.
+    val offers by viewModel.offers.collectAsState()
+    LaunchedEffect(activeUser?.role) {
+        if (activeUser?.role == "partner") {
+            while (true) {
+                viewModel.loadOffers()
+                kotlinx.coroutines.delay(20000)
+            }
+        }
+    }
 
     val currentThemeDark = true
     val scope = rememberCoroutineScope()
@@ -98,6 +109,7 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
                     currentScreen = viewModel.currentScreen,
                     userRole = activeUser?.role ?: "customer",
                     cartCount = cart?.count ?: 0,
+                    offersCount = offers.size,
                     onNavigate = { screen -> viewModel.currentScreen = screen },
                 )
             }
@@ -162,6 +174,7 @@ fun NikhatGlowBottomBar(
     currentScreen: Screen,
     userRole: String,
     cartCount: Int,
+    offersCount: Int = 0,   // §705 — live count of open pool jobs (partner badge)
     onNavigate: (Screen) -> Unit,
 ) {
     val selectedColors = NavigationBarItemDefaults.colors(
@@ -214,33 +227,52 @@ fun NikhatGlowBottomBar(
                 modifier = Modifier.testTag("customer_profile_tab")
             )
         } else {
+            // §705 — partner = a WORK app. Nav reflects "jobs come to me": the home
+            // inbox, the OPEN-JOBS POOL (was buried), today's schedule, earnings, and
+            // a business hub. No new Screen entries — every target already exists.
             NavigationBarItem(
                 selected = currentScreen is Screen.PartnerDashboard,
                 onClick = { onNavigate(Screen.PartnerDashboard) },
-                icon = { Icon(Icons.Default.Dashboard, contentDescription = "Dashboard") },
-                label = { Text("Dashboard", fontSize = 11.sp) },
+                icon = { Icon(Icons.Default.Work, contentDescription = "Jobs") },
+                label = { Text("Jobs", fontSize = 11.sp) },
                 colors = selectedColors,
             )
             NavigationBarItem(
-                selected = currentScreen is Screen.PartnerServices,
-                onClick = { onNavigate(Screen.PartnerServices) },
-                icon = { Icon(Icons.Default.ContentCut, contentDescription = "Services") },
-                label = { Text("Services", fontSize = 11.sp) },
+                selected = currentScreen is Screen.PartnerOffers,
+                onClick = { onNavigate(Screen.PartnerOffers) },
+                icon = {
+                    if (offersCount > 0) {
+                        BadgedBox(badge = { Badge { Text("$offersCount") } }) {
+                            Icon(Icons.Default.Bolt, contentDescription = "Open Jobs")
+                        }
+                    } else {
+                        Icon(Icons.Default.Bolt, contentDescription = "Open Jobs")
+                    }
+                },
+                label = { Text("Open Jobs", fontSize = 11.sp) },
                 colors = selectedColors,
+                modifier = Modifier.testTag("partner_pool_tab"),
             )
             NavigationBarItem(
                 selected = currentScreen is Screen.MyBookings,
                 onClick = { onNavigate(Screen.MyBookings) },
-                icon = { Icon(Icons.Default.EventNote, contentDescription = "Requests") },
-                label = { Text("Requests", fontSize = 11.sp) },
+                icon = { Icon(Icons.Default.EventNote, contentDescription = "Schedule") },
+                label = { Text("Schedule", fontSize = 11.sp) },
                 colors = selectedColors,
                 modifier = Modifier.testTag("partner_requests_tab"),
             )
             NavigationBarItem(
+                selected = currentScreen is Screen.PartnerEarnings,
+                onClick = { onNavigate(Screen.PartnerEarnings) },
+                icon = { Icon(Icons.Default.Payments, contentDescription = "Earnings") },
+                label = { Text("Earnings", fontSize = 11.sp) },
+                colors = selectedColors,
+            )
+            NavigationBarItem(
                 selected = currentScreen is Screen.PartnerProfile,
                 onClick = { onNavigate(Screen.PartnerProfile) },
-                icon = { Icon(Icons.Default.Person, contentDescription = "Partner") },
-                label = { Text("Partner", fontSize = 11.sp) },
+                icon = { Icon(Icons.Default.Person, contentDescription = "Business") },
+                label = { Text("Business", fontSize = 11.sp) },
                 colors = selectedColors,
             )
         }
@@ -4812,7 +4844,7 @@ fun PartnerOffersScreen(viewModel: NikhatGlowViewModel) {
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
-            title = { Text("Rescue Board", fontWeight = FontWeight.Bold) },
+            title = { Text("Open Jobs", fontWeight = FontWeight.Bold) },
             navigationIcon = {
                 IconButton(onClick = { viewModel.currentScreen = Screen.PartnerDashboard }) {
                     Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
@@ -4932,8 +4964,59 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                     NotificationBell(viewModel)
                 }
 
+                // §705 — "jobs come to me": the OPEN-JOBS POOL + today's numbers sit
+                // right under the partner's name so the home reads as a WORK INBOX,
+                // not a setup form. (The buried setup cards remain lower / in Business.)
+                val poolOffers by viewModel.offers.collectAsState()
+                val earningsNow by viewModel.earnings.collectAsState()
+                LaunchedEffect(Unit) { viewModel.loadEarnings() }
                 Spacer(modifier = Modifier.height(16.dp))
-                
+                Surface(
+                    onClick = { viewModel.currentScreen = Screen.PartnerOffers },
+                    shape = RoundedCornerShape(14.dp),
+                    color = NikhatRose,
+                    modifier = Modifier.fillMaxWidth().testTag("dashboard_open_pool_card"),
+                ) {
+                    Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Bolt, contentDescription = null, tint = Color.White, modifier = Modifier.size(28.dp))
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                if (poolOffers.isNotEmpty()) "${poolOffers.size} open job(s) to claim" else "Open Jobs Pool",
+                                color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                            Text(
+                                if (poolOffers.isNotEmpty()) "First to accept wins — tap to claim" else "Nearby bookings appear here",
+                                color = Color.White.copy(alpha = 0.85f), fontSize = 12.sp)
+                        }
+                        Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.White)
+                    }
+                }
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(modifier = Modifier.fillMaxWidth()) {
+                    listOf(
+                        "Today" to "₹${(earningsNow?.todayPaise ?: 0L) / 100}",
+                        "Active" to "${ongoingJobs.size}",
+                        "In pool" to "${poolOffers.size}",
+                    ).forEachIndexed { i, pair ->
+                        if (i > 0) Spacer(modifier = Modifier.width(8.dp))
+                        Surface(
+                            shape = RoundedCornerShape(12.dp),
+                            color = Color.White.copy(alpha = 0.08f),
+                            modifier = Modifier.weight(1f),
+                        ) {
+                            Column(
+                                modifier = Modifier.padding(vertical = 12.dp).fillMaxWidth(),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                Text(pair.second, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 16.sp)
+                                Text(pair.first, color = Color.White.copy(alpha = 0.7f), fontSize = 11.sp)
+                            }
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(16.dp))
+
                 // §701 — composite "why you're not visible" banner (only when not visible).
                 val dashSub by viewModel.subscription.collectAsState()
                 val kycApprovedNow = currentRoleKyc == "approved"
