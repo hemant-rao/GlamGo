@@ -28,8 +28,8 @@ class TokenStore(context: Context) {
         prefs.edit()
             .putString("access_$role", access)
             .putString("refresh_$role", refresh)
+            .putString(KEY_ACTIVE_ROLE, if (makeActive) role else activeRole)
             .apply()
-        if (makeActive) activeRole = role
     }
 
     fun updateAccess(role: String, access: String, refresh: String?) {
