@@ -3003,11 +3003,6 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
     var bookingNotes by remember { mutableStateOf("") }
     var genderPref by remember { mutableStateOf("any") }
 
-    // Real-time availability indicator lock states
-    var isAvailable by remember { mutableStateOf(true) }
-    var bcDate by remember { mutableStateOf("") }
-    var bcTime by remember { mutableStateOf("") }
-
     // §687 — address search-as-you-type via the geo proxy (free OSM); only fires after
     // 3 characters, debounced 300ms (per the founder's "show after 3 letters").
     LaunchedEffect(addrQuery) {
@@ -3063,9 +3058,9 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                 }
             }
             
-            // STEP 2: Timing note (connector model — exact time arranged in chat)
+            // STEP 2: §702 — real availability slot picker (date stepper + slot chips).
             Spacer(modifier = Modifier.height(16.dp))
-            Text("2. PREFERRED TIME & AVAILABILITY STATUS", fontWeight = FontWeight.Bold, color = NikhatRose)
+            Text("2. PICK A TIME SLOT", fontWeight = FontWeight.Bold, color = NikhatRose)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -3073,84 +3068,89 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    // §690 — real date + time pickers. Both feed viewModel.selectedSlot.
-                    fun syncSlot() {
-                        viewModel.selectedSlot = listOfNotNull(
-                            bcDate.ifBlank { null }, bcTime.ifBlank { null }
-                        ).joinToString(" at ")
-                    }
-                    
-                    var checkingAvailability by remember { mutableStateOf(false) }
-                    var availabilityStatus by remember { mutableStateOf<String?>(null) }
+                    val slots = viewModel.availableSlots
+                    val selectedSlotId = viewModel.selectedSlotId
+                    val selectedDate = viewModel.selectedBookingDate
 
-                    LaunchedEffect(bcDate) {
-                        if (bcDate.isNotBlank()) {
-                            checkingAvailability = true
-                            delay(600) // realistic delay to feel authentic
-                            checkingAvailability = false
-                            val cleanDateStr = bcDate.trim()
-                            val dayOfWeek = kotlin.runCatching {
-                                val parser = java.text.SimpleDateFormat("dd MMM yyyy", java.util.Locale.US)
-                                val date = parser.parse(cleanDateStr)
-                                val cal = java.util.Calendar.getInstance()
-                                cal.time = date
-                                cal.get(java.util.Calendar.DAY_OF_WEEK)
-                            }.getOrDefault(2)
-                            
-                            val isOffDay = dayOfWeek == java.util.Calendar.SUNDAY || cleanDateStr.contains("24 Jun") || (partner.id.hashCode() % 5 == dayOfWeek % 5)
-                            
-                            if (isOffDay) {
-                                isAvailable = false
-                                availabilityStatus = "Specialist ${partner.name} is fully booked / on holiday leave on $cleanDateStr. Please select another date."
-                            } else {
-                                isAvailable = true
-                                availabilityStatus = "✓ ${partner.name} is active and available on $cleanDateStr!"
-                            }
-                        } else {
-                            availabilityStatus = null
-                            isAvailable = true
-                        }
+                    // Load real slots on entry + whenever the date changes.
+                    LaunchedEffect(partner.id, service.id, selectedDate) {
+                        viewModel.loadSlots(partner.id, service.id, selectedDate)
                     }
 
-                    NikhatDateField(
-                        value = bcDate,
-                        onChange = { bcDate = it; syncSlot() },
-                        label = "Preferred date",
-                        iconTint = NikhatRose,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    
-                    if (bcDate.isNotBlank()) {
-                        Spacer(modifier = Modifier.height(6.dp))
-                        if (checkingAvailability) {
-                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                                CircularProgressIndicator(modifier = Modifier.size(14.dp), strokeWidth = 2.dp, color = NikhatRose)
-                                Text("Verifying specialist availability slot...", fontSize = 11.sp, color = Color.Gray)
-                            }
-                        } else {
-                            val statusText = availabilityStatus ?: ""
-                            val statusColor = if (isAvailable) SuccessGreen else Color(0xFFEC7063)
-                            Text(
-                                text = statusText,
-                                fontSize = 12.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = statusColor
+                    // Next-7-days date stepper (ISO yyyy-MM-dd drives loadSlots).
+                    val today = remember { java.time.LocalDate.now() }
+                    val dayFmt = remember { java.time.format.DateTimeFormatter.ofPattern("EEE, dd MMM", java.util.Locale.US) }
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        for (offset in 0..6) {
+                            val d = today.plusDays(offset.toLong())
+                            val iso = d.toString()
+                            val isSel = iso == selectedDate
+                            FilterChip(
+                                selected = isSel,
+                                onClick = { viewModel.loadSlots(partner.id, service.id, iso) },
+                                label = { Text(d.format(dayFmt), fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = NikhatRose,
+                                    selectedLabelColor = Color.White,
+                                )
                             )
                         }
-                        Spacer(modifier = Modifier.height(8.dp))
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    when {
+                        viewModel.slotsLoading -> {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = NikhatRose)
+                                Text("Loading available slots…", fontSize = 12.sp, color = Color.Gray)
+                            }
+                        }
+                        slots.isEmpty() -> {
+                            Text(
+                                "No free slots that day — pick another date.",
+                                fontSize = 12.sp, color = Color(0xFFEC7063), fontWeight = FontWeight.Bold
+                            )
+                        }
+                        else -> {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                slots.forEach { slot ->
+                                    // Hour label: prefer start, else 3rd ":" segment of slot_id.
+                                    val hourLabel = slot.start?.takeIf { it.isNotBlank() }
+                                        ?: slot.slotId.split(":").getOrNull(2)?.let { h ->
+                                            val hh = h.toIntOrNull()
+                                            if (hh != null) String.format("%02d:00", hh) else h
+                                        } ?: slot.slotId
+                                    val isSel = slot.slotId == selectedSlotId
+                                    FilterChip(
+                                        selected = isSel,
+                                        enabled = slot.available,
+                                        onClick = { viewModel.selectedSlotId = slot.slotId },
+                                        label = { Text(hourLabel, fontSize = 12.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = NikhatRose,
+                                            selectedLabelColor = Color.White,
+                                            disabledLabelColor = Color.Gray.copy(alpha = 0.5f),
+                                        )
+                                    )
+                                }
+                            }
+                        }
                     }
 
                     Spacer(modifier = Modifier.height(8.dp))
-                    NikhatTimeField(
-                        value = bcTime,
-                        onChange = { bcTime = it; syncSlot() },
-                        label = "Preferred time",
-                        iconTint = NikhatRose,
-                        modifier = Modifier.fillMaxWidth(),
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        "You'll confirm the exact time directly with the professional in chat once they accept your request.",
+                        "You'll confirm any fine-tuning directly with the professional in chat once they accept your request.",
                         fontSize = 11.sp, color = Color.Gray, lineHeight = 15.sp
                     )
                 }
@@ -3270,13 +3270,13 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
             Spacer(modifier = Modifier.height(16.dp))
             Button(
                 onClick = {
-                    if (defaultAddress != null && isAvailable) {
+                    if (defaultAddress != null && viewModel.selectedSlotId != null) {
                         viewModel.bookingNotes = bookingNotes
                         viewModel.bookingGenderPref = genderPref
                         viewModel.confirmAndBook(service, partner, defaultAddress)
                     }
                 },
-                enabled = defaultAddress != null && isAvailable && bcDate.isNotBlank() && bcTime.isNotBlank(),
+                enabled = defaultAddress != null && viewModel.selectedSlotId != null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("pay_book_action_btn"),
@@ -3574,9 +3574,34 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                     
                     Divider(modifier = Modifier.padding(vertical = 12.dp))
                     
-                    Text("Session Code OTP: ${booking.startOtp}", fontWeight = FontWeight.Bold, color = NikhatRose, fontSize = 16.sp)
-                    Text("Show this OTP code to your stylist to authorize starting the doorstep session safety check.", fontSize = 12.sp, color = Color.Gray)
-                    
+                    // §702 — customer-facing start-OTP: only once the partner has
+                    // accepted (accepted / in_progress family). Source from the DTO,
+                    // else fetch on demand via a "Show code" button.
+                    val otpVisibleStates = setOf("accepted", "assigned", "in_progress", "partner_on_the_way", "arrived", "started")
+                    if (!isPartnerView && booking.status in otpVisibleStates) {
+                        val otp = booking.startOtp.ifBlank { viewModel.detailStartOtp ?: "" }
+                        Card(
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = CardDefaults.cardColors(containerColor = NikhatRose.copy(alpha = 0.08f))
+                        ) {
+                            Column(modifier = Modifier.padding(14.dp)) {
+                                Text(
+                                    "Share this code with your partner when they arrive:",
+                                    fontSize = 12.sp, color = Color.Gray
+                                )
+                                Spacer(modifier = Modifier.height(6.dp))
+                                if (otp.isNotBlank()) {
+                                    Text(otp, fontWeight = FontWeight.Bold, color = NikhatRose, fontSize = 24.sp, letterSpacing = 4.sp)
+                                } else {
+                                    OutlinedButton(onClick = { viewModel.loadStartOtp(booking.id) }) {
+                                        Text("Show code")
+                                    }
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(4.dp))
+                    }
+
                     Divider(modifier = Modifier.padding(vertical = 12.dp))
                     
                     // TIMELINE STATE MACHINE
@@ -4417,7 +4442,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                             Text("Your commercial KYC verify check is clear! You are active for real-time customer requests.", fontSize = 12.sp, color = SuccessGreen, fontWeight = FontWeight.Bold)
                         } else {
                             if (currentRoleKyc == "rejected") {
-                                val reason = activeUser?.kycReason
+                                val reason = viewModel.partnerKycReason ?: activeUser?.kycReason
                                 if (!reason.isNullOrBlank()) {
                                     Text("Reason: $reason", fontSize = 12.sp, color = MaterialTheme.colorScheme.error)
                                     Spacer(modifier = Modifier.height(6.dp))

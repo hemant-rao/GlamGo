@@ -562,6 +562,8 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             val role = repository.activeRole() ?: "customer"
             currentScreen = if (role == "partner") Screen.PartnerDashboard else Screen.CustomerHome
             viewModelScope.launch { runCatching { repository.hydrateForRole(role) } }
+            // §702 — populate the partner KYC rejection reason (Mapper never sets it).
+            if (role == "partner") loadPartnerKyc()
         }
         // §690 — pull the geo gateway config (tile key + feature flags) so the
         // live map can render. Public endpoint; safe before/without login.
@@ -688,6 +690,42 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
     var couponCode by mutableStateOf("")            // unused in connector model; kept for API compat
     var quoteBreakdown by mutableStateOf<QuoteBreakdown?>(null)
 
+    // ── §702 real time-slot picker ─────────────────────────────────────────────
+    var selectedBookingDate by mutableStateOf(java.time.LocalDate.now().toString()) // ISO yyyy-MM-dd
+    var availableSlots by mutableStateOf<List<com.example.data.remote.SlotDto>>(emptyList())
+    var selectedSlotId by mutableStateOf<String?>(null)
+    var slotsLoading by mutableStateOf(false)
+
+    /** Load real availability for a partner+service+date; clears any prior pick. */
+    fun loadSlots(partnerId: String, serviceId: String?, date: String) {
+        selectedBookingDate = date
+        selectedSlotId = null
+        slotsLoading = true
+        viewModelScope.launch {
+            val pid = partnerId.toIntOrNull() ?: 0
+            val sid = serviceId?.toIntOrNull()
+            availableSlots = repository.fetchAvailability(pid, sid, date)
+            slotsLoading = false
+        }
+    }
+
+    /** §702 — customer start-OTP shown on demand on the booking detail. */
+    var detailStartOtp by mutableStateOf<String?>(null)
+    fun loadStartOtp(bookingId: String) {
+        viewModelScope.launch {
+            val id = bookingId.toIntOrNull() ?: return@launch
+            detailStartOtp = repository.fetchStartOtp(id)
+        }
+    }
+
+    /** §702 — partner KYC rejection reason (Mapper never populates kycReason). */
+    var partnerKycReason by mutableStateOf<String?>(null)
+    fun loadPartnerKyc() {
+        viewModelScope.launch {
+            repository.fetchKyc()?.let { partnerKycReason = it.reason }
+        }
+    }
+
     // ── Cart (single-partner, multi-service) ───────────────────────────────────
     val cart = repository.cartFlow.stateIn(
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
@@ -734,7 +772,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             runCatching {
                 val addr = addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull()
-                repository.cartQuote(couponCode, addr?.id)
+                repository.cartQuote(couponCode, addr?.id, selectedSlotId)
                 repository.createBookingFromLastQuote(
                     customerNotes = bookingNotes,
                     genderPreference = bookingGenderPref,
@@ -842,7 +880,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
                 repository.createQuote(
                     partnerId = partner.id,
                     serviceId = service.id,
-                    slotId = null,
+                    slotId = selectedSlotId,
                     addressId = defaultAddr?.id,
                     couponCode = couponCode,
                     useWallet = false,

@@ -343,12 +343,32 @@ class NikhatGlowRepository(context: Context) {
 
     /** Build a single multi-line quote from the whole cart; stores quote_id so
      *  [createBookingFromLastQuote] can place the booking request. */
-    suspend fun cartQuote(couponCode: String?, addressId: Long?) {
+    suspend fun cartQuote(couponCode: String?, addressId: Long?, slotId: String? = null) {
         val resp = api.cartQuote(
-            CartQuoteReq(addressId = addressId?.toInt(), couponCode = couponCode?.ifBlank { null })
+            CartQuoteReq(
+                slotId = slotId?.ifBlank { null },
+                addressId = addressId?.toInt(),
+                couponCode = couponCode?.ifBlank { null },
+            )
         )
         lastQuoteId = resp.quoteId
     }
+
+    /** §702 — real availability slots for the booking-time picker. Null-safe. */
+    suspend fun fetchAvailability(
+        partnerId: Int,
+        serviceId: Int?,
+        date: String,
+    ): List<com.example.data.remote.SlotDto> =
+        runCatching { api.availability(partnerId, serviceId, date).slots }.getOrDefault(emptyList())
+
+    /** §702 — customer fetches the start-OTP on demand once a booking is accepted. */
+    suspend fun fetchStartOtp(id: Int): String? =
+        runCatching { api.startOtp(id).otp }.getOrNull()
+
+    /** §702 — partner KYC status (incl. rejection reason for the trust pass). */
+    suspend fun fetchKyc(): com.example.data.remote.KycStatusResp? =
+        runCatching { api.getKyc() }.getOrNull()
 
     suspend fun refreshFavorites() {
         val wl = api.wishlist()
