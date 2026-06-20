@@ -100,6 +100,7 @@ dependencies {
   implementation(libs.converter.moshi)
   implementation(libs.firebase.ai)
   implementation(libs.firebase.firestore)
+  implementation(libs.firebase.messaging)  // §710 P0-5 — FCM push (see FCM_PAYMENTS_SETUP.md for google-services.json + plugin)
   implementation(libs.kotlinx.coroutines.android)
   implementation(libs.kotlinx.coroutines.core)
   implementation(libs.logging.interceptor)

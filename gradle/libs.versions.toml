@@ -90,6 +90,7 @@ roborazzi-junit-rule = { group = "io.github.takahirom.roborazzi", name = "robora
 firebase-bom = { group = "com.google.firebase", name = "firebase-bom", version.ref = "firebaseBom" }
 firebase-firestore = { group = "com.google.firebase", name = "firebase-firestore" }
 firebase-ai = { group = "com.google.firebase", name = "firebase-ai" }
+firebase-messaging = { group = "com.google.firebase", name = "firebase-messaging" }  # §710 P0-5 FCM push
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }

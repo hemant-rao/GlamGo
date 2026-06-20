@@ -68,13 +68,24 @@ class MainActivity : ComponentActivity() {
             // §703 — pull the admin-controlled app config on launch so feature
             // gates + role-based nav + policy copy reflect the server immediately.
             viewModel.loadAppConfig()
+            // §710 P0-5 — register this device's FCM token (no-op if logged out) +
+            // deep-link a cold-start that came from tapping a push.
+            viewModel.registerFcmToken()
+            intent?.getStringExtra("notif_booking_id")?.let { viewModel.openBookingFromPush(it) }
             if (LocationHelper.hasPermission(this@MainActivity)) {
               viewModel.captureDeviceLocation()
+              if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                permLauncher.launch(arrayOf(Manifest.permission.POST_NOTIFICATIONS))
+              }
             } else {
-              permLauncher.launch(
+              val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU)
+                arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,
+                        Manifest.permission.ACCESS_COARSE_LOCATION,
+                        Manifest.permission.POST_NOTIFICATIONS)
+              else
                 arrayOf(Manifest.permission.ACCESS_FINE_LOCATION,
                         Manifest.permission.ACCESS_COARSE_LOCATION)
-              )
+              permLauncher.launch(perms)
             }
           }
           NikhatGlowMainShell(viewModel = viewModel)

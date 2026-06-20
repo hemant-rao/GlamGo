@@ -745,10 +745,39 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
                     devOtpHint = null
                     currentScreen = if (role == "partner") Screen.PartnerDashboard else Screen.CustomerHome
                     loadNotifications()
+                    registerFcmToken()   // §710 P0-5 — enable background push for this account
                 }
                 .onFailure { authError = friendly(it) }
             authBusy = false
         }
+    }
+
+    // §710 P0-5 — FCM token lifecycle. Best-effort + wrapped, so a not-yet-configured
+    // Firebase (no google-services.json) can never crash auth. registerDevice/
+    // unregisterDevice are authed no-ops when logged out.
+    private var lastFcmToken: String? = null
+
+    fun registerFcmToken() {
+        runCatching {
+            com.google.firebase.messaging.FirebaseMessaging.getInstance().token
+                .addOnSuccessListener { token ->
+                    if (!token.isNullOrBlank()) {
+                        lastFcmToken = token
+                        viewModelScope.launch { runCatching { repository.registerDevice(token) } }
+                    }
+                }
+        }
+    }
+
+    private suspend fun unregisterFcmToken() {
+        val t = lastFcmToken ?: return
+        runCatching { repository.unregisterDevice(t) }
+        lastFcmToken = null
+    }
+
+    /** §710 P0-5 — a tapped push (carrying notif_booking_id) deep-links to that booking. */
+    fun openBookingFromPush(bookingId: String?) {
+        if (!bookingId.isNullOrBlank()) currentScreen = Screen.BookingDetail(bookingId)
     }
 
     /** Go back from the OTP-entry step to the phone/role step. */
@@ -761,6 +790,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
 
     fun logout() {
         viewModelScope.launch {
+            unregisterFcmToken()   // §710 P0-5 — stop pushes to this device before clearing
             runCatching { repository.logout() }
             resetSessionState()
         }
@@ -770,6 +800,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
      *  state (same as logout), then drops back to the login/landing screen. */
     fun deleteAccount(onDone: () -> Unit = {}) {
         viewModelScope.launch {
+            unregisterFcmToken()   // §710 P0-5 — release this device's push registration
             runCatching { repository.deleteAccount() }
                 .onSuccess {
                     notify("Your account has been deleted.")
