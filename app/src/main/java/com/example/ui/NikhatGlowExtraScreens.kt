@@ -15,6 +15,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.ArrowForward
 import androidx.compose.material.icons.filled.Bolt
 import androidx.compose.material.icons.filled.CheckCircle
@@ -1078,14 +1079,14 @@ fun NotificationBell(viewModel: NikhatGlowViewModel) {
         if (unread > 0) {
             BadgedBox(badge = { Badge { Text(if (unread > 99) "99+" else "$unread") } }) {
                 Icon(
-                    androidx.compose.material.icons.Icons.Default.Notifications,
+                    Icons.Default.Notifications,
                     contentDescription = "Notifications ($unread unread)",
                     tint = Color.White
                 )
             }
         } else {
             Icon(
-                androidx.compose.material.icons.Icons.Default.Notifications,
+                Icons.Default.Notifications,
                 contentDescription = "Notifications",
                 tint = Color.White
             )
@@ -1111,7 +1112,7 @@ fun NotificationsScreen(viewModel: NikhatGlowViewModel) {
             verticalAlignment = Alignment.CenterVertically
         ) {
             IconButton(onClick = { if (!viewModel.goBack()) viewModel.currentScreen = Screen.CustomerHome }) {
-                Icon(ArrowBack, contentDescription = "Back", tint = Color.White)
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
             }
             Spacer(modifier = Modifier.width(4.dp))
             Text("Notifications", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
@@ -1121,7 +1122,7 @@ fun NotificationsScreen(viewModel: NikhatGlowViewModel) {
             Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Column(horizontalAlignment = Alignment.CenterHorizontally) {
                     Icon(
-                        androidx.compose.material.icons.Icons.Default.Notifications,
+                        Icons.Default.Notifications,
                         contentDescription = null,
                         tint = Color.White.copy(alpha = 0.4f),
                         modifier = Modifier.size(56.dp)

@@ -3776,6 +3776,7 @@ fun BookingStatusStepper(status: String) {
 fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
     val bookings by viewModel.bookings.collectAsState()
     val activeUser by viewModel.activeUser.collectAsState()
+    val isPartnerView = activeUser?.role == "partner"
     val messages by viewModel.getMessagesForBooking(bookingId).collectAsState(initial = emptyList())
     
     val booking = bookings.firstOrNull { it.id == bookingId }
@@ -3930,7 +3931,6 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                             modifier = Modifier.fillMaxSize(),
                         )
                     }
-                    val isPartnerView = activeUser?.role == "partner"
                     Row(
                         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
                         horizontalArrangement = Arrangement.spacedBy(16.dp),

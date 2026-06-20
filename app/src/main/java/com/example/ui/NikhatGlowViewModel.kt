@@ -924,6 +924,8 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     // ── Partner Availability Engine ──────────────────────────────────────────
+    @get:JvmName("getPartnerActiveVal")
+    @set:JvmName("setPartnerActiveVal")
     var isPartnerActive by mutableStateOf(true)
     var partnerServiceRadiusKm by mutableStateOf(10.0)
     var partnerWorkingHoursRange by mutableStateOf("9:00 AM - 8:00 PM")
