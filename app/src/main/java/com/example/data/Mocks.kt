@@ -72,6 +72,8 @@ data class Partner(
     val kycStatus: String = "not_started",
     val certifications: List<String> = emptyList(),
     val languages: List<String> = emptyList(),
+    // Real service radius (km) — drives the honest "Serves within N km" line.
+    val travelRadiusKm: Double = 0.0,
 )
 
 /**

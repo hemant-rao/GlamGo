@@ -75,6 +75,7 @@ object Mappers {
         kycStatus = d.kycStatus ?: "not_started",
         certifications = d.certifications ?: emptyList(),
         languages = d.languages ?: emptyList(),
+        travelRadiusKm = d.travelRadiusKm ?: 0.0,
     )
 
     /** Build a UserEntity for the active identity. Wallet balance comes from a
