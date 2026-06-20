@@ -86,7 +86,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
             actions = {
                 if (items.isNotEmpty()) {
                     TextButton(onClick = { viewModel.clearCart() }) {
-                        Text("Clear", color = NikhatRose)
+                        Text("Clear", color = NikhatRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -109,7 +109,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                 Button(
                     onClick = { viewModel.currentScreen = Screen.CustomerHome },
                     colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
-                ) { Text("Explore Services") }
+                ) { Text("Explore Services", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             }
             return
         }
@@ -295,7 +295,7 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                         modifier = Modifier.fillMaxWidth().height(50.dp).testTag("send_booking_request_btn"),
                         colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                     ) {
-                        Text(if (placing) "Sending..." else "Send Request", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text(if (placing) "Sending..." else "Send Request", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -518,7 +518,7 @@ fun MyBookingsScreen(viewModel: NikhatGlowViewModel) {
                                         ) {
                                             Icon(Icons.Default.Star, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(12.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Feedback", fontSize = 10.sp, color = NikhatRose, fontWeight = FontWeight.Bold)
+                                            Text("Feedback", fontSize = 10.sp, color = NikhatRose, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                         }
                                     } else if (!isPartner && booking.reviewRating > 0) {
                                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -539,7 +539,7 @@ fun MyBookingsScreen(viewModel: NikhatGlowViewModel) {
                                         ) {
                                             Icon(Icons.Default.Refresh, contentDescription = "Book Again", tint = Color.White, modifier = Modifier.size(12.dp))
                                             Spacer(modifier = Modifier.width(4.dp))
-                                            Text("Book Again", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                                            Text("Book Again", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                         }
                                     }
 
@@ -623,7 +623,7 @@ fun MyBookingsScreen(viewModel: NikhatGlowViewModel) {
                     colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                     modifier = Modifier.testTag("dialog_review_submit_btn")
                 ) {
-                    Text("Submit")
+                    Text("Submit", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                 }
             },
             dismissButton = {
@@ -631,7 +631,7 @@ fun MyBookingsScreen(viewModel: NikhatGlowViewModel) {
                     onClick = { showReviewDialog = false },
                     colors = ButtonDefaults.textButtonColors(contentColor = Color.Gray)
                 ) {
-                    Text("Cancel")
+                    Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                 }
             }
         )
@@ -703,7 +703,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                         Text((activeUser?.kycStatus ?: "not_started").replace("_", " "), fontSize = 12.sp, color = Color.Gray)
                     }
                     TextButton(onClick = { viewModel.currentScreen = Screen.PartnerKyc }) {
-                        Text("Manage", color = NikhatRose)
+                        Text("Manage", color = NikhatRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -720,7 +720,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                         Text(status.replaceFirstChar { it.uppercase() } + tail, fontSize = 12.sp, color = Color.Gray)
                     }
                     TextButton(onClick = { viewModel.currentScreen = Screen.PartnerSubscription }) {
-                        Text("Manage", color = NikhatRose)
+                        Text("Manage", color = NikhatRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -734,7 +734,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                         Text("Working hours, days & leaves", fontSize = 12.sp, color = Color.Gray)
                     }
                     TextButton(onClick = { viewModel.currentScreen = Screen.PartnerAvailability }) {
-                        Text("Manage", color = NikhatRose)
+                        Text("Manage", color = NikhatRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -761,7 +761,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                             )
                         }
                     }) {
-                        Text("Use current", color = NikhatRose)
+                        Text("Use current", color = NikhatRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -775,7 +775,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                         Text("Showcase your work", fontSize = 12.sp, color = Color.Gray)
                     }
                     TextButton(onClick = { viewModel.currentScreen = Screen.PartnerPortfolio }) {
-                        Text("Manage", color = NikhatRose)
+                        Text("Manage", color = NikhatRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -808,7 +808,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                         TextButton(onClick = {
                             clipboard.setText(AnnotatedString(publicCode.uppercase()))
                             Toast.makeText(ctx, "Code copied", Toast.LENGTH_SHORT).show()
-                        }) { Text("Copy", color = NikhatRose) }
+                        }) { Text("Copy", color = NikhatRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                     }
                 }
             }
@@ -830,7 +830,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                             }) {
                                 Icon(Icons.Default.Edit, contentDescription = "Edit", modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Edit", color = NikhatRose, fontWeight = FontWeight.Bold)
+                                Text("Edit", color = NikhatRose, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                         }
                     }
@@ -881,7 +881,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                                     isEditing = false
                                 },
                                 modifier = Modifier.weight(1f)
-                            ) { Text("Cancel") }
+                            ) { Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                             Button(
                                 onClick = {
                                     if (nameState.trim().isEmpty()) {
@@ -903,7 +903,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                                 },
                                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                                 modifier = Modifier.weight(1f)
-                            ) { Text("Save") }
+                            ) { Text("Save", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                         }
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
@@ -943,7 +943,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
             ) {
                 Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Log out", fontWeight = FontWeight.SemiBold)
+                Text("Log out", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
             }
 
             // §704 — Play-Store-required account deletion (subtle, destructive).
@@ -954,7 +954,7 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                 modifier = Modifier.fillMaxWidth().testTag("delete_account_button"),
                 colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
             ) {
-                Text("Delete account", fontSize = 13.sp)
+                Text("Delete account", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
             }
             if (showDeleteAccount) {
                 DeleteAccountDialog(
@@ -1055,7 +1055,7 @@ fun ComplaintDetailScreen(viewModel: NikhatGlowViewModel, complaintId: String) {
                 },
                 enabled = replyText.isNotBlank() && !viewModel.complaintReplyBusy,
                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
-            ) { Text("Send") }
+            ) { Text("Send", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
         }
     }
 }

@@ -769,10 +769,10 @@ fun PartnerPortfolioScreen(viewModel: NikhatGlowViewModel) {
                         uploadId = ""; imageUrl = ""; caption = ""
                         showAdd = false
                     }
-                ) { Text(if (viewModel.portfolioBusy) "Adding…" else "Add", color = NikhatRose) }
+                ) { Text(if (viewModel.portfolioBusy) "Adding…" else "Add", color = NikhatRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             },
             dismissButton = {
-                TextButton(onClick = { showAdd = false }) { Text("Cancel") }
+                TextButton(onClick = { showAdd = false }) { Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             }
         )
     }
@@ -924,7 +924,7 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                         Icon(Icons.Default.Add, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(16.dp))
                         Spacer(modifier = Modifier.width(6.dp))
                         val firstName = partner.name.substringBefore(" ")
-                        Text("Chat with $firstName Pre-Booking", color = NikhatRose, fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                        Text("Chat with $firstName Pre-Booking", color = NikhatRose, fontSize = 12.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
                 Divider(color = Color.Gray.copy(alpha = 0.15f))
@@ -1224,7 +1224,7 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                                         border = BorderStroke(1.dp, NikhatRose),
                                         colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose)
                                     ) {
-                                        Text("ADD", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                                        Text("ADD", fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                     }
                                 }
                             }
@@ -1277,7 +1277,10 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                             text = "View Cart & Book ➔",
                             fontSize = 13.sp,
                             fontWeight = FontWeight.Bold,
-                            color = Color.White
+                            color = Color.White,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = false
                         )
                     }
                 }

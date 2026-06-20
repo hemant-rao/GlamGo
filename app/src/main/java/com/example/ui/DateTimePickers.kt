@@ -32,6 +32,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import java.text.SimpleDateFormat
@@ -112,9 +113,9 @@ fun NikhatDateField(
                 TextButton(onClick = {
                     state.selectedDateMillis?.let { onChange(formatPickedDate(it)) }
                     show = false
-                }) { Text("OK") }
+                }) { Text("OK", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             },
-            dismissButton = { TextButton(onClick = { show = false }) { Text("Cancel") } },
+            dismissButton = { TextButton(onClick = { show = false }) { Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) } },
         ) { DatePicker(state = state) }
     }
 }
@@ -152,11 +153,11 @@ fun NikhatTimeField(
                     Text("Select time", style = MaterialTheme.typography.titleMedium)
                     Box(Modifier.padding(top = 12.dp)) { TimePicker(state = state) }
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { show = false }) { Text("Cancel") }
+                        TextButton(onClick = { show = false }) { Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                         TextButton(onClick = {
                             onChange(formatPickedTime(state.hour, state.minute))
                             show = false
-                        }) { Text("OK") }
+                        }) { Text("OK", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                     }
                 }
             }

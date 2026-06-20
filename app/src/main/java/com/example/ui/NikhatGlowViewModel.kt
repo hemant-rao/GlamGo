@@ -17,6 +17,8 @@ import kotlinx.coroutines.launch
 
 sealed class Screen {
     object CustomerHome : Screen()
+    // Dedicated global search-results screen (the ONE place search lives).
+    data class SearchResults(val query: String = "") : Screen()
     data class CategoryDetail(val category: Category) : Screen()
     data class ServiceDetail(val service: Service) : Screen()
     data class PartnerSelect(val service: Service) : Screen()

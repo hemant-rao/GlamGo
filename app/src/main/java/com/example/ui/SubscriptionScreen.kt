@@ -107,14 +107,14 @@ fun PartnerSubscriptionScreen(viewModel: NikhatGlowViewModel) {
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                     border = BorderStroke(1.dp, NikhatRose),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
-                ) { Text(if (viewModel.subscriptionBusy) "Please wait…" else "Cancel auto-renew") }
+                ) { Text(if (viewModel.subscriptionBusy) "Please wait…" else "Cancel auto-renew", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             } else {
                 Button(
                     onClick = { viewModel.subscribeNow() },
                     enabled = !viewModel.subscriptionBusy,
                     colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                     modifier = Modifier.fillMaxWidth().height(50.dp),
-                ) { Text(if (viewModel.subscriptionBusy) "Please wait…" else "Subscribe ₹$priceRupees/mo", maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                ) { Text(if (viewModel.subscriptionBusy) "Please wait…" else "Subscribe ₹$priceRupees/mo", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             }
 
             // Payment history

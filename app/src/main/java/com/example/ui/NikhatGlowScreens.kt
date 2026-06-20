@@ -152,6 +152,7 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
                 saveableStateHolder.SaveableStateProvider(screen.toString()) {
                 when (screen) {
                     is Screen.CustomerHome -> CustomerHomeScreen(viewModel)
+                    is Screen.SearchResults -> SearchResultsScreen(viewModel, screen.query)
                     is Screen.CategoryDetail -> CategoryDetailScreen(viewModel, screen.category)
                     is Screen.ServiceDetail -> ServiceDetailScreen(viewModel, screen.service)
                     is Screen.PartnerSelect -> PartnerSelectScreen(viewModel, screen.service)
@@ -351,28 +352,12 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
     }
 
     val activeAddress = addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull()
-    var searchPrompt by remember { mutableStateOf("") }
     var minRatingFilter by remember { mutableStateOf(0.0) }
 
-    val q = searchPrompt.trim()
-    // §690 — once the query is >= 3 chars, hit the backend search (partner-filtered
-    // + price range), debounced 300ms; fall back to the local in-memory filter when
-    // the query is short or the call fails (remoteResults stays null).
-    var remoteResults by remember { mutableStateOf<List<Service>?>(null) }
-    LaunchedEffect(q) {
-        remoteResults = if (q.length >= 3) {
-            kotlinx.coroutines.delay(300)
-            viewModel.searchServices(q)
-        } else null
-    }
-    val baseServices = if (q.length >= 3 && remoteResults != null) remoteResults!!
-        else NikhatGlowDataSource.services.filter { service ->
-            // shorter input shows the full list; 3+ chars filters locally as a fallback.
-            q.length < 3 ||
-                service.name.contains(q, ignoreCase = true) ||
-                service.description.contains(q, ignoreCase = true)
-        }
-    val filteredServices = baseServices.filter { it.rating >= minRatingFilter }
+    // Search no longer filters the home list in place — it lives ONLY on the
+    // dedicated SearchResults screen (tap the bar below). Home always shows the
+    // full catalog (still honouring the rating filter chip).
+    val filteredServices = NikhatGlowDataSource.services.filter { it.rating >= minRatingFilter }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
         // TOP Header
@@ -477,22 +462,39 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
                 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // §687 — SEARCH Bar moved to the TOP of the header for immediate
-                // access (was below the welcome tagline).
-                TextField(
-                    value = searchPrompt,
-                    onValueChange = { searchPrompt = it },
-                    placeholder = { Text("Search haircut, facials, massage...") },
-                    leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                // SEARCH bar — a tap-to-open affordance (NOT an in-place filter).
+                // Tapping opens the dedicated SearchResults screen so search lives
+                // in exactly one place and never filters the home page itself.
+                Surface(
+                    onClick = { viewModel.currentScreen = Screen.SearchResults("") },
+                    shape = RoundedCornerShape(12.dp),
+                    color = MaterialTheme.colorScheme.surface,
                     modifier = Modifier
                         .fillMaxWidth()
-                        .clip(RoundedCornerShape(12.dp))
-                        .testTag("home_search_bar"),
-                    colors = TextFieldDefaults.colors(
-                        focusedIndicatorColor = Color.Transparent,
-                        unfocusedIndicatorColor = Color.Transparent
-                    )
-                )
+                        .testTag("home_search_bar")
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Icon(
+                            Icons.Default.Search,
+                            contentDescription = null,
+                            tint = NikhatRose,
+                            modifier = Modifier.size(20.dp)
+                        )
+                        Spacer(modifier = Modifier.width(12.dp))
+                        Text(
+                            text = "Search services & experts",
+                            color = Color.Gray,
+                            fontSize = 14.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -561,7 +563,7 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
                             onClick = { minRatingFilter = 0.0 },
                             colors = ButtonDefaults.textButtonColors(contentColor = Color.White.copy(alpha = 0.6f))
                         ) {
-                            Text("Clear", fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                            Text("Clear", fontSize = 10.sp, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                     }
                 }
@@ -600,7 +602,7 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
                         onClick = { viewModel.currentScreen = Screen.BookingDetail(mostRecent.id) },
                         colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                     ) {
-                        Text("Track", color = Color.Black)
+                        Text("Track", color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -819,13 +821,188 @@ fun CustomerHomeScreen(viewModel: NikhatGlowViewModel) {
     }
 }
 
+/**
+ * The ONE global search screen. The home + marketplace feed no longer filter
+ * themselves in place; tapping the home search bar opens this dedicated screen.
+ * Debounced server-backed service search (reuses viewModel.searchServices), with
+ * a local fallback so results still appear if the call fails.
+ */
+@Composable
+fun SearchResultsScreen(viewModel: NikhatGlowViewModel, initialQuery: String) {
+    var query by remember { mutableStateOf(initialQuery) }
+    var results by remember { mutableStateOf<List<Service>>(emptyList()) }
+    var isLoading by remember { mutableStateOf(false) }
+    val focusRequester = remember { FocusRequester() }
+
+    // Auto-focus the field on entry (robust: ignore the rare race before layout).
+    LaunchedEffect(Unit) {
+        runCatching {
+            delay(150)
+            focusRequester.requestFocus()
+        }
+    }
+
+    val q = query.trim()
+    // Debounced search: >= 2 chars hits the backend (300ms), with a local
+    // catalog filter as a fallback when the call returns null / fails.
+    LaunchedEffect(q) {
+        if (q.length < 2) {
+            results = emptyList()
+            isLoading = false
+            return@LaunchedEffect
+        }
+        isLoading = true
+        delay(300)
+        val remote = viewModel.searchServices(q)
+        results = remote ?: NikhatGlowDataSource.services.filter { service ->
+            service.name.contains(q, ignoreCase = true) ||
+                service.description.contains(q, ignoreCase = true)
+        }
+        isLoading = false
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        // Compact top bar: back arrow + the single search field.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 8.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            IconButton(onClick = { if (!viewModel.goBack()) viewModel.currentScreen = Screen.CustomerHome }) {
+                Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+            }
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                modifier = Modifier
+                    .weight(1f)
+                    .focusRequester(focusRequester)
+                    .testTag("search_results_input"),
+                placeholder = { Text("Search facials, makeup, mehndi…", maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = NikhatRose) },
+                trailingIcon = {
+                    if (query.isNotEmpty()) {
+                        IconButton(
+                            onClick = { query = "" },
+                            modifier = Modifier.testTag("search_results_clear_btn")
+                        ) {
+                            Icon(Icons.Default.Close, contentDescription = "Clear", tint = Color.Gray)
+                        }
+                    }
+                },
+                singleLine = true,
+                maxLines = 1,
+                shape = RoundedCornerShape(24.dp),
+                colors = TextFieldDefaults.colors(
+                    focusedContainerColor = MaterialTheme.colorScheme.surface,
+                    unfocusedContainerColor = MaterialTheme.colorScheme.surface,
+                    focusedIndicatorColor = NikhatRose,
+                    unfocusedIndicatorColor = Color.Gray.copy(alpha = 0.3f)
+                )
+            )
+        }
+
+        when {
+            isLoading -> {
+                Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator(color = NikhatRose, modifier = Modifier.size(28.dp))
+                }
+            }
+            q.length < 2 -> {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(32.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("Search for facials, makeup, mehndi…", color = Color.Gray, textAlign = TextAlign.Center, maxLines = 2)
+                }
+            }
+            results.isEmpty() -> {
+                Column(
+                    modifier = Modifier.fillMaxSize().padding(32.dp).testTag("search_results_empty"),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.Center
+                ) {
+                    Icon(Icons.Default.SearchOff, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Text("No results for \"$q\"", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Try a different service or expert name.", color = Color.Gray, fontSize = 13.sp, textAlign = TextAlign.Center, maxLines = 2)
+                }
+            }
+            else -> {
+                LazyColumn(
+                    modifier = Modifier.fillMaxSize().testTag("search_results_list"),
+                    contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    items(results) { service ->
+                        Card(
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                // Match the home flow: a service tap opens its detail.
+                                .clickable { viewModel.currentScreen = Screen.ServiceDetail(service) }
+                                .testTag("search_result_${service.id}"),
+                            shape = RoundedCornerShape(16.dp),
+                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                        ) {
+                            Row(
+                                modifier = Modifier.padding(12.dp),
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                AsyncImage(
+                                    model = service.imageUrl,
+                                    contentDescription = service.name,
+                                    contentScale = ContentScale.Crop,
+                                    modifier = Modifier
+                                        .size(64.dp)
+                                        .clip(RoundedCornerShape(12.dp))
+                                )
+                                Spacer(modifier = Modifier.width(12.dp))
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(
+                                        text = service.name,
+                                        style = MaterialTheme.typography.titleMedium,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.Star, contentDescription = null, tint = NikhatGold, modifier = Modifier.size(12.dp))
+                                        Spacer(modifier = Modifier.width(2.dp))
+                                        Text("${service.rating}", fontSize = 11.sp, color = Color.Gray, maxLines = 1)
+                                        Text(" · ${service.durationMin} mins", fontSize = 11.sp, color = Color.Gray, maxLines = 1)
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text(
+                                        text = service.priceLabel(),
+                                        style = MaterialTheme.typography.titleSmall,
+                                        color = MaterialTheme.colorScheme.primary,
+                                        maxLines = 1
+                                    )
+                                }
+                                Icon(Icons.Default.ChevronRight, contentDescription = null, tint = Color.Gray)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun GlamGoMarketplaceFeed(viewModel: NikhatGlowViewModel) {
     val favoritePartners by viewModel.favoritePartners.collectAsState()
     val allPartners = NikhatGlowDataSource.partners
     val allServices = NikhatGlowDataSource.services
     
-    var searchQuery by remember { mutableStateOf("") }
+    // Search lives ONLY on the dedicated SearchResults screen now; this feed
+    // keeps just its category filter (no in-place search box).
     var selectedCategoryId by remember { mutableStateOf("All") }
     var showCompareModal by remember { mutableStateOf(false) }
 
@@ -849,16 +1026,7 @@ fun GlamGoMarketplaceFeed(viewModel: NikhatGlowViewModel) {
             partner.servicesOffered.any { svcId -> allServices.any { s -> s.id == svcId && s.categoryId.equals(selectedCategoryId, ignoreCase = true) } }
         }
         
-        val matchesSearch = if (searchQuery.isBlank()) true else {
-            partner.name.contains(searchQuery, ignoreCase = true) ||
-            partner.description.contains(searchQuery, ignoreCase = true) ||
-            partner.servicesOffered.any { svcId -> 
-                val svc = allServices.find { s -> s.id == svcId }
-                svc != null && (svc.name.contains(searchQuery, ignoreCase = true) || svc.description.contains(searchQuery, ignoreCase = true))
-            }
-        }
-        
-        matchesCategory && matchesSearch
+        matchesCategory
     }
     
     Column(
@@ -902,50 +1070,9 @@ fun GlamGoMarketplaceFeed(viewModel: NikhatGlowViewModel) {
                     modifier = Modifier.size(14.dp)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
-                Text("Compare ⚖️", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                Text("Compare ⚖️", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
             }
         }
-
-        // Search Bar Block
-        OutlinedTextField(
-            value = searchQuery,
-            onValueChange = { searchQuery = it },
-            modifier = Modifier
-                .fillMaxWidth()
-                .testTag("marketplace_search_input"),
-            placeholder = { Text("Search treatments, salon names, styles...", color = Color.Gray) },
-            leadingIcon = {
-                Icon(
-                    imageVector = Icons.Default.Search,
-                    contentDescription = "Search icon",
-                    tint = NikhatRose
-                )
-            },
-            trailingIcon = {
-                if (searchQuery.isNotEmpty()) {
-                    IconButton(
-                        onClick = { searchQuery = "" },
-                        modifier = Modifier.testTag("marketplace_search_clear_btn")
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Clear,
-                            contentDescription = "Clear search",
-                            tint = Color.Gray
-                        )
-                    }
-                }
-            },
-            singleLine = true,
-            shape = RoundedCornerShape(24.dp),
-            colors = TextFieldDefaults.colors(
-                focusedContainerColor = MaterialTheme.colorScheme.surface,
-                unfocusedContainerColor = MaterialTheme.colorScheme.surface,
-                focusedIndicatorColor = NikhatRose,
-                unfocusedIndicatorColor = Color.Gray.copy(alpha = 0.3f),
-                focusedTextColor = Color.White,
-                unfocusedTextColor = Color.White
-            )
-        )
 
         // Horizontal Category Row
         Row(
@@ -998,7 +1125,7 @@ fun GlamGoMarketplaceFeed(viewModel: NikhatGlowViewModel) {
                     Icon(Icons.Default.Spa, contentDescription = null, modifier = Modifier.size(32.dp), tint = Color.Gray)
                     Spacer(modifier = Modifier.height(8.dp))
                     Text(
-                        text = if (searchQuery.isNotEmpty() || selectedCategoryId != "All") "No matches found for your search or filters." else "No salons or beauty studios are currently active nearby.",
+                        text = if (selectedCategoryId != "All") "No matches found for the selected category." else "No salons or beauty studios are currently active nearby.",
                         fontWeight = FontWeight.Medium,
                         color = Color.Gray,
                         fontSize = 13.sp
@@ -1012,8 +1139,7 @@ fun GlamGoMarketplaceFeed(viewModel: NikhatGlowViewModel) {
                 // Get this partner's specific services matching category and search queries
                 val partnerServices = allServices.filter { service ->
                     partner.servicesOffered.contains(service.id) &&
-                    (selectedCategoryId == "All" || service.categoryId.equals(selectedCategoryId, ignoreCase = true)) &&
-                    (searchQuery.isBlank() || service.name.contains(searchQuery, ignoreCase = true) || service.description.contains(searchQuery, ignoreCase = true))
+                    (selectedCategoryId == "All" || service.categoryId.equals(selectedCategoryId, ignoreCase = true))
                 }
                 
                 Card(
@@ -1272,7 +1398,7 @@ fun PartnerComparisonModal(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                             border = BorderStroke(1.dp, if (partner1 != null) NikhatRose else Color.Gray.copy(alpha = 0.5f))
                         ) {
-                            Text(partner1?.name ?: "Select Slot 1 👤", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(partner1?.name ?: "Select Slot 1 👤", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                         DropdownMenu(
                             expanded = p1Expanded,
@@ -1299,7 +1425,7 @@ fun PartnerComparisonModal(
                             colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
                             border = BorderStroke(1.dp, if (partner2 != null) NikhatRose else Color.Gray.copy(alpha = 0.5f))
                         ) {
-                            Text(partner2?.name ?: "Select Slot 2 👤", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(partner2?.name ?: "Select Slot 2 👤", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                         DropdownMenu(
                             expanded = p2Expanded,
@@ -1431,7 +1557,7 @@ fun PartnerComparisonModal(
                 onClick = onDismiss,
                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
             ) {
-                Text("Close", color = Color.White)
+                Text("Close", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
             }
         },
         containerColor = DeepPlum
@@ -1954,7 +2080,7 @@ fun BeautyShowcaseSection(viewModel: NikhatGlowViewModel) {
                             .testTag("showcase_book_button"),
                         shape = RoundedCornerShape(12.dp)
                     ) {
-                        Text("Book Again", color = Color.Black, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("Book Again", color = Color.Black, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -2501,7 +2627,7 @@ fun CategoryDetailScreen(viewModel: NikhatGlowViewModel, category: Category) {
                                     onClick = { viewModel.currentScreen = Screen.ServiceDetail(service) },
                                     colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                                 ) {
-                                    Text("Add", color = Color.Black)
+                                    Text("Add", color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                 }
                             }
                         }
@@ -2585,7 +2711,7 @@ fun ServiceDetailScreen(viewModel: NikhatGlowViewModel, service: Service) {
                     modifier = Modifier.testTag("select_partner_btn"),
                     shape = RoundedCornerShape(12.dp)
                 ) {
-                    Text("Choose Partner", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text("Choose Partner", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                 }
             }
 
@@ -2606,7 +2732,7 @@ fun ServiceDetailScreen(viewModel: NikhatGlowViewModel, service: Service) {
                 ) {
                     Icon(Icons.Default.FlashOn, contentDescription = null, modifier = Modifier.size(18.dp))
                     Spacer(modifier = Modifier.width(8.dp))
-                    Text("Book any available expert", fontWeight = FontWeight.Bold, maxLines = 1)
+                    Text("Book any available expert", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                 }
                 if (showOpen) {
                     OpenBookingDialog(viewModel, service, openAddresses, openDeviceLoc) { showOpen = false }
@@ -2736,9 +2862,9 @@ private fun OpenBookingDialog(
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
-            ) { Text("Send request") }
+            ) { Text("Send request", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) } },
     )
 }
 
@@ -3074,7 +3200,7 @@ fun PartnerSelectScreen(viewModel: NikhatGlowViewModel, service: Service) {
                             ) {
                                 Icon(Icons.Default.Chat, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Chat", color = NikhatRose, fontSize = 12.sp)
+                                Text("Chat", color = NikhatRose, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
 
                             OutlinedButton(
@@ -3090,7 +3216,7 @@ fun PartnerSelectScreen(viewModel: NikhatGlowViewModel, service: Service) {
                             ) {
                                 Icon(Icons.Default.ShoppingCart, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(6.dp))
-                                Text("Add", color = NikhatRose, fontSize = 12.sp)
+                                Text("Add", color = NikhatRose, fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
 
                             Button(
@@ -3104,7 +3230,7 @@ fun PartnerSelectScreen(viewModel: NikhatGlowViewModel, service: Service) {
                                     .testTag("book_button_${partner.id}"),
                                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                             ) {
-                                Text("Book", fontSize = 12.sp)
+                                Text("Book", fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                         }
                     }
@@ -3219,7 +3345,7 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                     ) {
                         Icon(Icons.Default.AddLocation, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Add New Custom Address")
+                        Text("Add New Custom Address", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -3488,7 +3614,7 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                     ) {
                         Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Use current location")
+                        Text("Use current location", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
 
                     // §687 — search-as-you-type (suggestions appear after 3 letters).
@@ -3497,6 +3623,7 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                         onValueChange = { addrQuery = it },
                         label = { Text("Search address") },
                         leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                        singleLine = true,
                         modifier = Modifier.fillMaxWidth()
                     )
                     addrSuggestions.take(5).forEach { sug ->
@@ -3545,7 +3672,7 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                     
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
                         TextButton(onClick = { showNewAddressDialog = false }) {
-                            Text("Cancel")
+                            Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                         Button(
                             onClick = {
@@ -3555,7 +3682,7 @@ fun BookingConfirmScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                                 }
                             }
                         ) {
-                            Text("Add Address")
+                            Text("Add Address", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                     }
                 }
@@ -3715,7 +3842,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
         Column(modifier = Modifier.fillMaxSize(), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.Center) {
             Text("Booking Not Found")
             Button(onClick = { viewModel.currentScreen = Screen.CustomerHome }) {
-                Text("Go Home")
+                Text("Go Home", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
             }
         }
         return
@@ -3869,7 +3996,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                                     Text(otp, fontWeight = FontWeight.Bold, color = NikhatRose, fontSize = 24.sp, letterSpacing = 4.sp)
                                 } else {
                                     OutlinedButton(onClick = { viewModel.loadStartOtp(booking.id) }) {
-                                        Text("Show code")
+                                        Text("Show code", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                     }
                                 }
                             }
@@ -3910,7 +4037,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                         ) {
                             Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Call ${booking.counterpartyName.ifBlank { "now" }}")
+                            Text("Call ${booking.counterpartyName.ifBlank { "now" }}", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                     }
 
@@ -3929,7 +4056,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                         ) {
                             Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(18.dp))
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text(if (talkSent) "Request sent" else "Request to talk")
+                            Text(if (talkSent) "Request sent" else "Request to talk", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                         Text("Chat is closed after a booking. Send a request and the other person can accept.",
                             fontSize = 11.sp, color = Color.Gray, modifier = Modifier.padding(top = 4.dp))
@@ -3966,7 +4093,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                             ) {
                                 Icon(Icons.Default.SwapHoriz, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Change Partner")
+                                Text("Change Partner", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                             if (showChange) {
                                 val ctx = LocalContext.current
@@ -3984,9 +4111,9 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                                                 }
                                             },
                                             colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
-                                        ) { Text("Yes, change") }
+                                        ) { Text("Yes, change", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                                     },
-                                    dismissButton = { TextButton(onClick = { showChange = false }) { Text("Keep partner") } },
+                                    dismissButton = { TextButton(onClick = { showChange = false }) { Text("Keep partner", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) } },
                                 )
                             }
                         }
@@ -4005,7 +4132,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                             ) {
                                 Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Confirm visit")
+                                Text("Confirm visit", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                             Text(
                                 "For your safety, please speak with your professional first, then confirm. They can only set out after you confirm.",
@@ -4025,7 +4152,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                             ) {
                                 Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("SOS — I need help")
+                                Text("SOS — I need help", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                         }
 
@@ -4051,7 +4178,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                             ) {
                                 Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Emergency — Call $emNum")
+                                Text("Emergency — Call $emNum", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                             Text(
                                 "Calls the police / women helpline. Women helpline: ${viewModel.womenHelpline()}.",
@@ -4069,7 +4196,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                             ) {
                                 Icon(Icons.Default.Warning, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("I feel unsafe — cancel & leave")
+                                Text("I feel unsafe — cancel & leave", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                             if (showUnsafe) {
                                 AlertDialog(
@@ -4080,9 +4207,9 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                                         Button(
                                             onClick = { viewModel.cancelBookingUnsafe(booking.id); showUnsafe = false },
                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                        ) { Text("Cancel now") }
+                                        ) { Text("Cancel now", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                                     },
-                                    dismissButton = { TextButton(onClick = { showUnsafe = false }) { Text("Stay") } },
+                                    dismissButton = { TextButton(onClick = { showUnsafe = false }) { Text("Stay", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) } },
                                 )
                             }
 
@@ -4096,7 +4223,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                                 ) {
                                     Icon(Icons.Default.Block, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Block & report this professional", color = Color.Gray)
+                                    Text("Block & report this professional", color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                 }
                                 if (showBlock) {
                                     AlertDialog(
@@ -4107,9 +4234,9 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                                             Button(
                                                 onClick = { viewModel.blockPartner(booking.partnerId) { showBlock = false } },
                                                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                                            ) { Text("Block & report") }
+                                            ) { Text("Block & report", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                                         },
-                                        dismissButton = { TextButton(onClick = { showBlock = false }) { Text("Cancel") } },
+                                        dismissButton = { TextButton(onClick = { showBlock = false }) { Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) } },
                                     )
                                 }
                             }
@@ -4130,7 +4257,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                             ) {
                                 Icon(Icons.Default.EventNote, contentDescription = null, modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Reschedule")
+                                Text("Reschedule", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                             if (showReschedule) {
                                 RescheduleDialog(
@@ -4155,7 +4282,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                             ) {
                                 Icon(Icons.Default.Delete, contentDescription = null, modifier = Modifier.size(18.dp), tint = Color.White)
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("Cancel Appointment", color = Color.White, fontWeight = FontWeight.Bold)
+                                Text("Cancel Appointment", color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                             
                             if (showCancelDialog) {
@@ -4218,7 +4345,8 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                                                             text = selectedReason.ifBlank { "Select Cancellation Reason ▾" },
                                                             fontSize = 12.sp,
                                                             maxLines = 1,
-                                                            overflow = TextOverflow.Ellipsis
+                                                            overflow = TextOverflow.Ellipsis,
+                                                            softWrap = false
                                                         )
                                                     }
                                                 }
@@ -4269,7 +4397,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                                             modifier = Modifier.testTag("confirm_cancel_booking_btn")
                                         ) {
-                                            Text("Cancel Booking 🔕", color = Color.White, fontWeight = FontWeight.Bold)
+                                            Text("Cancel Booking 🔕", color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                         }
                                     },
                                     dismissButton = {
@@ -4277,7 +4405,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                                             onClick = { showCancelDialog = false },
                                             modifier = Modifier.testTag("dismiss_cancel_booking_btn")
                                         ) {
-                                            Text("Keep Appointment", color = Color.White)
+                                            Text("Keep Appointment", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                         }
                                     },
                                     containerColor = DeepPlum
@@ -4385,7 +4513,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                                     colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                                     modifier = Modifier.align(Alignment.End).testTag("submit_triple_review_btn")
                                 ) {
-                                    Text("Submit Verified Review")
+                                    Text("Submit Verified Review", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                 }
                             }
                         }
@@ -4413,7 +4541,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                         ) {
                             Icon(Icons.Outlined.Report, contentDescription = null)
                             Spacer(modifier = Modifier.width(8.dp))
-                            Text("Raise Complaint / Help Ticket")
+                            Text("Raise Complaint / Help Ticket", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                     }
                     
@@ -4582,7 +4710,7 @@ fun ComplaintsListScreen(viewModel: NikhatGlowViewModel) {
                     onClick = { showForm = !showForm },
                     colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                 ) {
-                    Text(if (showForm) "View Tickets" else "New Ticket", color = Color.Black)
+                    Text(if (showForm) "View Tickets" else "New Ticket", color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                 }
             }
             
@@ -4618,7 +4746,7 @@ fun ComplaintsListScreen(viewModel: NikhatGlowViewModel) {
                             colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                             modifier = Modifier.align(Alignment.End)
                         ) {
-                            Text("File Formal Ticket")
+                            Text("File Formal Ticket", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                     }
                 }
@@ -4756,9 +4884,9 @@ fun RescheduleDialog(
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                 modifier = Modifier.testTag("confirm_reschedule_btn"),
-            ) { Text(if (placing) "Rescheduling…" else "Confirm", color = Color.White) }
+            ) { Text(if (placing) "Rescheduling…" else "Confirm", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
         },
-        dismissButton = { TextButton(onClick = onDismiss, enabled = !placing) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss, enabled = !placing) { Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) } },
     )
 }
 
@@ -4841,9 +4969,9 @@ fun TransferBookingDialog(viewModel: NikhatGlowViewModel, bookingId: String, onD
                     }
                 },
                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
-            ) { Text("Transfer") }
+            ) { Text("Transfer", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
         },
-        dismissButton = { TextButton(onClick = { onDismiss() }) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = { onDismiss() }) { Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) } },
     )
 }
 
@@ -4927,11 +5055,11 @@ fun PartnerOffersScreen(viewModel: NikhatGlowViewModel) {
                                     },
                                     modifier = Modifier.weight(1f),
                                     colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
-                                ) { Text("Claim Job") }
+                                ) { Text("Claim Job", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                                 OutlinedButton(
                                     onClick = { viewModel.declineOffer(offer.offerId) },
                                     modifier = Modifier.weight(1f),
-                                ) { Text("Dismiss") }
+                                ) { Text("Dismiss", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                             }
                         }
                     }
@@ -5118,7 +5246,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                                 ) {
                                     Text(
                                         if (currentRoleKyc == "rejected") "Re-submit KYC" else "Start KYC",
-                                        maxLines = 1, overflow = TextOverflow.Ellipsis
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false
                                     )
                                 }
                             }
@@ -5250,7 +5378,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                             onClick = { showHoursPicker = true },
                             colors = ButtonDefaults.textButtonColors(contentColor = NikhatRose)
                         ) {
-                            Text("Configure")
+                            Text("Configure", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                         
                         if (showHoursPicker) {
@@ -5276,14 +5404,14 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                                                     contentColor = if (viewModel.partnerWorkingHoursRange == shift) Color.White else MaterialTheme.colorScheme.onSurfaceVariant
                                                 )
                                             ) {
-                                                Text(shift)
+                                                Text(shift, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                             }
                                         }
                                     }
                                 },
                                 confirmButton = {
                                     TextButton(onClick = { showHoursPicker = false }) {
-                                        Text("Close")
+                                        Text("Close", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                     }
                                 }
                             )
@@ -5378,7 +5506,8 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                             color = if (subIsActive) Color.White else Color.Black,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
-                            overflow = TextOverflow.Ellipsis
+                            overflow = TextOverflow.Ellipsis,
+                            softWrap = false
                         )
                     }
                 }
@@ -5501,7 +5630,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                             colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                             modifier = Modifier.fillMaxWidth().testTag("salon_branding_save_btn")
                         ) {
-                            Text("Save Studio Details", fontWeight = FontWeight.Bold, color = Color.Black)
+                            Text("Save Studio Details", fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                         
                         Spacer(modifier = Modifier.height(4.dp))
@@ -5609,7 +5738,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                             colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
                             modifier = Modifier.fillMaxWidth().testTag("custom_svc_add_btn")
                         ) {
-                            Text("Add Service", fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("Add Service", fontWeight = FontWeight.Bold, color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                         
                         Spacer(modifier = Modifier.height(6.dp))
@@ -5619,7 +5748,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
                             modifier = Modifier.fillMaxWidth().testTag("standard_services_btn")
                         ) {
-                            Text("Manage Catalog", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text("Manage Catalog", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                     }
                 }
@@ -5632,13 +5761,13 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                     modifier = Modifier.weight(1f),
                     border = BorderStroke(1.dp, NikhatRose),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
-                ) { Text("Earnings", fontSize = 13.sp) }
+                ) { Text("Earnings", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                 OutlinedButton(
                     onClick = { viewModel.currentScreen = Screen.PartnerAnalytics },
                     modifier = Modifier.weight(1f),
                     border = BorderStroke(1.dp, NikhatRose),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
-                ) { Text("Analytics", fontSize = 13.sp) }
+                ) { Text("Analytics", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             }
             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(
@@ -5646,13 +5775,13 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                     modifier = Modifier.weight(1f),
                     border = BorderStroke(1.dp, NikhatRose),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
-                ) { Text("Availability", fontSize = 13.sp) }
+                ) { Text("Availability", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                 OutlinedButton(
                     onClick = { viewModel.currentScreen = Screen.PartnerPortfolio },
                     modifier = Modifier.weight(1f),
                     border = BorderStroke(1.dp, NikhatRose),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
-                ) { Text("Portfolio", fontSize = 13.sp) }
+                ) { Text("Portfolio", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             }
 
             // §691 — Rescue Board: jobs other partners (or customers) put up for
@@ -5669,6 +5798,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                     if (openOffers.isNotEmpty()) "Rescue Board — ${openOffers.size} job(s) to claim"
                     else "Rescue Board — claim nearby jobs",
                     color = Color.Black, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false,
                 )
             }
 
@@ -5765,7 +5895,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                                             modifier = Modifier.fillMaxWidth().testTag("arrive_location_btn"),
                                             colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
                                         ) {
-                                            Text("Mark Arrived at Residence")
+                                            Text("Mark Arrived at Residence", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                         }
                                     } else if (job.status == "arrived") {
                                         var codeInserted by remember { mutableStateOf("") }
@@ -5774,6 +5904,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                                                 value = codeInserted,
                                                 onValueChange = { codeInserted = it },
                                                 placeholder = { Text("Insert client sequence OTP to start") },
+                                                singleLine = true,
                                                 modifier = Modifier.fillMaxWidth().testTag("verify_otp_field")
                                             )
                                             Button(
@@ -5782,7 +5913,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                                                 modifier = Modifier.fillMaxWidth().testTag("verify_otp_start_btn"),
                                                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                                             ) {
-                                                Text("Verify & Start Deep Cleansing", color = Color.Black)
+                                                Text("Verify & Start Deep Cleansing", color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                             }
                                         }
                                     } else if (job.status == "started") {
@@ -5791,7 +5922,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                                             modifier = Modifier.fillMaxWidth().testTag("complete_service_btn"),
                                             colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen)
                                         ) {
-                                            Text("Mark Job Completed & Sanitized")
+                                            Text("Mark Job Completed & Sanitized", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                         }
                                     }
                                     
@@ -5799,7 +5930,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                                         onClick = { viewModel.currentScreen = Screen.BookingDetail(job.id) },
                                         colors = ButtonDefaults.buttonColors(containerColor = Color.Gray)
                                     ) {
-                                        Text("Chat Logistics")
+                                        Text("Chat Logistics", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                     }
                                 }
 
@@ -5929,7 +6060,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                                 ) {
                                     Icon(Icons.Default.Chat, contentDescription = null, modifier = Modifier.size(16.dp))
                                     Spacer(modifier = Modifier.width(6.dp))
-                                    Text("Open Chat", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text("Open Chat", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                 }
                             }
                         }
@@ -6150,7 +6281,7 @@ fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
             ) {
                 Text(
                     if (submitting) "Submitting…" else "Submit KYC",
-                    maxLines = 1, overflow = TextOverflow.Ellipsis
+                    maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false
                 )
             }
 
@@ -6188,7 +6319,7 @@ private fun KycPhotoCapture(
                 ) {
                     Icon(Icons.Default.CameraAlt, contentDescription = null, modifier = Modifier.size(16.dp))
                     Spacer(modifier = Modifier.width(6.dp))
-                    Text(captureText, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(captureText, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                 }
             } else {
                 Image(
@@ -6205,7 +6336,7 @@ private fun KycPhotoCapture(
                     Spacer(modifier = Modifier.width(6.dp))
                     Text("Captured", color = SuccessGreen, fontSize = 12.sp, modifier = Modifier.weight(1f))
                     TextButton(onClick = onRetake) {
-                        Text("Retake", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        Text("Retake", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -6258,7 +6389,7 @@ fun PartnerServicesScreen(viewModel: NikhatGlowViewModel) {
                                 Text("Create completely custom service", fontWeight = FontWeight.Bold, color = NikhatRose)
                             }
                             TextButton(onClick = { showAddForm = !showAddForm }) {
-                                Text(if (showAddForm) "Hide Form" else "Open Form", color = Color.White, fontWeight = FontWeight.Bold)
+                                Text(if (showAddForm) "Hide Form" else "Open Form", color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                         }
                         
@@ -6360,7 +6491,7 @@ fun PartnerServicesScreen(viewModel: NikhatGlowViewModel) {
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                             ) {
-                                Text("Add Service", fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text("Add Service", fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                         }
                     }
@@ -6417,9 +6548,9 @@ fun PartnerServicesScreen(viewModel: NikhatGlowViewModel) {
                                                     showDeleteConfirm = false
                                                 },
                                                 colors = ButtonDefaults.buttonColors(containerColor = Color(0xFFD32F2F)),
-                                            ) { Text("Remove") }
+                                            ) { Text("Remove", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                                         },
-                                        dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel") } },
+                                        dismissButton = { TextButton(onClick = { showDeleteConfirm = false }) { Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) } },
                                     )
                                 }
                             }
@@ -6466,7 +6597,7 @@ fun PartnerServicesScreen(viewModel: NikhatGlowViewModel) {
                             modifier = Modifier.fillMaxWidth().testTag("save_service_${service.id}"),
                             colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                         ) {
-                            Text(if (activeSetting != null) "Save changes" else "List this service", color = Color.White)
+                            Text(if (activeSetting != null) "Save changes" else "List this service", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                     }
                 }
@@ -6689,7 +6820,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                                 Icon(Icons.Default.Edit, contentDescription = "Edit",
                                     modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Edit", fontWeight = FontWeight.Bold)
+                                Text("Edit", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                         }
                     }
@@ -6753,7 +6884,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                                 modifier = Modifier.weight(1f),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text("Cancel")
+                                Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                             Button(
                                 onClick = {
@@ -6775,7 +6906,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                                     .testTag("profile_save_btn"),
                                 shape = RoundedCornerShape(12.dp)
                             ) {
-                                Text("Save", fontWeight = FontWeight.Bold)
+                                Text("Save", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                         }
                     } else {
@@ -6851,7 +6982,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                             ) {
                                 Icon(Icons.Default.Edit, contentDescription = "Edit Beauty Profile", modifier = Modifier.size(18.dp))
                                 Spacer(modifier = Modifier.width(4.dp))
-                                Text("Edit", fontWeight = FontWeight.Bold)
+                                Text("Edit", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                         }
                     }
@@ -6912,7 +7043,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                                     modifier = Modifier.weight(1f),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text("Discard")
+                                    Text("Discard", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                 }
                                 Button(
                                     onClick = {
@@ -6924,7 +7055,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                                     modifier = Modifier.weight(1.5f).testTag("beauty_profile_save_btn"),
                                     shape = RoundedCornerShape(12.dp)
                                 ) {
-                                    Text("Save Beauty Profile", fontWeight = FontWeight.Bold)
+                                    Text("Save Beauty Profile", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                 }
                             }
                         }
@@ -7015,14 +7146,14 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, NikhatRose),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
-                ) { Text("Dashboard", fontWeight = FontWeight.SemiBold) }
+                ) { Text("Dashboard", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                 OutlinedButton(
                     onClick = { viewModel.currentScreen = Screen.Favourites },
                     modifier = Modifier.weight(1f),
                     shape = RoundedCornerShape(12.dp),
                     border = BorderStroke(1.dp, NikhatRose),
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
-                ) { Text("Favourites", fontWeight = FontWeight.SemiBold) }
+                ) { Text("Favourites", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             }
 
             // Favorite Partners section
@@ -7118,7 +7249,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                                 ) {
                                     Icon(Icons.Default.Favorite, contentDescription = null, modifier = Modifier.size(12.dp), tint = Color.Black)
                                     Spacer(modifier = Modifier.width(4.dp))
-                                    Text("Saved (Remove)", fontSize = 11.sp, color = Color.Black)
+                                    Text("Saved (Remove)", fontSize = 11.sp, color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                 }
                             }
                         }
@@ -7297,7 +7428,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                                 onClick = { viewModel.currentScreen = Screen.ServiceBookingForm },
                                 colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                             ) {
-                                Text("Book a Treatment Now", color = Color.Black)
+                                Text("Book a Treatment Now", color = Color.Black, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                         }
                     }
@@ -7394,7 +7525,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
         ) {
             Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(modifier = Modifier.width(8.dp))
-            Text("Log out", fontWeight = FontWeight.SemiBold)
+            Text("Log out", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
         }
 
         // §704 — Play-Store-required account deletion (subtle, destructive).
@@ -7408,7 +7539,7 @@ fun CustomerProfileScreen(viewModel: NikhatGlowViewModel) {
                 .testTag("delete_account_button"),
             colors = ButtonDefaults.textButtonColors(contentColor = MaterialTheme.colorScheme.error),
         ) {
-            Text("Delete account", fontSize = 13.sp)
+            Text("Delete account", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
         }
         if (showDeleteAccount) {
             DeleteAccountDialog(
@@ -7432,9 +7563,9 @@ fun DeleteAccountDialog(onConfirm: () -> Unit, onDismiss: () -> Unit) {
                 onClick = onConfirm,
                 colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.testTag("confirm_delete_account_btn"),
-            ) { Text("Delete", color = Color.White) }
+            ) { Text("Delete", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
         },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) } },
     )
 }
 
@@ -8064,7 +8195,10 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                         text = "CONFIRM & SECURE BOOKING",
                         style = MaterialTheme.typography.titleMedium,
                         fontWeight = FontWeight.Bold,
-                        color = Color.White
+                        color = Color.White,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis,
+                        softWrap = false
                     )
                 }
             }
@@ -8084,7 +8218,7 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                         colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.primary),
                         modifier = Modifier.fillMaxWidth().testTag("modal_view_bookings_btn")
                     ) {
-                        Text("VIEW MY BOOKINGS", fontWeight = FontWeight.Bold)
+                        Text("VIEW MY BOOKINGS", fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 },
                 dismissButton = {
@@ -8100,7 +8234,7 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                         shape = RoundedCornerShape(12.dp),
                         modifier = Modifier.fillMaxWidth().padding(top = 8.dp).testTag("modal_close_btn")
                     ) {
-                        Text("BOOK ANOTHER TREATMENT", color = MaterialTheme.colorScheme.primary)
+                        Text("BOOK ANOTHER TREATMENT", color = MaterialTheme.colorScheme.primary, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 },
                 title = {

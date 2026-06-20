@@ -180,6 +180,9 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                             Text(
                                 if (!viewModel.otpSent) "Send OTP" else "Verify & Continue",
                                 fontWeight = FontWeight.SemiBold,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false,
                             )
                         }
                     }
@@ -199,7 +202,8 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                                 fontWeight = FontWeight.SemiBold,
                                 fontSize = 14.sp,
                                 maxLines = 1,
-                                overflow = TextOverflow.Ellipsis
+                                overflow = TextOverflow.Ellipsis,
+                                softWrap = false,
                             )
                         }
                     }
@@ -209,11 +213,11 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                             onClick = { viewModel.sendOtp(phone, role) },
                             enabled = !viewModel.authBusy,
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Resend OTP", color = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        ) { Text("Resend OTP", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                         TextButton(
                             onClick = { viewModel.resetOtpFlow() },
                             modifier = Modifier.fillMaxWidth(),
-                        ) { Text("Change number", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis) }
+                        ) { Text("Change number", color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                     }
                 }
             }
@@ -242,7 +246,7 @@ private fun RolePill(
             modifier = modifier.height(46.dp),
             shape = RoundedCornerShape(12.dp),
             colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
-        ) { Text(label, fontWeight = FontWeight.SemiBold) }
+        ) { Text(label, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
     } else {
         OutlinedButton(
             onClick = onClick,
@@ -250,6 +254,6 @@ private fun RolePill(
             shape = RoundedCornerShape(12.dp),
             border = BorderStroke(1.dp, NikhatRose),
             colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
-        ) { Text(label, fontWeight = FontWeight.SemiBold) }
+        ) { Text(label, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
     }
 }
