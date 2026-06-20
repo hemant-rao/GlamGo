@@ -5341,6 +5341,10 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                     Spacer(modifier = Modifier.height(12.dp))
                 }
 
+                // §709 — declutter: show the KYC card ONLY when action is needed.
+                // Once approved it leaves the daily work inbox (the conditional
+                // "not visible" banner above still surfaces a lapsed subscription).
+                if (!kycApprovedNow) {
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         // §701 — explicit, clear KYC state strings.
@@ -5392,9 +5396,10 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                         }
                     }
                 }
+                }   // §709 — close if (!kycApprovedNow)
             }
         }
-        
+
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
             // Live Growth & Recharts-style Analytics Widget (Volume & Payout trends)
             MonthlyGrowthLineChart(bookings = bookings)
@@ -5467,7 +5472,23 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                     }
                     
                     Divider(color = Color.Gray.copy(alpha = 0.15f))
-                    
+
+                    // §709 — coverage radius + shift hours are one-time SETUP, not
+                    // daily work: tuck them behind a collapsible toggle so the
+                    // dashboard reads as a work inbox. Collapsed by default; the
+                    // online/away toggle above (daily-operational) stays visible.
+                    var showCoverageSetup by remember { mutableStateOf(false) }
+                    TextButton(
+                        onClick = { showCoverageSetup = !showCoverageSetup },
+                        colors = ButtonDefaults.textButtonColors(contentColor = NikhatRose),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Text(
+                            if (showCoverageSetup) "Hide coverage & hours ▴" else "Coverage & working hours ▾",
+                            maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false
+                        )
+                    }
+                    if (showCoverageSetup) {
                     // Service Radius Control Slider
                     Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
                         Row(
@@ -5556,6 +5577,7 @@ fun PartnerDashboardScreen(viewModel: NikhatGlowViewModel) {
                             )
                         }
                     }
+                    }   // §709 — close if (showCoverageSetup)
                 }
             }
 
