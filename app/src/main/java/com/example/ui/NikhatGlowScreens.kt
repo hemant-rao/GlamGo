@@ -49,6 +49,7 @@ import com.example.data.*
 import com.example.data.remote.CartItemDto
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 
 @Composable
@@ -3507,6 +3508,16 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
     // §703 — pull a fresh booking status whenever this screen opens.
     LaunchedEffect(bookingId) { viewModel.loadBookingDetail(bookingId) }
 
+    // Poll the chat thread while this screen is open so incoming counterparty
+    // messages appear without us having to send or reopen (only location streams
+    // over WS). Auto-cancels when leaving the screen.
+    LaunchedEffect(bookingId) {
+        while (isActive) {
+            kotlinx.coroutines.delay(5000)
+            viewModel.refreshThread(bookingId)
+        }
+    }
+
     // §691/§703 — while the job is being reassigned, poll the dedicated status
     // endpoint so the screen flips to the new partner the moment someone claims it.
     // Bounded (~10 tries × 4s); the LaunchedEffect auto-cancels on leaving the screen.
@@ -4185,7 +4196,8 @@ fun StateChip(status: String) {
 @Composable
 fun ComplaintsListScreen(viewModel: NikhatGlowViewModel) {
     val complaints by viewModel.complaints.collectAsState()
-    
+    LaunchedEffect(Unit) { viewModel.refreshComplaints() }
+
     var ticketSubject by remember { mutableStateOf("") }
     var ticketDesc by remember { mutableStateOf("") }
     var showForm by remember { mutableStateOf(false) }
@@ -4236,7 +4248,9 @@ fun ComplaintsListScreen(viewModel: NikhatGlowViewModel) {
                         Button(
                             onClick = {
                                 if (ticketSubject.isNotBlank() && ticketDesc.isNotBlank()) {
-                                    viewModel.submitComplaint("GG-" + (1000..9999).random(), ticketSubject, ticketDesc)
+                                    // No booking context on this standalone ticket form → pass null
+                                    // so the complaint isn't mis-associated with a fake booking id.
+                                    viewModel.submitComplaint(null, ticketSubject, ticketDesc)
                                     ticketSubject = ""
                                     ticketDesc = ""
                                     showForm = false
@@ -7210,102 +7224,6 @@ fun ServiceBookingFormScreen(viewModel: NikhatGlowViewModel) {
                 }
             }
 
-            // Section 6: Customer Testimonials
-            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                Text(
-                    text = "6. CLIENT TESTIMONIALS & TRUST",
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.primary
-                )
-                
-                LazyRow(
-                    horizontalArrangement = Arrangement.spacedBy(14.dp),
-                    contentPadding = PaddingValues(bottom = 8.dp),
-                    modifier = Modifier.fillMaxWidth()
-                ) {
-                    val testimonialList = listOf(
-                        Testimonial("Anya Sharma", 5, "The bridal glow treatment completely transformed my skin! Super relaxing and exceptional staff.", "Skin Care Treatment", "Yesterday"),
-                        Testimonial("Nisha Patel", 5, "Fantastic therapeutic hair spa. My hair feels incredibly soft, and the stylist was extremely professional.", "Hair Care Treatment", "3 days ago"),
-                        Testimonial("Priya Sen", 4, "Flawless party makeup. It lasted all night through the celebration without any smudges! Highly recommend.", "Professional Makeup", "1 week ago")
-                    )
-                    items(testimonialList) { review ->
-                        Card(
-                            modifier = Modifier
-                                .width(280.dp)
-                                .testTag("testimonial_card_${review.name.lowercase().replace(" ", "_")}"),
-                            shape = RoundedCornerShape(16.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Row(
-                                    modifier = Modifier.fillMaxWidth(),
-                                    horizontalArrangement = Arrangement.SpaceBetween,
-                                    verticalAlignment = Alignment.CenterVertically
-                                ) {
-                                    Column {
-                                        Text(
-                                            text = review.name,
-                                            fontSize = 13.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = MaterialTheme.colorScheme.onSurface
-                                        )
-                                        Text(
-                                            text = review.serviceName,
-                                            fontSize = 10.sp,
-                                            color = NikhatRose,
-                                            fontWeight = FontWeight.SemiBold
-                                        )
-                                    }
-                                    Surface(
-                                        color = NikhatGold.copy(alpha = 0.1f),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Row(
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 3.dp),
-                                            verticalAlignment = Alignment.CenterVertically
-                                        ) {
-                                            Icon(
-                                                Icons.Default.Star,
-                                                contentDescription = null,
-                                                tint = NikhatGold,
-                                                modifier = Modifier.size(12.dp)
-                                            )
-                                            Spacer(modifier = Modifier.width(3.dp))
-                                            Text(
-                                                text = "${review.rating}.0",
-                                                modifier = Modifier.testTag("testimonial_rating_${review.name.lowercase().replace(" ", "_")}"),
-                                                fontSize = 10.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = MaterialTheme.colorScheme.onSurface
-                                            )
-                                        }
-                                    }
-                                }
-                                
-                                Spacer(modifier = Modifier.height(8.dp))
-                                
-                                Text(
-                                    text = "\"${review.feedback}\"",
-                                    fontSize = 11.sp,
-                                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                    lineHeight = 15.sp,
-                                    fontStyle = androidx.compose.ui.text.font.FontStyle.Italic,
-                                    maxLines = 3,
-                                    overflow = TextOverflow.Ellipsis
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                Text(
-                                    text = review.relativeTime,
-                                    fontSize = 9.sp,
-                                    color = Color.Gray
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-
             // Error Indicator
             if (errorState != null) {
                 Card(
@@ -7542,6 +7460,15 @@ fun PreBookingChatScreen(viewModel: NikhatGlowViewModel, service: Service, partn
             if (localMessages.none { it.id == dbMsg.id || (it.timestamp == dbMsg.timestamp && it.text == dbMsg.text) }) {
                 localMessages.add(dbMsg)
             }
+        }
+    }
+
+    // Poll the thread while open so incoming partner replies surface without
+    // re-sending/reopening. Auto-cancels on leaving the screen.
+    LaunchedEffect(preBookingId) {
+        while (isActive) {
+            kotlinx.coroutines.delay(5000)
+            viewModel.refreshThread(preBookingId)
         }
     }
 

@@ -584,8 +584,8 @@ class NikhatGlowRepository(context: Context) {
         refreshBookings("customer")
     }
 
-    suspend fun createComplaint(bookingId: String, subject: String, message: String) {
-        api.createComplaint(ComplaintReq(bookingId.toIntOrNull(), subject, message))
+    suspend fun createComplaint(bookingId: String?, subject: String, message: String) {
+        api.createComplaint(ComplaintReq(bookingId?.toIntOrNull(), subject, message))
         refreshComplaints()
     }
 

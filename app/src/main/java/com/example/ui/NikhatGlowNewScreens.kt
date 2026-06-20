@@ -14,6 +14,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Place
 import androidx.compose.material.icons.filled.BarChart
 import androidx.compose.material.icons.filled.CalendarMonth
 import androidx.compose.material.icons.filled.CheckCircle
@@ -761,37 +762,7 @@ fun PartnerPortfolioScreen(viewModel: NikhatGlowViewModel) {
             title = { Text("Add portfolio item") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Or tap an AI work placeholder preset to pre-fill instantly ✨", fontSize = 11.sp, color = Color.Gray)
-                    
-                    val presets = listOf(
-                        Triple("Bridal Glow 🌸", "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?q=80&w=600&auto=format&fit=crop", "Exquisite Royal Bridal GLOW Makeup"),
-                        Triple("Organic Facial 💆", "https://images.unsplash.com/photo-1512290923902-8a9f81dc236c?q=80&w=600&auto=format&fit=crop", "Luxurious Organic Flower Mist Facial Therapy"),
-                        Triple("Balayage Hair 💇", "https://images.unsplash.com/photo-1562322140-8baeececf3df?q=80&w=600&auto=format&fit=crop", "Chic Balayage Hair Highlights Showcase"),
-                        Triple("Luxe Pedicure 💅", "https://images.unsplash.com/photo-1604654894610-df63bc536371?q=80&w=600&auto=format&fit=crop", "Premium Luxe Gel Pedicure Styling"),
-                        Triple("Glow Therapy 🌿", "https://images.unsplash.com/photo-1556228720-195a672e8a03?q=80&w=600&auto=format&fit=crop", "Detox Glow Skin tightening Therapy Work")
-                    )
-                    Row(
-                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                        horizontalArrangement = Arrangement.spacedBy(6.dp)
-                    ) {
-                        presets.forEach { (label, url, cap) ->
-                            val isChosen = imageUrl == url
-                            FilterChip(
-                                selected = isChosen,
-                                onClick = {
-                                    imageUrl = url
-                                    caption = cap
-                                    uploadId = "ai_" + System.currentTimeMillis().toString().takeLast(6)
-                                },
-                                label = { Text(label, fontSize = 11.sp) },
-                                colors = FilterChipDefaults.filterChipColors(
-                                    selectedContainerColor = NikhatRose.copy(alpha = 0.25f),
-                                    selectedLabelColor = NikhatRose
-                                )
-                            )
-                        }
-                    }
-                    Divider(color = Color.Gray.copy(alpha = 0.15f))
+                    Text("Add a photo of your own real work.", fontSize = 11.sp, color = Color.Gray)
 
                     OutlinedTextField(
                         value = uploadId, onValueChange = { uploadId = it },
@@ -979,10 +950,12 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                 Divider(color = Color.Gray.copy(alpha = 0.15f))
             }
 
-            // Mock service area coverage map
-            item {
-                PartnerCoverageMap(partner = partner)
-                Divider(color = Color.Gray.copy(alpha = 0.15f))
+            // Honest service-radius line (only when the partner set one)
+            if (partner.travelRadiusKm > 0) {
+                item {
+                    PartnerCoverageMap(partner = partner)
+                    Divider(color = Color.Gray.copy(alpha = 0.15f))
+                }
             }
 
             // Real Client Satisfaction & Verified Reviews Subsection
@@ -1125,14 +1098,22 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
                 Spacer(modifier = Modifier.height(10.dp))
             }
 
-            // Menu Items List
-            val filteredServices = allServices.filter { srv ->
+            // Menu Items List — restrict to the partner's OWN listed services so the
+            // customer can't add something the §690 quote/cart gate will reject.
+            val partnerServices = allServices.filter { it.id in partner.servicesOffered }
+            val filteredServices = partnerServices.filter { srv ->
                 if (selectedCategory == "All") true
                 else srv.categoryId.lowercase().contains(selectedCategory.lowercase()) ||
                      srv.name.lowercase().contains(selectedCategory.lowercase())
             }
 
-            if (filteredServices.isEmpty()) {
+            if (partnerServices.isEmpty()) {
+                item {
+                    Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        Text("This partner hasn't listed services yet", color = Color.Gray, fontSize = 13.sp)
+                    }
+                }
+            } else if (filteredServices.isEmpty()) {
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
                         Text("No services matches this category selection", color = Color.Gray, fontSize = 13.sp)
@@ -1327,260 +1308,42 @@ fun PartnerStoreScreen(viewModel: NikhatGlowViewModel, partner: Partner) {
 
 @Composable
 fun PartnerCoverageMap(partner: Partner) {
-    var pinQuery by remember { mutableStateOf("") }
-    var checkingCoverage by remember { mutableStateOf(false) }
-    var coverageResult by remember { mutableStateOf<String?>(null) }
-    var isWithinRange by remember { mutableStateOf(true) }
-    val scope = rememberCoroutineScope()
-
+    // Honest service-radius line driven by the partner's own data — no fake
+    // geofence / canvas map / string-matched eligibility check.
     Card(
         modifier = Modifier
             .fillMaxWidth()
             .padding(16.dp)
-            .testTag("coverage_map_card_${partner.id}"),
+            .testTag("coverage_radius_card_${partner.id}"),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.15f)),
         border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.15f)),
         shape = RoundedCornerShape(16.dp)
     ) {
-        Column(modifier = Modifier.padding(16.dp)) {
-            // Header Content
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(8.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Favorite,
-                    contentDescription = null,
-                    tint = NikhatRose,
-                    modifier = Modifier.size(20.dp)
-                )
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.Place,
+                contentDescription = null,
+                tint = NikhatRose,
+                modifier = Modifier.size(20.dp)
+            )
+            Column {
                 Text(
-                    text = "SERVICE AREA COVERAGE MAP",
+                    text = "SERVICE AREA",
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = NikhatRose,
                     letterSpacing = 1.sp
                 )
-            }
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = "${partner.name} covers a 15 km doorstep logistics radius around their active service salon hub.",
-                fontSize = 11.sp,
-                color = Color.Gray
-            )
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Realistic Stylized Canvas Map Illustration
-            Box(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(150.dp)
-                    .clip(RoundedCornerShape(12.dp))
-                    .background(DarkSlate)
-            ) {
-                Canvas(modifier = Modifier.fillMaxSize()) {
-                    val width = size.width
-                    val height = size.height
-
-                    // Draw street grid lines (schematic map background)
-                    val gridColor = Color.White.copy(alpha = 0.05f)
-                    val streetColor = Color.White.copy(alpha = 0.08f)
-
-                    // Draw grid/terrain lines
-                    for (i in 0..10) {
-                        val x = (width / 10) * i
-                        drawLine(color = gridColor, start = Offset(x, 0f), end = Offset(x, height), strokeWidth = 1f)
-                        val y = (height / 10) * i
-                        drawLine(color = gridColor, start = Offset(0f, y), end = Offset(width, y), strokeWidth = 1f)
-                    }
-
-                    // Draw mock main streets (crossings)
-                    drawLine(color = streetColor, start = Offset(0f, height * 0.3f), end = Offset(width, height * 0.3f), strokeWidth = 8f)
-                    drawLine(color = streetColor, start = Offset(0f, height * 0.75f), end = Offset(width, height * 0.75f), strokeWidth = 12f)
-                    drawLine(color = streetColor, start = Offset(width * 0.4f, 0f), end = Offset(width * 0.4f, height), strokeWidth = 10f)
-                    drawLine(color = streetColor, start = Offset(width * 0.8f, 0f), end = Offset(width * 0.8f, height), strokeWidth = 6f)
-
-                    // Draw service radius circle (centered at width*0.4, height*0.5)
-                    val centerX = width * 0.4f
-                    val centerY = height * 0.5f
-                    val radius = width * 0.35f
-
-                    // Draw service area zone
-                    drawCircle(
-                        color = NikhatRose.copy(alpha = 0.12f),
-                        radius = radius,
-                        center = Offset(centerX, centerY)
-                    )
-                    drawCircle(
-                        color = NikhatRose.copy(alpha = 0.4f),
-                        radius = radius,
-                        center = Offset(centerX, centerY),
-                        style = androidx.compose.ui.graphics.drawscope.Stroke(
-                            width = 2f,
-                            pathEffect = androidx.compose.ui.graphics.PathEffect.dashPathEffect(floatArrayOf(10f, 10f), 0f)
-                        )
-                    )
-
-                    // Draw pulsing beacon of the Partner center
-                    drawCircle(
-                        color = Color.White,
-                        radius = 16f,
-                        center = Offset(centerX, centerY)
-                    )
-                    drawCircle(
-                        color = NikhatRose,
-                        radius = 8f,
-                        center = Offset(centerX, centerY)
-                    )
-
-                    // Draw customer indicator (represented dynamically as ~2.5km distance)
-                    val customerX = centerX + radius * 0.6f
-                    val customerY = centerY - radius * 0.4f
-                    drawCircle(
-                        color = SuccessGreen.copy(alpha = 0.2f),
-                        radius = 24f,
-                        center = Offset(customerX, customerY)
-                    )
-                    drawCircle(
-                        color = Color(0xFF2ECC71),
-                        radius = 6f,
-                        center = Offset(customerX, customerY)
-                    )
-                }
-
-                // Small Map Floating Overlays
-                Box(
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 3.dp)
-                        .align(Alignment.TopStart)
-                ) {
-                    Text("Coverage Zone: 15 km Radius", fontSize = 9.sp, color = Color.White, fontWeight = FontWeight.Bold)
-                }
-
-                Box(
-                    modifier = Modifier
-                        .padding(8.dp)
-                        .background(Color.Black.copy(alpha = 0.75f), RoundedCornerShape(4.dp))
-                        .padding(horizontal = 6.dp, vertical = 3.dp)
-                        .align(Alignment.BottomEnd)
-                ) {
-                    Text("Hub Pin: Active ✔", fontSize = 9.sp, color = NikhatRose, fontWeight = FontWeight.Bold)
-                }
-            }
-
-            Spacer(modifier = Modifier.height(12.dp))
-
-            // Address Check Input Field
-            Text(
-                text = "CHECK COURIER/TRANSIT ELIGIBILITY:",
-                fontSize = 10.sp,
-                fontWeight = FontWeight.Bold,
-                color = Color.Gray,
-                letterSpacing = 1.sp
-            )
-            Spacer(modifier = Modifier.height(6.dp))
-
-            Row(
-                modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                OutlinedTextField(
-                    value = pinQuery,
-                    onValueChange = {
-                        pinQuery = it
-                        coverageResult = null
-                    },
-                    placeholder = { Text("Enter post code / locality...", fontSize = 12.sp, color = Color.Gray) },
-                    singleLine = true,
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedBorderColor = NikhatRose,
-                        unfocusedBorderColor = Color.Gray.copy(alpha = 0.3f),
-                        focusedContainerColor = Color.Black.copy(alpha = 0.15f),
-                        unfocusedContainerColor = Color.Black.copy(alpha = 0.15f)
-                    ),
-                    modifier = Modifier
-                        .weight(1.3f)
-                        .testTag("coverage_pin_input"),
-                    textStyle = MaterialTheme.typography.bodyMedium.copy(fontSize = 12.sp, color = Color.White),
-                    keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search)
+                Spacer(modifier = Modifier.height(2.dp))
+                Text(
+                    text = "Serves within ${partner.travelRadiusKm.toInt()} km",
+                    fontSize = 12.sp,
+                    color = Color.Gray
                 )
-
-                Button(
-                    onClick = {
-                        if (pinQuery.isNotBlank()) {
-                            checkingCoverage = true
-                            scope.launch {
-                                kotlinx.coroutines.delay(1000)
-                                checkingCoverage = false
-                                val sanitized = pinQuery.trim().lowercase()
-                                if (sanitized.contains("out") || sanitized.contains("999") || sanitized.contains("away") || sanitized.startsWith("0")) {
-                                    coverageResult = "Out of premium transit boundaries! Our specialist can only cover up to 15km."
-                                    isWithinRange = false
-                                } else {
-                                    coverageResult = "Within coverage zone! Direct checkout is active. (${partner.name} is ${partner.distanceKm} km away from you). ✅"
-                                    isWithinRange = true
-                                }
-                            }
-                        }
-                    },
-                    enabled = pinQuery.isNotBlank() && !checkingCoverage,
-                    colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
-                    shape = RoundedCornerShape(8.dp),
-                    modifier = Modifier
-                        .weight(1f)
-                        .height(52.dp)
-                        .testTag("coverage_check_btn")
-                ) {
-                    if (checkingCoverage) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), color = Color.White, strokeWidth = 2.dp)
-                    } else {
-                        Text("Check 📡", fontSize = 11.sp, fontWeight = FontWeight.Bold, color = Color.White)
-                    }
-                }
-            }
-
-            // Interactive results output
-            coverageResult?.let { result ->
-                Spacer(modifier = Modifier.height(8.dp))
-                AnimatedVisibility(
-                    visible = true,
-                    enter = fadeIn() + expandVertically()
-                ) {
-                    Card(
-                        colors = CardDefaults.cardColors(
-                            containerColor = if (isWithinRange) SuccessGreen.copy(alpha = 0.1f) else MaterialTheme.colorScheme.error.copy(alpha = 0.1f)
-                        ),
-                        border = BorderStroke(
-                            1.dp,
-                            if (isWithinRange) SuccessGreen.copy(alpha = 0.3f) else MaterialTheme.colorScheme.error.copy(alpha = 0.3f)
-                        ),
-                        shape = RoundedCornerShape(8.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(10.dp),
-                            horizontalArrangement = Arrangement.spacedBy(8.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.CheckCircle,
-                                contentDescription = null,
-                                tint = if (isWithinRange) SuccessGreen else MaterialTheme.colorScheme.error,
-                                modifier = Modifier.size(16.dp)
-                            )
-                            Text(
-                                text = result,
-                                fontSize = 11.sp,
-                                color = if (isWithinRange) Color.White else MaterialTheme.colorScheme.onErrorContainer,
-                                fontWeight = FontWeight.Medium
-                            )
-                        }
-                    }
-                }
             }
         }
     }

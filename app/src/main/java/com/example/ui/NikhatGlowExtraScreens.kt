@@ -4,6 +4,7 @@ package com.example.ui
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -62,9 +63,17 @@ import com.example.ui.theme.NikhatRose
 @Composable
 fun CartScreen(viewModel: NikhatGlowViewModel) {
     val cart by viewModel.cart.collectAsState()
+    val addresses by viewModel.addresses.collectAsState()
     var checkoutError by remember { mutableStateOf<String?>(null) }
     var placing by remember { mutableStateOf(false) }
     val items: List<CartItemDto> = cart?.items ?: emptyList()
+
+    // Chosen delivery address — default to the user's default, but let them switch.
+    var selectedAddressId by remember(addresses) {
+        mutableStateOf(
+            (addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull())?.id
+        )
+    }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
@@ -144,6 +153,119 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                 }
             }
 
+            // ── Pick a time slot (reuses the §702 availability picker pattern) ──
+            val partnerIdStr = cart?.partnerId?.toString()
+            val firstServiceId = items.firstOrNull()?.serviceId?.toString()
+            val selectedDate = viewModel.selectedBookingDate
+            val selectedSlotId = viewModel.selectedSlotId
+
+            // Load real slots on entry + whenever the date changes.
+            LaunchedEffect(partnerIdStr, firstServiceId, selectedDate) {
+                if (partnerIdStr != null) {
+                    viewModel.loadSlots(partnerIdStr, firstServiceId, selectedDate)
+                }
+            }
+
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("PICK A TIME SLOT", fontWeight = FontWeight.Bold, color = NikhatRose, fontSize = 13.sp)
+
+                    // Next-7-days date stepper.
+                    val today = remember { java.time.LocalDate.now() }
+                    val dayFmt = remember { java.time.format.DateTimeFormatter.ofPattern("EEE, dd MMM", java.util.Locale.US) }
+                    Row(
+                        modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        for (offset in 0..6) {
+                            val d = today.plusDays(offset.toLong())
+                            val iso = d.toString()
+                            FilterChip(
+                                selected = iso == selectedDate,
+                                onClick = { if (partnerIdStr != null) viewModel.loadSlots(partnerIdStr, firstServiceId, iso) },
+                                label = { Text(d.format(dayFmt), fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = NikhatRose,
+                                    selectedLabelColor = Color.White,
+                                )
+                            )
+                        }
+                    }
+
+                    when {
+                        viewModel.slotsLoading -> {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                                CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp, color = NikhatRose)
+                                Text("Loading available slots...", fontSize = 12.sp, color = Color.Gray)
+                            }
+                        }
+                        viewModel.availableSlots.isEmpty() -> {
+                            Text("No free slots that day - pick another date.", fontSize = 12.sp, color = NikhatRose, fontWeight = FontWeight.Bold)
+                        }
+                        else -> {
+                            Row(
+                                modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                viewModel.availableSlots.forEach { slot ->
+                                    val hourLabel = slot.start
+                                        ?.substringAfter("T", "")
+                                        ?.take(5)
+                                        ?.takeIf { it.length == 5 && it.contains(":") }
+                                        ?: slot.slotId.split(":").getOrNull(2)?.let { h ->
+                                            val hh = h.toIntOrNull()
+                                            if (hh != null) String.format("%02d:00", hh) else h
+                                        } ?: slot.slotId
+                                    FilterChip(
+                                        selected = slot.slotId == selectedSlotId,
+                                        enabled = slot.available,
+                                        onClick = { viewModel.selectedSlotId = slot.slotId },
+                                        label = { Text(hourLabel, fontSize = 12.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = NikhatRose,
+                                            selectedLabelColor = Color.White,
+                                            disabledLabelColor = Color.Gray.copy(alpha = 0.5f),
+                                        )
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // ── Choose delivery address ──
+            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("DELIVERY ADDRESS", fontWeight = FontWeight.Bold, color = NikhatRose, fontSize = 13.sp)
+                    if (addresses.isEmpty()) {
+                        Text("No saved address - add one from your profile first.", fontSize = 12.sp, color = Color.Gray)
+                    } else {
+                        addresses.forEach { addr ->
+                            val isSel = addr.id == selectedAddressId
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable { selectedAddressId = addr.id }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                RadioButton(
+                                    selected = isSel,
+                                    onClick = { selectedAddressId = addr.id },
+                                    colors = RadioButtonDefaults.colors(selectedColor = NikhatRose)
+                                )
+                                Column {
+                                    Text(addr.labelText, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("${addr.line1} ${addr.line2}, ${addr.city} - ${addr.pincode}", fontSize = 11.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
@@ -154,6 +276,9 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                         "Estimate only - you pay the professional directly after the service.",
                         fontSize = 11.sp, color = Color.Gray
                     )
+                    if (selectedSlotId == null) {
+                        Text("Select a time slot to send your request.", fontSize = 11.sp, color = NikhatRose)
+                    }
                     checkoutError?.let {
                         Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
                     }
@@ -161,12 +286,12 @@ fun CartScreen(viewModel: NikhatGlowViewModel) {
                         onClick = {
                             placing = true
                             checkoutError = null
-                            viewModel.checkoutCart { err ->
+                            viewModel.checkoutCart(addressId = selectedAddressId) { err ->
                                 placing = false
                                 checkoutError = err
                             }
                         },
-                        enabled = !placing,
+                        enabled = !placing && selectedSlotId != null,
                         modifier = Modifier.fillMaxWidth().height(50.dp).testTag("send_booking_request_btn"),
                         colors = ButtonDefaults.buttonColors(containerColor = NikhatRose)
                     ) {

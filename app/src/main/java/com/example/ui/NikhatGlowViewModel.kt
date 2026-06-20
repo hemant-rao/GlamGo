@@ -772,12 +772,17 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    /** Quote the whole cart, place the booking request, then open its detail. */
-    fun checkoutCart(onResult: (String?) -> Unit = {}) {
+    /**
+     * Quote the whole cart, place the booking request, then open its detail.
+     * Callers pass the explicitly chosen [addressId] (cart checkout flow); when null
+     * we fall back to the default address (back-compat for older call sites).
+     */
+    fun checkoutCart(addressId: Long? = null, onResult: (String?) -> Unit = {}) {
         viewModelScope.launch {
             runCatching {
-                val addr = addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull()
-                repository.cartQuote(couponCode, addr?.id, selectedSlotId)
+                val chosenAddrId = addressId
+                    ?: (addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull())?.id
+                repository.cartQuote(couponCode, chosenAddrId, selectedSlotId)
                 repository.createBookingFromLastQuote(
                     customerNotes = bookingNotes,
                     genderPreference = bookingGenderPref,
@@ -845,6 +850,15 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             viewModelScope.launch { runCatching { repository.loadThread(bookingId) } }
         }
         return repository.getMessagesFlow(bookingId)
+    }
+
+    /**
+     * Re-pull a chat thread on demand. Chat text only streams in when we send or
+     * reopen otherwise, so the open chat view polls this to surface incoming
+     * counterparty messages. Silently no-ops on transient failures.
+     */
+    fun refreshThread(bookingId: String) {
+        viewModelScope.launch { runCatching { repository.loadThread(bookingId) } }
     }
 
     fun updateProfile(
@@ -1100,11 +1114,16 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    fun submitComplaint(bookingId: String, subject: String, message: String) {
+    fun submitComplaint(bookingId: String?, subject: String, message: String) {
         viewModelScope.launch {
             runCatching { repository.createComplaint(bookingId, subject, message) }
                 .onSuccess { notify("Complaint submitted") }
         }
+    }
+
+    /** Pull the latest complaints/tickets for the support-desk list. */
+    fun refreshComplaints() {
+        viewModelScope.launch { runCatching { repository.refreshComplaints() } }
     }
 
     // ── Live booking detail refresh ─────────────────────────────────────────────
