@@ -75,6 +75,12 @@ data class BookingEntity(
     // visit" step and the partner's disabled "On my way" button.
     val preVisitRequired: Boolean = false,
     val preVisitContactOk: Boolean = false,
+    // §704 — the counterparty's contact, revealed by the server only while the
+    // booking is live (and the customer's number only if she opted in). Drives the
+    // call button; empty once the booking is over.
+    val counterpartyName: String = "",
+    val counterpartyPhone: String = "",
+    val callAllowed: Boolean = false,
 )
 
 @Entity(tableName = "partner_services")

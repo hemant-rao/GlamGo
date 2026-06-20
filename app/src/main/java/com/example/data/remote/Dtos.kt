@@ -537,6 +537,8 @@ data class ChatSendReq(
     val kind: String = "text",
     @Json(name = "upload_id") val uploadId: String? = null,
     @Json(name = "duration_ms") val durationMs: Int = 0,
+    // §704 — app's own quick-reply templates skip moderation (safe + instant).
+    val predefined: Boolean = false,
 )
 
 @JsonClass(generateAdapter = true)
@@ -548,11 +550,41 @@ data class ChatMessageDto(
     val text: String? = null,
     val kind: String = "text",
     @Json(name = "duration_ms") val durationMs: Int = 0,
+    val blocked: Boolean = false,   // §704 — the sender's own blocked message
     @Json(name = "created_at") val createdAt: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
 data class ChatMessagesResp(val items: List<ChatMessageDto> = emptyList())
+
+// ── §704 talk-request + partner inbox ────────────────────────────────────────
+@JsonClass(generateAdapter = true)
+data class TalkRequestDto(
+    val id: Int,
+    @Json(name = "booking_id") val bookingId: Int? = null,
+    @Json(name = "requester_type") val requesterType: String? = null,
+    val status: String = "pending",
+    val reason: String? = null,
+    @Json(name = "reject_count") val rejectCount: Int = 0,
+    @Json(name = "chat_open_until") val chatOpenUntil: String? = null,
+    @Json(name = "chat_open_now") val chatOpenNow: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class TalkRequestStateResp(
+    @Json(name = "chat_open") val chatOpen: Boolean = false,
+    @Json(name = "talk_request") val talkRequest: TalkRequestDto? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class PartnerInboxThreadDto(
+    @Json(name = "customer_id") val customerId: Int,
+    val count: Int = 0,
+    val last: ChatMessageDto? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class PartnerInboxResp(val items: List<PartnerInboxThreadDto> = emptyList())
 
 @JsonClass(generateAdapter = true)
 data class AiChatReq(

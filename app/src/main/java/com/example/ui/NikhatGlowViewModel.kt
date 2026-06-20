@@ -1253,6 +1253,24 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
     fun emergencyNumbers(): List<String> = repository.emergencyNumbers()
     fun womenHelpline(): String = repository.womenHelpline()
 
+    /** §704 — after a booking ends, request to talk again (the other party accepts). */
+    fun requestToTalk(bookingId: String, reason: String?, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            runCatching { repository.raiseTalkRequest(bookingId, reason) }
+                .onSuccess { notify("Request sent — we'll let you know when they respond."); onDone() }
+                .onFailure { notify(friendly(it), isError = true) }
+        }
+    }
+
+    /** §704 — accept/decline a talk request on a past booking. */
+    fun respondToTalk(bookingId: String, reqId: Int, accept: Boolean, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            runCatching { repository.respondTalkRequest(bookingId, reqId, accept) }
+                .onSuccess { notify(if (accept) "You can chat now." else "Request declined."); onDone() }
+                .onFailure { notify(friendly(it), isError = true) }
+        }
+    }
+
     /** §704 — reschedule a pending/accepted booking to the [slotId] the customer
      *  picked (reuses loadSlots/availableSlots/selectedSlotId). Surfaces 409s
      *  (RESCHEDULE_WINDOW_CLOSED / SLOT_TAKEN / SLOT_PAST) via the friendly path. */

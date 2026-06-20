@@ -139,6 +139,11 @@ object Mappers {
         completionProofUrls = (d.completionProof ?: emptyList()).joinToString(","),
         preVisitRequired = d.preVisitRequired,
         preVisitContactOk = d.preVisitContactOk,
+        // §704 — the server already viewer-scopes `contact` (customer sees partner,
+        // partner sees customer), so take whichever side is present.
+        counterpartyName = (d.contact?.partner ?: d.contact?.customer)?.name ?: "",
+        counterpartyPhone = (d.contact?.partner ?: d.contact?.customer)?.phone ?: "",
+        callAllowed = (d.contact?.partner ?: d.contact?.customer)?.callAllowed ?: false,
     )
 
     fun walletTxn(d: WalletTxnDto, role: String): WalletTransactionEntity = WalletTransactionEntity(

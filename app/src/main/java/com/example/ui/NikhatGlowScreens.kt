@@ -3733,6 +3733,30 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                     TimelineStep("Service In Progress", "Started", isActive = booking.status == "started" || booking.status == "completed")
                     TimelineStep("Completed & Sanitized", "Completed", isActive = booking.status == "completed")
 
+                    // §704 — Call button: shown only while the booking is live AND the
+                    // server revealed the counterparty's number (the customer's number
+                    // only if she opted in at booking; gone once the booking is over).
+                    if (booking.callAllowed && booking.counterpartyPhone.isNotBlank()) {
+                        val callCtx = LocalContext.current
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Button(
+                            onClick = {
+                                runCatching {
+                                    callCtx.startActivity(android.content.Intent(
+                                        android.content.Intent.ACTION_DIAL,
+                                        android.net.Uri.parse("tel:${booking.counterpartyPhone}")))
+                                }
+                            },
+                            modifier = Modifier.fillMaxWidth().testTag("call_btn"),
+                            colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
+                            shape = RoundedCornerShape(8.dp),
+                        ) {
+                            Icon(Icons.Default.Call, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Call ${booking.counterpartyName.ifBlank { "now" }}")
+                        }
+                    }
+
                     // §691 — customer reassignment. While reassigning, show a
                     // "finding…" banner; otherwise (accepted/assigned, >3h before the
                     // slot) offer a "Change Partner" action that re-broadcasts the job.

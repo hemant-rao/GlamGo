@@ -584,6 +584,7 @@ class NikhatGlowRepository(context: Context) {
         customerNotes: String? = null,
         genderPreference: String? = null,
         deviceInfo: Map<String, String?>? = null,
+        customerShareNumber: Boolean = false,
     ): BookingEntity {
         val qid = lastQuoteId ?: throw IllegalStateException("No quote — request a quote first.")
         val dto = api.createBooking(
@@ -593,6 +594,7 @@ class NikhatGlowRepository(context: Context) {
                 genderPreference = genderPreference?.ifBlank { null },
                 bookingSource = "app",
                 deviceInfo = deviceInfo?.takeIf { it.isNotEmpty() },
+                customerShareNumber = customerShareNumber,
             )
         )
         lastQuoteId = null
@@ -631,6 +633,23 @@ class NikhatGlowRepository(context: Context) {
     fun womenHelpline(): String =
         _appConfig.value?.params?.get("women_helpline")?.toString() ?: "1091"
 
+    // ── §704 post-booking talk-request + partner inbox ──────────────────────────
+    suspend fun getTalkRequest(bookingId: String) = api.getTalkRequest(bookingId.toInt())
+
+    suspend fun raiseTalkRequest(bookingId: String, reason: String?) =
+        api.raiseTalkRequest(bookingId.toInt(),
+            if (reason.isNullOrBlank()) emptyMap() else mapOf("reason" to reason))
+
+    suspend fun respondTalkRequest(bookingId: String, reqId: Int, accept: Boolean) =
+        api.respondTalkRequest(bookingId.toInt(), reqId, mapOf("action" to if (accept) "accept" else "reject"))
+
+    suspend fun partnerInbox() = api.partnerInbox().items
+
+    suspend fun partnerInboxThread(customerId: Int) = api.partnerInboxThread(customerId).items
+
+    suspend fun partnerInboxReply(customerId: Int, text: String) =
+        api.partnerInboxReply(customerId, com.example.data.remote.ChatSendReq(text = text))
+
     // ── §703 app config + Flow-B open booking + safety ──────────────────────────
     /** Fetch the resolved app config (best-effort; never throws). Drives feature
      *  gating + the role-based nav + policy copy. Call on launch + on resume. */
@@ -661,6 +680,7 @@ class NikhatGlowRepository(context: Context) {
         lon: Double? = null,
         customerNotes: String? = null,
         deviceInfo: Map<String, String?>? = null,
+        customerShareNumber: Boolean = false,
     ): com.example.data.remote.OpenBookingResp {
         val resp = api.createOpenBooking(
             com.example.data.remote.OpenBookingReq(
@@ -669,6 +689,7 @@ class NikhatGlowRepository(context: Context) {
                 addressId = addressId, lat = lat, lon = lon,
                 customerNotes = customerNotes?.trim()?.ifBlank { null },
                 deviceInfo = deviceInfo?.takeIf { it.isNotEmpty() },
+                customerShareNumber = customerShareNumber,
             )
         )
         refreshBookings("customer")

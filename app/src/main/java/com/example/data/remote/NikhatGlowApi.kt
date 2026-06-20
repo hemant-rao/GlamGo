@@ -221,6 +221,27 @@ interface NikhatGlowApi {
     @POST("customer/bookings/{id}/messages")
     suspend fun sendBookingMessage(@Path("id") id: Int, @Body body: ChatSendReq): ChatMessageDto
 
+    // §704 — post-booking talk request (chat is locked after a booking ends).
+    @GET("customer/bookings/{id}/talk-request")
+    suspend fun getTalkRequest(@Path("id") id: Int): TalkRequestStateResp
+
+    @POST("customer/bookings/{id}/talk-request")
+    suspend fun raiseTalkRequest(@Path("id") id: Int, @Body body: Map<String, String?> = emptyMap()): TalkRequestDto
+
+    @POST("customer/bookings/{id}/talk-request/{reqId}/respond")
+    suspend fun respondTalkRequest(@Path("id") id: Int, @Path("reqId") reqId: Int,
+                                   @Body body: Map<String, String>): TalkRequestDto
+
+    // §704 — partner "messages from customers" inbox.
+    @GET("partner/messages")
+    suspend fun partnerInbox(): PartnerInboxResp
+
+    @GET("partner/messages/{customerId}")
+    suspend fun partnerInboxThread(@Path("customerId") customerId: Int): ChatMessagesResp
+
+    @POST("partner/messages/{customerId}")
+    suspend fun partnerInboxReply(@Path("customerId") customerId: Int, @Body body: ChatSendReq): ChatMessageDto
+
     @GET("customer/chat/pre-booking")
     suspend fun preBookingMessages(
         @Query("partner_id") partnerId: Int,
