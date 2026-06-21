@@ -471,11 +471,12 @@ fun PartnerAvailabilityScreen(viewModel: NikhatGlowViewModel) {
                         // Day off OR day-on-with-no-hours => unavailable => [].
                         overrides[iso] = if (p.on) p.hours.filter { it in 7..17 }.sorted() else emptyList()
                     }
+                    // §714 pda-7day-clobbers-weekly-1 — this per-date editor fully defines
+                    // the visible 7 days via hour_overrides; do NOT send days/leaves so the
+                    // partner's underlying weekly recurrence (e.g. Sundays off) is preserved.
                     viewModel.saveAvailability(
                         start = "07:00",
                         end = "18:00",
-                        days = listOf(0, 1, 2, 3, 4, 5, 6),
-                        leaves = emptyList(),
                         hourOverrides = overrides,
                     )
                 },

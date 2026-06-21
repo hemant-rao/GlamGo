@@ -246,6 +246,12 @@ class NikhatGlowRepository(context: Context) {
         refreshNotifications()
     }
 
+    // §714 cross-notif-markall-5 — clear the whole unread badge in one tap.
+    suspend fun markAllNotificationsRead() {
+        runCatching { api.markAllNotificationsRead() }
+        refreshNotifications()
+    }
+
     /** Register this device's FCM token for push (best-effort — push is optional;
      *  the in-app inbox works without it). */
     suspend fun registerDevice(token: String) {
@@ -389,18 +395,20 @@ class NikhatGlowRepository(context: Context) {
     suspend fun saveAvailability(
         start: String,
         end: String,
-        days: List<Int>,
-        leaves: List<String>,
+        // §714 pda-7day-clobbers-weekly-1 — nullable so the 7-day editor can OMIT the
+        // weekly recurrence (days/leaves) from its partial update. Sending all-days-open
+        // used to silently wipe a partner's weekly day-off for day 8 onward.
+        days: List<Int>? = null,
+        leaves: List<String>? = null,
         hourOverrides: Map<String, List<Int>> = emptyMap(),
     ) {
-        api.setPartnerAvailability(
-            mapOf(
-                "working_hours" to mapOf("start" to start, "end" to end),
-                "days" to days,
-                "leaves" to leaves,
-                "hour_overrides" to hourOverrides,
-            )
-        )
+        val body = buildMap<String, Any> {
+            put("working_hours", mapOf("start" to start, "end" to end))
+            if (days != null) put("days", days)
+            if (leaves != null) put("leaves", leaves)
+            put("hour_overrides", hourOverrides)
+        }
+        api.setPartnerAvailability(body)
         loadAvailability()
     }
 

@@ -169,6 +169,10 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch { runCatching { repository.refreshNotifications() } }
     }
 
+    fun markAllNotificationsRead() {
+        viewModelScope.launch { runCatching { repository.markAllNotificationsRead() } }
+    }
+
     fun markNotificationRead(id: Int) {
         viewModelScope.launch { runCatching { repository.markNotificationRead(id) } }
     }
@@ -365,8 +369,8 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
     fun saveAvailability(
         start: String,
         end: String,
-        days: List<Int>,
-        leaves: List<String>,
+        days: List<Int>? = null,        // §714 pda-7day-clobbers-weekly-1 — omittable
+        leaves: List<String>? = null,
         hourOverrides: Map<String, List<Int>> = emptyMap(),
     ) {
         availabilityBusy = true; availabilityError = null; availabilitySaved = false

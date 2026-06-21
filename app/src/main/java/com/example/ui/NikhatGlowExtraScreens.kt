@@ -977,8 +977,11 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                 }
             }
 
+            // §714 cust-auth-logout-noconfirm — confirm before logging out (one tap used
+            // to immediately revoke the refresh token + wipe all caches).
+            var showLogout by remember { mutableStateOf(false) }
             OutlinedButton(
-                onClick = { viewModel.logout() },
+                onClick = { showLogout = true },
                 modifier = Modifier.fillMaxWidth().height(50.dp).testTag("logout_button"),
                 border = BorderStroke(1.dp, NikhatRose),
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
@@ -986,6 +989,19 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                 Icon(Icons.Default.Logout, contentDescription = null, modifier = Modifier.size(18.dp))
                 Spacer(modifier = Modifier.width(8.dp))
                 Text("Log out", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+            }
+            if (showLogout) {
+                AlertDialog(
+                    onDismissRequest = { showLogout = false },
+                    title = { Text("Log out?") },
+                    text = { Text("You'll need your phone number and OTP to sign back in.") },
+                    confirmButton = {
+                        TextButton(onClick = { showLogout = false; viewModel.logout() }) { Text("Log out") }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { showLogout = false }) { Text("Cancel") }
+                    },
+                )
             }
 
             // §704 — Play-Store-required account deletion (subtle, destructive).
@@ -1158,6 +1174,13 @@ fun NotificationsScreen(viewModel: NikhatGlowViewModel) {
             }
             Spacer(modifier = Modifier.width(4.dp))
             Text("Notifications", fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Color.White)
+            Spacer(modifier = Modifier.weight(1f))
+            // §714 cross-notif-markall-5 — clear the whole unread badge in one tap.
+            if (notifications.any { !it.read }) {
+                TextButton(onClick = { viewModel.markAllNotificationsRead() }) {
+                    Text("Mark all read", color = Color.White, fontSize = 13.sp)
+                }
+            }
         }
 
         if (notifications.isEmpty()) {

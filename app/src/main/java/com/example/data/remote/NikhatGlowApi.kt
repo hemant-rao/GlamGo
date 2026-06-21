@@ -382,6 +382,10 @@ interface NikhatGlowApi {
     @POST("notifications/{id}/read")
     suspend fun markNotificationRead(@Path("id") id: Int): OkResp
 
+    // §714 cross-notif-markall-5 — clear the whole unread badge in one tap.
+    @POST("notifications/read-all")
+    suspend fun markAllNotificationsRead(): OkResp
+
     @POST("notifications/devices")
     suspend fun registerDevice(@Body body: DeviceReq): OkResp
 
