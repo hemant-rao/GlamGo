@@ -410,9 +410,20 @@ class NikhatGlowRepository(context: Context) {
             runCatching { api.partnerReviews(partnerId.toInt()).items }.getOrDefault(emptyList())
     }
 
+    // §714 cpe-beauty-1 — the customer beauty profile (skin type / concerns / preferred
+    // time) is saved server-side but UserEntity/Room doesn't carry it. Expose the raw
+    // server values so the VM can re-hydrate its state on a fresh install / new device
+    // instead of showing SharedPreferences defaults. (Triple of nullable strings; null
+    // until the first profile fetch.)
+    private val _serverBeauty = MutableStateFlow<Triple<String?, String?, String?>?>(null)
+    val serverBeautyFlow: StateFlow<Triple<String?, String?, String?>?> = _serverBeauty.asStateFlow()
+
     private suspend fun refreshProfile(role: String) {
         val profile = api.me().profile ?: return
         _activeUser.value = Mappers.user(profile, role, 0L)
+        if (role == "customer") {
+            _serverBeauty.value = Triple(profile.skinType, profile.beautyConcerns, profile.preferredTime)
+        }
     }
 
     /** Public, null-safe re-fetch of the signed-in identity (refreshes kyc_status,
@@ -553,7 +564,10 @@ class NikhatGlowRepository(context: Context) {
                 pricePaise = it.pricePaise,
                 durationMin = 0,
                 active = it.active,
-                productsUsed = customProductsUsed[it.serviceId.toString()] ?: ""
+                // §714 pda-products-used-1 — read the server value first; fall back to
+                // the optimistic local cache only when the server hasn't sent one.
+                productsUsed = it.productsUsed
+                    ?: customProductsUsed[it.serviceId.toString()] ?: ""
             )
         } ?: return
         _partnerServices.value = remoteList + localCustomPartnerServices
@@ -994,12 +1008,16 @@ class NikhatGlowRepository(context: Context) {
     }
 
     suspend fun setServicePrice(serviceId: String, pricePaise: Long, active: Boolean, productsUsed: String) {
+        // §714 pda-products-used-1 — persist products_used to the backend (was kept only
+        // in the in-memory customProductsUsed map → silently lost on logout/restart and
+        // invisible to customers/admin). Keep the local cache as an optimistic fallback.
         customProductsUsed[serviceId] = productsUsed
         val existing = _partnerServices.value.firstOrNull { it.serviceId == serviceId }
         if (existing != null) {
-            api.patchPartnerService(existing.id.toInt(), mapOf("price_paise" to pricePaise, "active" to active))
+            api.patchPartnerService(existing.id.toInt(),
+                mapOf("price_paise" to pricePaise, "active" to active, "products_used" to productsUsed))
         } else {
-            api.addPartnerService(PartnerServiceReq(serviceId.toInt(), pricePaise, active))
+            api.addPartnerService(PartnerServiceReq(serviceId.toInt(), pricePaise, active, productsUsed))
         }
         refreshPartnerServices()
     }

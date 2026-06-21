@@ -1230,6 +1230,20 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
     var customerPreferredTime by mutableStateOf(getApplication<Application>().getSharedPreferences("nikhat_prefs", Context.MODE_PRIVATE).getString("pref_time", "No Preference") ?: "No Preference")
         private set
 
+    init {
+        // §714 cpe-beauty-1 — re-hydrate the beauty profile from the SERVER (so it
+        // survives reinstall / a new device) instead of only seeding from local prefs.
+        viewModelScope.launch {
+            repository.serverBeautyFlow.collect { b ->
+                if (b != null) {
+                    b.first?.takeIf { it.isNotBlank() }?.let { customerSkinType = it }
+                    b.second?.let { customerBeautyConcerns = it }
+                    b.third?.takeIf { it.isNotBlank() }?.let { customerPreferredTime = it }
+                }
+            }
+        }
+    }
+
     fun updateBeautyProfile(skinType: String, concerns: String, prefTime: String) {
         customerSkinType = skinType
         customerBeautyConcerns = concerns

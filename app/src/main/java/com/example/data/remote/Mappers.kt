@@ -183,6 +183,7 @@ object Mappers {
         text = d.text ?: "",
         kind = d.kind,
         voiceDurationMs = d.durationMs.toLong(),
+        blocked = d.blocked,   // §714 cust-chat-4
     )
 
     fun complaint(d: ComplaintDto): ComplaintEntity = ComplaintEntity(

@@ -56,6 +56,16 @@ data class ProfileDto(
     val gender: String? = null,
     @Json(name = "minimum_order_paise") val minimumOrderPaise: Long? = null,
     @Json(name = "travel_radius_km") val travelRadiusKm: Double? = null,
+    // §714 cpe-beauty-1 — the customer beauty profile is saved via PATCH /auth/me and
+    // returned by ser_customer; parse it so a returning user (or fresh install) re-hydrates
+    // from the server instead of silently showing SharedPreferences defaults.
+    @Json(name = "skin_type") val skinType: String? = null,
+    @Json(name = "beauty_concerns") val beautyConcerns: String? = null,
+    @Json(name = "preferred_time") val preferredTime: String? = null,
+    // §714 cust-auth-consent-fake — surface the recorded consent so a consented user
+    // isn't re-prompted.
+    val consented: Boolean? = null,
+    @Json(name = "gender_verification") val genderVerification: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -700,6 +710,10 @@ data class KycStatusResp(
     // §704 — once approved, the verified (locked) name.
     @Json(name = "name_locked") val nameLocked: Boolean = false,
     @Json(name = "verified_name") val verifiedName: String? = null,
+    // §714 kyc-img-resp-dto-4 — the submitted selfie/ID images (resolved URLs / data:
+    // URLs) so a returning partner can see which documents are on file.
+    @Json(name = "selfie_url") val selfieUrl: String? = null,
+    @Json(name = "document_urls") val documentUrls: List<String> = emptyList(),
 )
 
 @JsonClass(generateAdapter = true)
@@ -709,6 +723,8 @@ data class PartnerServiceDto(
     @Json(name = "price_paise") val pricePaise: Long = 0,
     val active: Boolean = true,
     val name: String? = null,
+    // §714 pda-products-used-1 — round-trip the partner's "products used / seal notes".
+    @Json(name = "products_used") val productsUsed: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -719,6 +735,8 @@ data class PartnerServiceReq(
     @Json(name = "service_id") val serviceId: Int,
     @Json(name = "price_paise") val pricePaise: Long,
     val active: Boolean = true,
+    // §714 pda-products-used-1 — send the products/seal notes so they persist.
+    @Json(name = "products_used") val productsUsed: String? = null,
 )
 
 @JsonClass(generateAdapter = true)

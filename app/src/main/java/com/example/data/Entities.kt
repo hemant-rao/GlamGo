@@ -120,7 +120,10 @@ data class ChatMessageEntity(
     val text: String,
     val kind: String = "text", // "text", "image", "voice"
     val timestamp: Long = System.currentTimeMillis(),
-    val voiceDurationMs: Long = 0
+    val voiceDurationMs: Long = 0,
+    // §714 cust-chat-4 — the server returns blocked=true to the SENDER for a
+    // moderation-soft-blocked message so her own UI can show it wasn't delivered.
+    val blocked: Boolean = false
 )
 
 @Entity(tableName = "complaints")

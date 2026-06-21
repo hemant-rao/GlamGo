@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
         ComplaintEntity::class,
         FavoritePartnerEntity::class
     ],
-    version = 7, // §710 #5/#6 — BookingEntity gained customerNotes + itemsSummary (destructive-migrated; cache only)
+    version = 8, // §714 cust-chat-4 — ChatMessageEntity gained `blocked` (destructive-migrated; cache only)
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
