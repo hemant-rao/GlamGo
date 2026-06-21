@@ -40,8 +40,8 @@ data class QuoteBreakdown(
 )
 
 /**
- * 100%-online NikhatGlow data layer. Every read/write goes to the backend
- * (`/api/nikhatglow/v1/`); there is no local source of truth. In-memory
+ * 100%-online VedaDrop data layer. Every read/write goes to the backend
+ * (`/api/vedadrop/v1/`); there is no local source of truth. In-memory
  * StateFlows act purely as a UI cache, refreshed from the server after each
  * mutation. The (untouched) Compose screens collect these flows exactly as
  * they did against the old Room repository.
@@ -53,7 +53,7 @@ data class QuoteBreakdown(
  * Do NOT introduce a bare `.toInt()` on any id whose source is not a backend
  * entity — use `.toIntOrNull()` (with a fallback / early return) instead.
  */
-class NikhatGlowRepository(context: Context) {
+class VedaDropRepository(context: Context) {
 
     private val client = ApiClient.get(context)
     private val api get() = client.api
@@ -271,7 +271,7 @@ class NikhatGlowRepository(context: Context) {
         // is admin-controlled and the partner list is discovery (subscription-
         // gated), so an empty result is the correct "no partners yet" state.
         val cats = api.categories().items.map { Mappers.category(it) }
-        NikhatGlowDataSource.categories = cats
+        VedaDropDataSource.categories = cats
         val allServices = mutableListOf<Service>()
         for (c in cats) {
             try {
@@ -279,11 +279,11 @@ class NikhatGlowRepository(context: Context) {
             } catch (_: Exception) {
             }
         }
-        NikhatGlowDataSource.services = allServices
+        VedaDropDataSource.services = allServices
         // §687 — pass the device fix (when known) so the backend can sort/limit
         // by distance ("near me"). Pre-§687 coords were never sent so distance
         // sorting silently did nothing. null coords → backend returns un-sorted.
-        NikhatGlowDataSource.partners = runCatching {
+        VedaDropDataSource.partners = runCatching {
             api.partners(lat = lat, lon = lon, sort = lat?.let { "distance" }).items.map { Mappers.partner(it) }
         }.getOrDefault(emptyList())
     }
@@ -310,8 +310,8 @@ class NikhatGlowRepository(context: Context) {
             api.partners(serviceId = serviceId.toIntOrNull(), lat = lat, lon = lon,
                 sort = lat?.let { "distance" })
         }.getOrNull()
-        NikhatGlowDataSource.partners = resp?.items?.map { Mappers.partner(it) } ?: emptyList()
-        NikhatGlowDataSource.partnersRequireLocation = resp?.requiresLocation == true
+        VedaDropDataSource.partners = resp?.items?.map { Mappers.partner(it) } ?: emptyList()
+        VedaDropDataSource.partnersRequireLocation = resp?.requiresLocation == true
     }
 
     suspend fun hydrateForRole(role: String) {
@@ -526,9 +526,9 @@ class NikhatGlowRepository(context: Context) {
         // the Favourites screen (which resolves favourites by id) renders real data even
         // when a favourite isn't in the current discovery result.
         if (wl.partners.isNotEmpty()) {
-            val merged = (NikhatGlowDataSource.partners + wl.partners.map { Mappers.partner(it) })
+            val merged = (VedaDropDataSource.partners + wl.partners.map { Mappers.partner(it) })
                 .associateBy { it.id }
-            NikhatGlowDataSource.partners = merged.values.toList()
+            VedaDropDataSource.partners = merged.values.toList()
         }
     }
 
@@ -622,10 +622,10 @@ class NikhatGlowRepository(context: Context) {
 
     /** §690 — remote map config from the OdioBook geo gateway (tile key + base url
      *  + feature flags). Builds the ABSOLUTE /api/geo URL from the app's server
-     *  root (NetworkConfig.baseUrl is .../api/nikhatglow/v1/). Null on failure. */
+     *  root (NetworkConfig.baseUrl is .../api/vedadrop/v1/). Null on failure. */
     suspend fun geoAppConfig(): com.example.data.remote.GeoAppConfigDto? {
         val root = com.example.data.remote.NetworkConfig.baseUrl.substringBefore("/api/")
-        val url = "$root/api/geo/app-config?app=nikhatglow"
+        val url = "$root/api/geo/app-config?app=vedadrop"
         return runCatching { api.geoAppConfig(url) }.getOrNull()
     }
 

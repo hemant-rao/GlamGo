@@ -16,8 +16,8 @@ import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.Modifier
 import com.example.data.LocationHelper
-import com.example.ui.NikhatGlowViewModel
-import com.example.ui.NikhatGlowMainShell
+import com.example.ui.VedaDropViewModel
+import com.example.ui.VedaDropMainShell
 import com.example.ui.theme.MyApplicationTheme
 
 class MainActivity : ComponentActivity() {
@@ -39,7 +39,7 @@ class MainActivity : ComponentActivity() {
         manager.createNotificationChannel(
           NotificationChannel(
             FCM_CHANNEL_ID,
-            "Nikhat Glow",
+            "Veda Drop",
             NotificationManager.IMPORTANCE_HIGH
           ).apply {
             description = "Booking updates, chat messages and reminders."
@@ -54,7 +54,7 @@ class MainActivity : ComponentActivity() {
           modifier = Modifier.fillMaxSize(),
           color = androidx.compose.material3.MaterialTheme.colorScheme.background
         ) {
-          val viewModel = androidx.lifecycle.viewmodel.compose.viewModel<NikhatGlowViewModel>()
+          val viewModel = androidx.lifecycle.viewmodel.compose.viewModel<VedaDropViewModel>()
           // §687 — request location once on launch; on grant (or if already
           // granted) capture the device fix so "near me" discovery engages. The
           // app works fine if the user denies — discovery just isn't distance-sorted
@@ -88,7 +88,7 @@ class MainActivity : ComponentActivity() {
               permLauncher.launch(perms)
             }
           }
-          NikhatGlowMainShell(viewModel = viewModel)
+          VedaDropMainShell(viewModel = viewModel)
         }
       }
     }

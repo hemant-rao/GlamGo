@@ -17,7 +17,7 @@ import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.coroutines.resume
 
 /**
- * Device location for NikhatGlow.
+ * Device location for VedaDrop.
  *
  * Ported from the Solaris-Gemini app's hardened acquisition chain — the previous
  * version made a single FusedLocation BALANCED_POWER request and gave up the
@@ -32,7 +32,7 @@ import kotlin.coroutines.resume
  *
  * Permission-aware (returns null when not granted) and never throws — callers
  * fall back to manual address entry / un-sorted discovery. We deliberately drop
- * Solaris's timezone + reverse-geocode work: NikhatGlow only needs (lat, lon),
+ * Solaris's timezone + reverse-geocode work: VedaDrop only needs (lat, lon),
  * and turns it into an address via the backend geo gateway (geoReverse).
  */
 object LocationHelper {

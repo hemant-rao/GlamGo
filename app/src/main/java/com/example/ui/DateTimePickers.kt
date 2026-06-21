@@ -73,7 +73,7 @@ private fun formatPickedTime(hour: Int, minute: Int): String {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NikhatDateField(
+fun VedaDropDateField(
     value: String,
     onChange: (String) -> Unit,
     modifier: Modifier = Modifier,
@@ -122,7 +122,7 @@ fun NikhatDateField(
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun NikhatTimeField(
+fun VedaDropTimeField(
     value: String,
     onChange: (String) -> Unit,
     modifier: Modifier = Modifier,

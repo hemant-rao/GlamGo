@@ -23,7 +23,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.DeepPlum
-import com.example.ui.theme.NikhatRose
+import com.example.ui.theme.VedaDropRose
 
 /**
  * OTP login + signup. The user first chooses a role (customer or partner) — this
@@ -31,7 +31,7 @@ import com.example.ui.theme.NikhatRose
  * role + phone → request OTP. Step 2: enter the code → verify.
  */
 @Composable
-fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
+fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
     val role = viewModel.loginRole
     val isPartner = role == "partner"
     var phone by remember { mutableStateOf("") }
@@ -42,7 +42,7 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
             .fillMaxSize()
             .background(
                 Brush.verticalGradient(
-                    listOf(NikhatRose.copy(alpha = 0.16f), MaterialTheme.colorScheme.background)
+                    listOf(VedaDropRose.copy(alpha = 0.16f), MaterialTheme.colorScheme.background)
                 )
             )
             .windowInsetsPadding(WindowInsets.systemBars),
@@ -63,13 +63,13 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                 modifier = Modifier
                     .size(76.dp)
                     .clip(RoundedCornerShape(22.dp))
-                    .background(Brush.linearGradient(listOf(NikhatRose, DeepPlum))),
+                    .background(Brush.linearGradient(listOf(VedaDropRose, DeepPlum))),
                 contentAlignment = Alignment.Center,
             ) {
                 Icon(Icons.Filled.Spa, contentDescription = null, tint = androidx.compose.ui.graphics.Color.White)
             }
             Spacer(Modifier.height(18.dp))
-            Text("Nikhat Glow", fontSize = 32.sp, fontWeight = FontWeight.Bold,
+            Text("Veda Drop", fontSize = 32.sp, fontWeight = FontWeight.Bold,
                 color = MaterialTheme.colorScheme.onBackground)
             Text(
                 "The Fragrance of Beauty",
@@ -148,7 +148,7 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                             Text(
                                 "Dev OTP: $it",
                                 style = MaterialTheme.typography.labelMedium,
-                                color = NikhatRose,
+                                color = VedaDropRose,
                             )
                         }
                     }
@@ -168,7 +168,7 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                         enabled = !viewModel.authBusy &&
                             (if (!viewModel.otpSent) phone.length == 10 else code.length == 6),
                         shape = RoundedCornerShape(14.dp),
-                        colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
+                        colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
                         modifier = Modifier.fillMaxWidth().height(52.dp),
                     ) {
                         if (viewModel.authBusy) {
@@ -193,10 +193,10 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
                         Spacer(Modifier.height(12.dp))
                         OutlinedButton(
                             onClick = { viewModel.isGuestMode = true },
-                            border = BorderStroke(1.dp, NikhatRose),
+                            border = BorderStroke(1.dp, VedaDropRose),
                             shape = RoundedCornerShape(14.dp),
                             modifier = Modifier.fillMaxWidth().height(52.dp),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = VedaDropRose),
                         ) {
                             Text(
                                 "Guest Browse",
@@ -225,7 +225,7 @@ fun NikhatGlowLoginScreen(viewModel: NikhatGlowViewModel) {
 
             Spacer(Modifier.height(18.dp))
             Text(
-                "By continuing you agree to Nikhat Glow's Terms & Privacy Policy.",
+                "By continuing you agree to Veda Drop's Terms & Privacy Policy.",
                 style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 textAlign = TextAlign.Center,
@@ -246,15 +246,15 @@ private fun RolePill(
             onClick = onClick,
             modifier = modifier.height(46.dp),
             shape = RoundedCornerShape(12.dp),
-            colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
+            colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
         ) { Text(label, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
     } else {
         OutlinedButton(
             onClick = onClick,
             modifier = modifier.height(46.dp),
             shape = RoundedCornerShape(12.dp),
-            border = BorderStroke(1.dp, NikhatRose),
-            colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
+            border = BorderStroke(1.dp, VedaDropRose),
+            colors = ButtonDefaults.outlinedButtonColors(contentColor = VedaDropRose),
         ) { Text(label, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
     }
 }

@@ -1,34 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Veda Drop brand teal (#009688) — adaptive-icon background. The white mark
+     lives in the density-specific drawable-*/ic_launcher_foreground.png. -->
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="108"
-    android:viewportHeight="108">
-    <!-- Sophisticated Deep Luxury Plum Solid Base -->
-    <path
-        android:fillColor="#1F022B"
-        android:pathData="M0,0h108v108h-108z" />
-    <!-- Gradient Inner Glow Circle -->
-    <path
-        android:pathData="M54,54m-45,0a45,45 0,1 1,90 0a45,45 0,1 1,-90 0"
-        android:fillColor="#2A0845" />
-    <!-- Secondary Outer Ring for Elegance -->
-    <path
-        android:pathData="M54,54m-48,0a48,48 0,1 1,96 0a48,48 0,1 1,-96 0"
-        android:strokeColor="#1A73E8"
-        android:strokeWidth="1.2"
-        android:fillColor="#00000000" />
-    <!-- Subtle Golden Sparkles in background -->
-    <path
-        android:fillColor="#FFD700"
-        android:pathData="M 24,24 l 1,2 l 2,1 l -2,1 l -1,2 l -1,-2 l -2,-1 l 2,-1 z" />
-    <path
-        android:fillColor="#FFD700"
-        android:pathData="M 84,24 l 1,2 l 2,1 l -2,1 l -1,2 l -1,-2 l -2,-1 l 2,-1 z" />
-    <path
-        android:fillColor="#FFD700"
-        android:pathData="M 24,84 l 1,2 l 2,1 l -2,1 l -1,2 l -1,-2 l -2,-1 l 2,-1 z" />
-    <path
-        android:fillColor="#FFD700"
-        android:pathData="M 84,84 l 1,2 l 2,1 l -2,1 l -1,2 l -1,-2 l -2,-1 l 2,-1 z" />
+    android:width="108dp" android:height="108dp"
+    android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#009688" android:pathData="M0,0h108v108h-108z" />
 </vector>

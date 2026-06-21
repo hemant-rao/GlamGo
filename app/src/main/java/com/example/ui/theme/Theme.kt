@@ -11,7 +11,7 @@ import androidx.compose.material3.lightColorScheme
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.platform.LocalContext
 
-// Nikhat Glow "Teal" (§715): a Teal-500 primary (white text) over deep teal darks
+// Veda Drop "Teal" (§715): a Teal-500 primary (white text) over deep teal darks
 // / teal-tinted white light surfaces. In dark mode the primary lifts to a soft
 // teal (AccentBronze #4DB6AC) so onPrimary dark text stays AA. Matches the web
 // admin's teal brand. All on-colour pairings WCAG-AA verified.
@@ -23,7 +23,7 @@ private val DarkColorScheme =
     onPrimaryContainer = Color(0xFFB2DFDB),
     secondary = Color(0xFF80CBC4),     // teal tint on dark (Teal 200)
     onSecondary = Color(0xFF00251F),
-    tertiary = NikhatGold,             // amber accent (stars)
+    tertiary = VedaDropGold,             // amber accent (stars)
     background = DarkSlate,
     onBackground = Color(0xFFEAF6F4),
     surface = DeepPlum,
@@ -36,7 +36,7 @@ private val DarkColorScheme =
 
 private val LightColorScheme =
   lightColorScheme(
-    primary = NikhatRose,              // #009688 Teal 500 — white text
+    primary = VedaDropRose,              // #009688 Teal 500 — white text
     onPrimary = Color.White,
     primaryContainer = RoseSoft,       // #B2DFDB (Teal 100)
     onPrimaryContainer = Color(0xFF004D40),
@@ -59,7 +59,7 @@ fun MyApplicationTheme(
   dynamicColor: Boolean = false,
   content: @Composable () -> Unit,
 ) {
-  // Always use the custom DarkColorScheme to enforce Nikhat Glow's dark luxury theme
+  // Always use the custom DarkColorScheme to enforce Veda Drop's dark luxury theme
   // across all devices and prevent any accidental white/light background overrides.
   val colorScheme = DarkColorScheme
 

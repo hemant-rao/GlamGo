@@ -12,8 +12,8 @@ import org.json.JSONObject
 import java.util.concurrent.TimeUnit
 
 /**
- * §690 — minimal live-tracking socket over the existing Nikhat chat WebSocket
- * (`/ws/nikhatglow/chat`). The backend relays {type:"location", role, lat, lon}
+ * §690 — minimal live-tracking socket over the existing VedaDrop chat WebSocket
+ * (`/ws/vedadrop/chat`). The backend relays {type:"location", role, lat, lon}
  * between the customer and the partner of a booking (server-stamps `role`), so we
  * reuse it for MUTUAL live tracking on the booking map. We push our own
  * {type:"location", lat, lon} and surface the counterparty's via [onLocation].
@@ -44,7 +44,7 @@ class LiveTrackingSocket(
     private fun wsUrl(): String {
         val root = NetworkConfig.baseUrl.substringBefore("/api/")  // https://host
         val ws = root.replaceFirst("https://", "wss://").replaceFirst("http://", "ws://")
-        return "$ws/ws/nikhatglow/chat?booking_id=$bookingId"
+        return "$ws/ws/vedadrop/chat?booking_id=$bookingId"
     }
 
     fun connect() {

@@ -4,7 +4,7 @@ import com.squareup.moshi.Json
 import com.squareup.moshi.JsonClass
 
 /**
- * Wire DTOs for the NikhatGlow REST contract (`/api/nikhatglow/v1/`). Field names use
+ * Wire DTOs for the VedaDrop REST contract (`/api/vedadrop/v1/`). Field names use
  * @Json to map the backend's snake_case to Kotlin camelCase. Money is paise
  * (Long). Server ids are Int; the app models stringify them in [Mappers].
  *
@@ -228,7 +228,7 @@ data class GeoDirectionsResp(
     @Json(name = "_disabled") val disabled: Boolean = false,
 )
 
-// ── Geo gateway app-config (§690 — GET /api/geo/app-config?app=nikhatglow) ────
+// ── Geo gateway app-config (§690 — GET /api/geo/app-config?app=vedadrop) ────
 @JsonClass(generateAdapter = true)
 data class GeoFeaturesDto(
     val autocomplete: Boolean = true,
@@ -241,7 +241,7 @@ data class GeoFeaturesDto(
 
 @JsonClass(generateAdapter = true)
 data class GeoAppConfigDto(
-    val app: String = "nikhatglow",
+    val app: String = "vedadrop",
     val enabled: Boolean = true,
     @Json(name = "maps_enabled") val mapsEnabled: Boolean = false,
     @Json(name = "weather_enabled") val weatherEnabled: Boolean = false,

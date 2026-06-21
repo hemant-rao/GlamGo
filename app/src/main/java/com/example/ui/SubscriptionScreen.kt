@@ -21,8 +21,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.ui.theme.DarkSlate
 import com.example.ui.theme.DeepPlum
-import com.example.ui.theme.NikhatGold
-import com.example.ui.theme.NikhatRose
+import com.example.ui.theme.VedaDropGold
+import com.example.ui.theme.VedaDropRose
 
 /**
  * Partner ₹99/month listing subscription — the connector model's only revenue.
@@ -30,7 +30,7 @@ import com.example.ui.theme.NikhatRose
  * and lists past payments. All data is server-backed (no hardcoded values).
  */
 @Composable
-fun PartnerSubscriptionScreen(viewModel: NikhatGlowViewModel) {
+fun PartnerSubscriptionScreen(viewModel: VedaDropViewModel) {
     val sub by viewModel.subscription.collectAsState()
     val payments by viewModel.subscriptionPayments.collectAsState()
 
@@ -57,7 +57,7 @@ fun PartnerSubscriptionScreen(viewModel: NikhatGlowViewModel) {
                     Text("Subscription", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 }
                 Spacer(Modifier.height(8.dp))
-                Text("₹$priceRupees / month", color = NikhatRose, fontSize = 28.sp, fontWeight = FontWeight.Bold)
+                Text("₹$priceRupees / month", color = VedaDropRose, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 Text(
                     "Stay discoverable and accept booking requests. You collect payment directly from customers — the platform never takes a cut.",
                     color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp,
@@ -76,7 +76,7 @@ fun PartnerSubscriptionScreen(viewModel: NikhatGlowViewModel) {
                             onClick = {},
                             label = { Text(status.replaceFirstChar { it.uppercase() }) },
                             colors = AssistChipDefaults.assistChipColors(
-                                containerColor = if (isActive) NikhatRose.copy(alpha = 0.15f) else Color.Gray.copy(alpha = 0.15f)
+                                containerColor = if (isActive) VedaDropRose.copy(alpha = 0.15f) else Color.Gray.copy(alpha = 0.15f)
                             )
                         )
                     }
@@ -90,7 +90,7 @@ fun PartnerSubscriptionScreen(viewModel: NikhatGlowViewModel) {
                     }
                     if (status == "trial") {
                         Spacer(Modifier.height(4.dp))
-                        Text("You're on a free trial. Subscribe to keep your listing active afterwards.", fontSize = 12.sp, color = NikhatRose)
+                        Text("You're on a free trial. Subscribe to keep your listing active afterwards.", fontSize = 12.sp, color = VedaDropRose)
                     }
                 }
             }
@@ -105,14 +105,14 @@ fun PartnerSubscriptionScreen(viewModel: NikhatGlowViewModel) {
                     onClick = { viewModel.cancelSubscriptionNow() },
                     enabled = !viewModel.subscriptionBusy,
                     modifier = Modifier.fillMaxWidth().height(50.dp),
-                    border = BorderStroke(1.dp, NikhatRose),
-                    colors = ButtonDefaults.outlinedButtonColors(contentColor = NikhatRose),
+                    border = BorderStroke(1.dp, VedaDropRose),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = VedaDropRose),
                 ) { Text(if (viewModel.subscriptionBusy) "Please wait…" else "Cancel auto-renew", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             } else {
                 Button(
                     onClick = { viewModel.subscribeNow() },
                     enabled = !viewModel.subscriptionBusy,
-                    colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
+                    colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
                     modifier = Modifier.fillMaxWidth().height(50.dp),
                 ) { Text(if (viewModel.subscriptionBusy) "Please wait…" else "Subscribe ₹$priceRupees/mo", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             }
@@ -123,13 +123,13 @@ fun PartnerSubscriptionScreen(viewModel: NikhatGlowViewModel) {
                 payments.forEach { p ->
                     Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                         Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(20.dp))
+                            Icon(Icons.Default.CheckCircle, contentDescription = null, tint = VedaDropRose, modifier = Modifier.size(20.dp))
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("₹${p.amountPaise / 100}", fontWeight = FontWeight.SemiBold)
                                 Text((p.at ?: p.periodStart ?: "").take(10), fontSize = 12.sp, color = Color.Gray)
                             }
-                            Text(p.status.replaceFirstChar { it.uppercase() }, fontSize = 12.sp, color = NikhatRose)
+                            Text(p.status.replaceFirstChar { it.uppercase() }, fontSize = 12.sp, color = VedaDropRose)
                         }
                     }
                 }

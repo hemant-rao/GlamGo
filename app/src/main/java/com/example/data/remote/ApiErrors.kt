@@ -10,7 +10,7 @@ import java.net.UnknownHostException
 /**
  * §694 — Centralised, user-friendly error translation.
  *
- * Every backend 4xx/5xx on the Nikhat Glow surface uses the frozen envelope
+ * Every backend 4xx/5xx on the Veda Drop surface uses the frozen envelope
  * `{"error":{"code":"...","message":"..."}}`. Retrofit, however, throws a bare
  * [HttpException] whose `.message()` is only the status line ("HTTP 401
  * Unauthorized") — which is what the UI used to show. This object parses the

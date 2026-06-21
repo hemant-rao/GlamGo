@@ -57,7 +57,7 @@ abstract class AppDatabase : RoomDatabase() {
                 )
                     .addMigrations(MIGRATION_5_6)
                     // Last-resort net: this Room DB is a pure server-refreshed CACHE
-                    // (see NikhatGlowRepository) — no source-of-truth data lives only
+                    // (see VedaDropRepository) — no source-of-truth data lives only
                     // here, so re-creating it merely forces a re-sync. Keep this so an
                     // UNCOVERED version gap (dev schema churn) rebuilds the DB instead
                     // of crashing the app at launch with "missing migration".

@@ -11,13 +11,13 @@ val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Nikhat Glow — "Teal" palette (§715).
+// Veda Drop — "Teal" palette (§715).
 //
 // Founder theme change: the SINGLE brand colour is now TEAL #009688 (Material
 // Teal 500), replacing the §694 Google-Blue. This file is the ONE source of
 // truth — these named vals are consumed ~360× across the screen code and wired
 // into Material via Theme.kt, so a future re-theme is a single edit here (+ the
-// Vue token in tailwind.config.cjs). The value NAMES are kept FROZEN (NikhatRose
+// Vue token in tailwind.config.cjs). The value NAMES are kept FROZEN (VedaDropRose
 // / DeepPlum / AccentBronze etc. — historically misleading but stable) so not a
 // single screen reference needs to change; only the hex shifts. Every Material
 // on-colour pairing is preserved: `primary`(teal) keeps white text, dark-mode
@@ -25,8 +25,8 @@ val Pink40 = Color(0xFF7D5260)
 // (AA-large / bold button labels — the standard Material teal-button look).
 // ─────────────────────────────────────────────────────────────────────────────
 
-val NikhatRose = Color(0xFF009688)     // DOMINANT brand teal — primary (Teal 500); white text
-val NikhatGold = Color(0xFFF9AB00)     // amber accent (rating stars / premium badge only)
+val VedaDropRose = Color(0xFF009688)     // DOMINANT brand teal — primary (Teal 500); white text
+val VedaDropGold = Color(0xFFF9AB00)     // amber accent (rating stars / premium badge only)
 val DeepPlum = Color(0xFF0B2E2A)     // deep teal surface (dark)
 val DarkSlate = Color(0xFF06211E)    // near-black teal background (dark)
 val SoftCream = Color(0xFFF2FBFA)    // teal-tinted near-white app background (light)
