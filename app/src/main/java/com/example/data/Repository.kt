@@ -890,6 +890,17 @@ class NikhatGlowRepository(context: Context) {
         loadThread(threadId)
     }
 
+    // §710 cycle-2 #1/#4 — persist the customer's beauty profile to the SERVER (was
+    // device-local SharedPreferences only, so it never reached the partner/admin and
+    // was lost on reinstall). /auth/me now stores skin_type/beauty_concerns/preferred_time.
+    suspend fun updateBeautyProfile(skinType: String, concerns: String, prefTime: String) {
+        api.updateMe(mapOf(
+            "skin_type" to skinType,
+            "beauty_concerns" to concerns,
+            "preferred_time" to prefTime,
+        ))
+    }
+
     suspend fun updateProfile(
         name: String,
         email: String,

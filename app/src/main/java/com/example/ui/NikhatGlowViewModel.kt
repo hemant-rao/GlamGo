@@ -126,7 +126,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             }.onSuccess {
                 notify(it.message ?: "Booking sent.", isError = !it.dispatched)
                 onResult(it.dispatched)
-            }.onFailure { notify(friendly(it), isError = true); onResult(false) }
+            }.onFailure { friendly(it); onResult(false) }
         }
     }
 
@@ -136,7 +136,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             runCatching { repository.confirmVisit(bookingId) }
                 .onSuccess { notify("Visit confirmed — your professional can head out."); onDone() }
-                .onFailure { notify(friendly(it), isError = true) }
+                .onFailure { friendly(it) }
         }
     }
 
@@ -148,7 +148,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
                     notify(it.message ?: "Help is being notified. Call 112 now if you are in danger.",
                            isError = true)
                 }
-                .onFailure { notify(friendly(it), isError = true) }
+                .onFailure { friendly(it) }
         }
     }
 
@@ -1152,11 +1152,18 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         customerSkinType = skinType
         customerBeautyConcerns = concerns
         customerPreferredTime = prefTime
+        // Local cache (offline + instant), used to seed the fields next launch.
         getApplication<Application>().getSharedPreferences("nikhat_prefs", Context.MODE_PRIVATE).edit()
             .putString("skin_type", skinType)
             .putString("beauty_concerns", concerns)
             .putString("pref_time", prefTime)
             .apply()
+        // §710 cycle-2 #1/#4 — ALSO persist to the server so it reaches the partner who
+        // performs the service + admin, and survives reinstall (was device-local only).
+        viewModelScope.launch {
+            runCatching { repository.updateBeautyProfile(skinType, concerns, prefTime) }
+                .onFailure { friendly(it) }
+        }
     }
 
     // ── §694 booking-time data capture (customer-set on the booking form) ──────
@@ -1328,7 +1335,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             runCatching { block() }
                 .onSuccess { notify(successMsg) }
                 .onFailure {
-                    notify(friendly(it), isError = true)
+                    friendly(it)
                     onError?.invoke()
                 }
         }
@@ -1438,7 +1445,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
                            isError = true)
                     refreshActiveBookings()
                 }
-                .onFailure { notify(friendly(it), isError = true) }
+                .onFailure { friendly(it) }
         }
     }
 
@@ -1447,7 +1454,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             runCatching { repository.blockPartner(partnerId) }
                 .onSuccess { notify("This professional has been blocked and reported."); onDone() }
-                .onFailure { notify(friendly(it), isError = true) }
+                .onFailure { friendly(it) }
         }
     }
 
@@ -1460,7 +1467,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             runCatching { repository.raiseTalkRequest(bookingId, reason) }
                 .onSuccess { notify("Request sent — we'll let you know when they respond."); onDone() }
-                .onFailure { notify(friendly(it), isError = true) }
+                .onFailure { friendly(it) }
         }
     }
 
@@ -1469,7 +1476,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             runCatching { repository.respondTalkRequest(bookingId, reqId, accept) }
                 .onSuccess { notify(if (accept) "You can chat now." else "Request declined."); onDone() }
-                .onFailure { notify(friendly(it), isError = true) }
+                .onFailure { friendly(it) }
         }
     }
 
@@ -1536,7 +1543,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             runCatching { repository.deletePartnerService(id) }
                 .onSuccess { notify("Service removed") }
-                .onFailure { notify(friendly(it)) }
+                .onFailure { friendly(it) }
         }
     }
 
@@ -1552,7 +1559,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
                     complaintDetail = dto
                     complaintMessages = dto?.messages ?: emptyList()
                 }
-                .onFailure { notify(friendly(it)) }
+                .onFailure { friendly(it) }
         }
     }
 
@@ -1562,7 +1569,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             runCatching { repository.replyComplaint(id, text) }
                 .onSuccess { openComplaint(id) }
-                .onFailure { notify(friendly(it)) }
+                .onFailure { friendly(it) }
             complaintReplyBusy = false
         }
     }
