@@ -87,4 +87,8 @@ object NikhatGlowDataSource {
     var categories: List<Category> by mutableStateOf(emptyList())
     var services: List<Service> by mutableStateOf(emptyList())
     var partners: List<Partner> by mutableStateOf(emptyList())
+    // §713 — set true when discovery returned requires_location (the customer's
+    // location is unknown), so the partner-select screen can prompt the customer
+    // to set their location instead of showing an empty "no professionals" state.
+    var partnersRequireLocation: Boolean by mutableStateOf(false)
 }

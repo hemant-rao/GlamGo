@@ -127,10 +127,42 @@ data class PartnerDto(
     val gender: String? = null,
     @Json(name = "minimum_order_paise") val minimumOrderPaise: Long? = null,
     @Json(name = "travel_radius_km") val travelRadiusKm: Double? = null,
+    // §713 — partner business location block (GET /partner/profile returns this
+    // alongside travel_radius_km). Null for customer-facing partner cards.
+    val location: PartnerLocationDto? = null,
 )
 
 @JsonClass(generateAdapter = true)
-data class PartnersResp(val items: List<PartnerDto> = emptyList())
+data class PartnersResp(
+    val items: List<PartnerDto> = emptyList(),
+    // §713 — discovery geofencing: the backend returns requires_location=true
+    // (with an empty items list) when the customer's location is unknown, so the
+    // app can prompt the customer to set their location instead of showing "no
+    // professionals". Defaults false for older payloads.
+    @Json(name = "requires_location") val requiresLocation: Boolean = false,
+)
+
+// ── §713 Partner business location (service-area geofence) ───────────────────
+// GET /partner/location → this shape; PUT /partner/location body = PartnerLocationReq
+// (radius clamped server-side to ≤ radius_max_km). PATCH /partner/profile + the
+// partner profile GET also surface the same block.
+@JsonClass(generateAdapter = true)
+data class PartnerLocationDto(
+    val lat: Double? = null,
+    val lon: Double? = null,
+    val address: String? = null,
+    @Json(name = "radius_km") val radiusKm: Double? = null,
+    @Json(name = "radius_max_km") val radiusMaxKm: Double = 10.0,
+    @Json(name = "has_location") val hasLocation: Boolean = false,
+)
+
+@JsonClass(generateAdapter = true)
+data class PartnerLocationReq(
+    val lat: Double,
+    val lon: Double,
+    val address: String? = null,
+    @Json(name = "radius_km") val radiusKm: Double? = null,
+)
 
 @JsonClass(generateAdapter = true)
 data class SlotDto(
@@ -642,6 +674,13 @@ data class KycReq(
     @Json(name = "document_upload_ids") val documentUploadIds: List<String> = emptyList(),
     // §704 — the legal name printed on her ID; the admin locks the display name to it.
     @Json(name = "legal_name") val legalName: String? = null,
+    // §713 — when geofence enforcement is ON the backend REQUIRES a base location
+    // at KYC submit (400 LOCATION_REQUIRED otherwise), so the KYC screen collects
+    // it before submitting. travel_radius_km is clamped server-side to ≤10km.
+    @Json(name = "base_lat") val baseLat: Double? = null,
+    @Json(name = "base_lon") val baseLon: Double? = null,
+    @Json(name = "base_address") val baseAddress: String? = null,
+    @Json(name = "travel_radius_km") val travelRadiusKm: Double? = null,
 )
 
 @JsonClass(generateAdapter = true)

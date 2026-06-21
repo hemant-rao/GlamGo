@@ -690,14 +690,8 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
     var radiusState by remember(activeUser?.travelRadiusKm) {
         mutableStateOf((activeUser?.travelRadiusKm ?: 0.0).let { if (it > 0) it.toString() else "" })
     }
-    val profileCtx = LocalContext.current
-    // Re-request location in-context if the partner denied it earlier, then save.
-    val partnerLocPermLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
-    ) { granted ->
-        if (granted.values.any { it }) viewModel.capturePartnerLocation()
-        else viewModel.notify("Location permission denied.", isError = true)
-    }
+    // §713 — Business location moved to its own page (Screen.PartnerBusinessLocation),
+    // so the inline GPS-capture launcher that used to live here is gone.
 
     Column(
         modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())
@@ -794,29 +788,22 @@ fun PartnerProfileScreen(viewModel: NikhatGlowViewModel) {
                 }
             }
 
-            // Business location — without it the partner can't be distance-ranked
-            // in customer discovery (the "can't set my location" symptom).
-            Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+            // §713 — Business location now opens a dedicated page (GPS + search +
+            // service-radius slider). Without a base location the partner can't be
+            // distance-ranked OR geofence-matched in customer discovery.
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.clickable { viewModel.currentScreen = Screen.PartnerBusinessLocation },
+            ) {
                 Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Icon(Icons.Default.MyLocation, contentDescription = null, tint = NikhatRose)
                     Spacer(modifier = Modifier.width(12.dp))
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Business location", fontWeight = FontWeight.Bold)
-                        Text("Set where you're based so nearby clients can find you", fontSize = 12.sp, color = Color.Gray)
+                        Text("Set where you're based + how far bookings can come", fontSize = 12.sp, color = Color.Gray)
                     }
-                    TextButton(onClick = {
-                        if (com.example.data.LocationHelper.hasPermission(profileCtx)) {
-                            viewModel.capturePartnerLocation()
-                        } else {
-                            partnerLocPermLauncher.launch(
-                                arrayOf(
-                                    android.Manifest.permission.ACCESS_FINE_LOCATION,
-                                    android.Manifest.permission.ACCESS_COARSE_LOCATION,
-                                )
-                            )
-                        }
-                    }) {
-                        Text("Use current", color = NikhatRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                    TextButton(onClick = { viewModel.currentScreen = Screen.PartnerBusinessLocation }) {
+                        Text("Manage", color = NikhatRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }

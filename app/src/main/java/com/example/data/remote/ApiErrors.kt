@@ -38,11 +38,22 @@ object ApiErrors {
     }
 
     private fun httpMessage(e: HttpException): String {
-        // Try the server's own message first.
-        val parsed = runCatching {
-            val raw = e.response()?.errorBody()?.string()
-            if (raw.isNullOrBlank()) null else extractMessage(raw)
-        }.getOrNull()
+        // Read the error body ONCE (ResponseBody.string() can only be consumed
+        // once), then derive both the code and the message from it.
+        val raw = runCatching { e.response()?.errorBody()?.string() }.getOrNull()
+
+        // §713 — code-aware copy for geofencing refusals when the server sent only
+        // a code (no human message), so the customer understands WHY. Checked
+        // before the server message so the copy is consistent + actionable.
+        when (raw?.let { codeOf(it) }) {
+            "PARTNER_OUT_OF_AREA" ->
+                return "This professional doesn't serve your area. Try another expert, or update your location."
+            "LOCATION_REQUIRED" ->
+                return "Please set your location first so we can match you with nearby professionals."
+        }
+
+        // Otherwise prefer the server's own message.
+        val parsed = raw?.takeIf { it.isNotBlank() }?.let { runCatching { extractMessage(it) }.getOrNull() }
         if (!parsed.isNullOrBlank()) return parsed
 
         // No parseable body — fall back to status-aware defaults.
@@ -78,13 +89,23 @@ object ApiErrors {
         return null
     }
 
-    /** The structured error code, when present — for code-specific UI branching. */
+    /** The structured error code, when present — for code-specific UI branching.
+     *  NOTE: consumes the error body, so don't also call [friendlyMessage] on the
+     *  same throwable (the body can only be read once). */
     fun errorCode(t: Throwable): String? {
         if (t !is HttpException) return null
+        val raw = runCatching { t.response()?.errorBody()?.string() }.getOrNull() ?: return null
+        return codeOf(raw)
+    }
+
+    /** Pull the structured error code out of an already-read body string. */
+    private fun codeOf(raw: String): String? {
+        if (raw.isBlank()) return null
         return runCatching {
-            val raw = t.response()?.errorBody()?.string() ?: return null
             val json = JSONObject(raw)
             json.optJSONObject("error")?.optString("code")?.takeIf { it.isNotBlank() }
+                ?: (json.opt("detail") as? JSONObject)
+                    ?.optJSONObject("error")?.optString("code")?.takeIf { it.isNotBlank() }
         }.getOrNull()
     }
 }

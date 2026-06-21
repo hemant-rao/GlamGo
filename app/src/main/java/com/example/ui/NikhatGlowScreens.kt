@@ -181,6 +181,7 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
                     is Screen.PartnerProfile -> PartnerProfileScreen(viewModel)
                     is Screen.PartnerSubscription -> PartnerSubscriptionScreen(viewModel)
                     is Screen.PartnerAvailability -> PartnerAvailabilityScreen(viewModel)
+                    is Screen.PartnerBusinessLocation -> PartnerBusinessLocationScreen(viewModel)
                     is Screen.PartnerEarnings -> PartnerEarningsScreen(viewModel)
                     is Screen.PartnerAnalytics -> PartnerAnalyticsScreen(viewModel)
                     is Screen.PartnerPortfolio -> PartnerPortfolioScreen(viewModel)
@@ -2653,6 +2654,271 @@ fun LocationPickerSheet(
     }
 }
 
+/**
+ * §713 — Partner Business Location page. Reuses the EXACT §697 picker UX (an input
+ * box with a current-location crosshair docked inside it + search-as-you-type over
+ * the free OSM geo proxy) but as a full page instead of a dialog, and adds a
+ * service-radius range card below (slider 1..radius_max_km, default 10). Setting a
+ * location is what makes the partner geofence-matchable in customer discovery; the
+ * radius decides how far away bookings can come from. Changeable any time.
+ */
+@Composable
+fun PartnerBusinessLocationScreen(viewModel: NikhatGlowViewModel) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val saved by viewModel.partnerLocation.collectAsState()
+
+    // Load the saved business location on entry.
+    LaunchedEffect(Unit) { viewModel.loadPartnerLocation() }
+
+    var query by remember { mutableStateOf("") }
+    var suggestions by remember { mutableStateOf<List<com.example.data.remote.GeoSuggestionDto>>(emptyList()) }
+    var busy by remember { mutableStateOf(false) }     // GPS detect in flight
+    var searching by remember { mutableStateOf(false) }
+
+    // Radius slider — server caps it at radius_max_km (10km). Seed from the saved
+    // value once it loads (default 10 until then), clamped to the server max.
+    val maxKm = (saved?.radiusMaxKm ?: 10.0).coerceAtLeast(1.0)
+    var radiusKm by remember(saved?.radiusKm, saved?.radiusMaxKm) {
+        mutableStateOf(((saved?.radiusKm ?: 10.0).takeIf { it > 0 } ?: 10.0).coerceIn(1.0, maxKm))
+    }
+
+    // Detect the device fix → reverse-geocode → save as the business location with
+    // the current radius. Mirrors §697's detectAndSave but targets the partner.
+    val detectAndSave: () -> Unit = {
+        busy = true
+        viewModel.captureDeviceLocation(notifyOnFail = true) { loc ->
+            if (loc == null) {
+                busy = false
+            } else {
+                scope.launch {
+                    val rev = viewModel.reverseGeocode(loc.first, loc.second)
+                    // GPS detect + reverse-geocode are done; the save shows its own
+                    // spinner (partnerLocationBusy), so release the GPS button here.
+                    busy = false
+                    query = ""
+                    viewModel.savePartnerBusinessLocation(
+                        lat = loc.first, lon = loc.second,
+                        address = rev?.address,
+                        radiusKm = radiusKm,
+                    )
+                }
+            }
+        }
+    }
+
+    // Re-request permission in-context if previously denied.
+    val permLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        if (granted.values.any { it }) detectAndSave()
+        else viewModel.notify("Location permission denied. Search your area below instead.", isError = true)
+    }
+
+    // Search-as-you-type via the geo proxy (free OSM); fires after 3 chars, 300ms debounce.
+    LaunchedEffect(query) {
+        if (query.trim().length >= 3) {
+            delay(300)
+            searching = true
+            suggestions = viewModel.searchPlaces(query.trim())
+            searching = false
+        } else {
+            suggestions = emptyList()
+            searching = false
+        }
+    }
+
+    Column(modifier = Modifier.fillMaxSize()) {
+        TopAppBar(
+            title = { Text("Business Location", fontWeight = FontWeight.Bold) },
+            navigationIcon = {
+                IconButton(onClick = { viewModel.currentScreen = Screen.PartnerProfile }) {
+                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
+                }
+            }
+        )
+
+        Column(
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState())
+                .padding(16.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp)
+        ) {
+            Text(
+                "Set where you're based so nearby clients can find you. Only bookings inside your service radius will be offered to you.",
+                fontSize = 13.sp, color = Color.Gray
+            )
+
+            // Currently-saved location summary (so the page never looks "unsaved").
+            val savedLat = saved?.lat
+            val savedLon = saved?.lon
+            Card(
+                colors = CardDefaults.cardColors(containerColor = LightSage),
+                border = BorderStroke(1.dp, NikhatRose.copy(alpha = 0.25f)),
+            ) {
+                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.LocationOn, contentDescription = null, tint = NikhatRose)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Current business location", fontSize = 11.sp, color = Color.Gray)
+                        if (saved?.hasLocation == true && savedLat != null && savedLon != null) {
+                            Text(
+                                (saved?.address ?: "").ifBlank {
+                                    "%.5f, %.5f".format(savedLat, savedLon)
+                                },
+                                fontWeight = FontWeight.Medium, fontSize = 14.sp,
+                                maxLines = 2, overflow = TextOverflow.Ellipsis
+                            )
+                        } else {
+                            Text("Not set yet", fontWeight = FontWeight.Medium, fontSize = 14.sp, color = OrderOrange)
+                        }
+                    }
+                    if (viewModel.partnerLocationBusy) {
+                        CircularProgressIndicator(color = NikhatRose, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))
+                    }
+                }
+            }
+
+            // §697-style single input: search field with the GPS crosshair docked
+            // on the RIGHT (trailingIcon). Tapping it uses the current location.
+            OutlinedTextField(
+                value = query,
+                onValueChange = { query = it },
+                placeholder = { Text("Search area, street or city…") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    IconButton(
+                        onClick = {
+                            if (com.example.data.LocationHelper.hasPermission(ctx)) detectAndSave()
+                            else permLauncher.launch(
+                                arrayOf(
+                                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                    android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                                )
+                            )
+                        },
+                        enabled = !busy,
+                        modifier = Modifier.testTag("partner_use_current_location_btn")
+                    ) {
+                        if (busy) {
+                            CircularProgressIndicator(color = NikhatRose, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                        } else {
+                            Icon(Icons.Default.MyLocation, contentDescription = "Use my current location", tint = NikhatRose)
+                        }
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("partner_location_search_input")
+            )
+
+            // Search status — never leave the list silently blank (§697 parity).
+            when {
+                query.isBlank() -> Text(
+                    "Tap the location icon to use your current location, or type to search",
+                    fontSize = 12.sp, color = Color.Gray,
+                )
+                query.trim().length in 1..2 -> Text(
+                    "Type at least 3 letters to search", fontSize = 12.sp, color = Color.Gray,
+                )
+                searching -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(14.dp), color = NikhatRose)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Searching…", fontSize = 12.sp, color = Color.Gray)
+                }
+                suggestions.isEmpty() -> Text(
+                    "No matches found. Try a different spelling, or use your current location.",
+                    fontSize = 12.sp, color = Color.Gray,
+                )
+                else -> Text(
+                    "${suggestions.size} ${if (suggestions.size == 1) "match" else "matches"} found",
+                    fontSize = 12.sp, color = Color.Gray, fontWeight = FontWeight.Medium,
+                )
+            }
+
+            // Search results — tap one to save it as the business location.
+            Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                suggestions.take(8).forEach { sug ->
+                    Row(
+                        verticalAlignment = Alignment.CenterVertically,
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable {
+                                scope.launch {
+                                    val lat = sug.lat
+                                    val lon = sug.lon
+                                    if (lat == null || lon == null) {
+                                        viewModel.notify("That place has no coordinates — pick another.", isError = true)
+                                        return@launch
+                                    }
+                                    val rev = viewModel.reverseGeocode(lat, lon)
+                                    val addr = rev?.address ?: listOfNotNull(sug.title, sug.subtitle).joinToString(", ")
+                                    viewModel.savePartnerBusinessLocation(
+                                        lat = lat, lon = lon,
+                                        address = addr.ifBlank { null },
+                                        radiusKm = radiusKm,
+                                    ) { query = ""; suggestions = emptyList() }
+                                }
+                            }
+                            .padding(vertical = 10.dp)
+                    ) {
+                        Icon(Icons.Default.LocationOn, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Column {
+                            Text(sug.title ?: "", fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (!sug.subtitle.isNullOrBlank()) {
+                                Text(sug.subtitle!!, fontSize = 12.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            }
+                        }
+                    }
+                    Divider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.4f))
+                }
+            }
+
+            // Radius range card — how far bookings can come from. Capped at the
+            // server's radius_max_km (10km). Applies on release; needs a location.
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.2f)),
+            ) {
+                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Text("Service radius", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                        Text("${radiusKm.roundToInt()} km", fontWeight = FontWeight.Bold, color = NikhatRose)
+                    }
+                    Text(
+                        "Bookings within ${radiusKm.roundToInt()} km of your business location will be offered to you (max ${maxKm.roundToInt()} km).",
+                        fontSize = 12.sp, color = Color.Gray
+                    )
+                    Slider(
+                        value = radiusKm.toFloat().coerceIn(1f, maxKm.toFloat()),
+                        onValueChange = { radiusKm = it.toDouble() },
+                        onValueChangeFinished = { viewModel.savePartnerLocationRadius(radiusKm) },
+                        valueRange = 1f..maxKm.toFloat(),
+                        colors = SliderDefaults.colors(
+                            thumbColor = NikhatRose,
+                            activeTrackColor = NikhatRose,
+                            inactiveTrackColor = Color.Gray.copy(alpha = 0.3f)
+                        ),
+                        modifier = Modifier.testTag("partner_radius_slider")
+                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("1 km", fontSize = 11.sp, color = Color.Gray)
+                        Text("${maxKm.roundToInt()} km", fontSize = 11.sp, color = Color.Gray)
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun CategoryDetailScreen(viewModel: NikhatGlowViewModel, category: Category) {
     val services = NikhatGlowDataSource.services.filter { it.categoryId == category.id }
@@ -2961,6 +3227,23 @@ fun PartnerSelectScreen(viewModel: NikhatGlowViewModel, service: Service) {
     // server-side). Blank until a subscribed partner adds it.
     LaunchedEffect(service.id) { viewModel.loadPartnersForService(service.id) }
     val partners = NikhatGlowDataSource.partners
+    // §713 — geofencing: the backend returns requires_location (empty items) when
+    // the customer's location is unknown, so we prompt them to set it. Re-run
+    // discovery automatically once a location is picked.
+    val requiresLocation = NikhatGlowDataSource.partnersRequireLocation
+    val deviceLoc by viewModel.deviceLocation.collectAsState()
+    var showLocationPicker by remember { mutableStateOf(false) }
+    LaunchedEffect(deviceLoc) {
+        if (deviceLoc != null && NikhatGlowDataSource.partnersRequireLocation) {
+            viewModel.loadPartnersForService(service.id)
+        }
+    }
+    if (showLocationPicker) {
+        LocationPickerSheet(viewModel = viewModel, onDismiss = {
+            showLocationPicker = false
+            viewModel.loadPartnersForService(service.id)
+        })
+    }
 
     // Each professional sets their own price; the card shows their "from" price
     // (falling back to the catalog indicative price). The final estimate is
@@ -3032,6 +3315,31 @@ fun PartnerSelectScreen(viewModel: NikhatGlowViewModel, service: Service) {
             if (viewModel.partnersLoading) {
                 item {
                     NikhatInlineLoader(message = "Connecting with marketplace sellers...")
+                }
+            } else if (requiresLocation && marketplaceOffers.isEmpty()) {
+                // §713 — geofencing needs the customer's location to match nearby pros.
+                item {
+                    Column(
+                        modifier = Modifier.fillMaxWidth().padding(top = 64.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally
+                    ) {
+                        Icon(Icons.Default.LocationOff, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(48.dp))
+                        Spacer(modifier = Modifier.height(12.dp))
+                        Text("Set your location to find experts near you", fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
+                        Text(
+                            "We match you with professionals who serve your area. Tell us where you are to see who's available.",
+                            fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center,
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
+                        )
+                        Button(
+                            onClick = { showLocationPicker = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = NikhatRose),
+                        ) {
+                            Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Set my location", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                        }
+                    }
                 }
             } else if (marketplaceOffers.isEmpty()) {
                 item {
@@ -6367,7 +6675,54 @@ fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
     var documentBmp by remember { mutableStateOf<Bitmap?>(null) }
     var permissionDenied by remember { mutableStateOf(false) }
 
+    // §713 — business location collected here (REQUIRED: the backend rejects KYC
+    // submit with 400 LOCATION_REQUIRED when geofencing is on). GPS button +
+    // search-as-you-type over the free OSM geo proxy, same as the §697 picker.
+    var kycLat by remember { mutableStateOf<Double?>(null) }
+    var kycLon by remember { mutableStateOf<Double?>(null) }
+    var kycAddress by remember { mutableStateOf("") }
+    var locQuery by remember { mutableStateOf("") }
+    var locSuggestions by remember { mutableStateOf<List<com.example.data.remote.GeoSuggestionDto>>(emptyList()) }
+    var locBusy by remember { mutableStateOf(false) }
+    var locSearching by remember { mutableStateOf(false) }
+    val kycScope = rememberCoroutineScope()
+
     val context = LocalContext.current
+
+    // GPS → reverse-geocode → fill the location fields.
+    val detectKycLocation: () -> Unit = {
+        locBusy = true
+        viewModel.captureDeviceLocation(notifyOnFail = true) { loc ->
+            if (loc == null) {
+                locBusy = false
+            } else {
+                kycScope.launch {
+                    val rev = viewModel.reverseGeocode(loc.first, loc.second)
+                    kycLat = loc.first; kycLon = loc.second
+                    kycAddress = rev?.address ?: "%.5f, %.5f".format(loc.first, loc.second)
+                    locQuery = ""; locSuggestions = emptyList()
+                    locBusy = false
+                }
+            }
+        }
+    }
+    val kycLocPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        if (granted.values.any { it }) detectKycLocation()
+        else viewModel.notify("Location permission denied. Search your area below instead.", isError = true)
+    }
+    LaunchedEffect(locQuery) {
+        if (locQuery.trim().length >= 3) {
+            delay(300)
+            locSearching = true
+            locSuggestions = viewModel.searchPlaces(locQuery.trim())
+            locSearching = false
+        } else {
+            locSuggestions = emptyList()
+            locSearching = false
+        }
+    }
 
     // §704 — surface the admin rejection reason on the form itself.
     val activeUser by viewModel.activeUser.collectAsState()
@@ -6441,7 +6796,9 @@ fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
     }
 
     val photosReady = selfieBmp != null && documentBmp != null
-    val canSubmit = aadhaarValid && panValid && legalName.isNotBlank() && photosReady && !submitting
+    // §713 — a business location is mandatory (backend enforces it with geofencing on).
+    val locationReady = kycLat != null && kycLon != null
+    val canSubmit = aadhaarValid && panValid && legalName.isNotBlank() && photosReady && locationReady && !submitting
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
@@ -6551,6 +6908,108 @@ fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
                 )
             }
 
+            // §713 — REQUIRED business location. Reuses the §697 picker pattern: a
+            // search field with the GPS crosshair docked inside it + OSM search.
+            Text("Business location", fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(
+                "Required. Set where you're based so only nearby clients can book you.",
+                color = Color.Gray, fontSize = 11.sp
+            )
+
+            OutlinedTextField(
+                value = locQuery,
+                onValueChange = { locQuery = it },
+                placeholder = { Text("Search area, street or city…") },
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
+                trailingIcon = {
+                    IconButton(
+                        onClick = {
+                            if (com.example.data.LocationHelper.hasPermission(context)) detectKycLocation()
+                            else kycLocPermLauncher.launch(
+                                arrayOf(
+                                    android.Manifest.permission.ACCESS_FINE_LOCATION,
+                                    android.Manifest.permission.ACCESS_COARSE_LOCATION,
+                                )
+                            )
+                        },
+                        enabled = !locBusy,
+                        modifier = Modifier.testTag("kyc_use_current_location_btn")
+                    ) {
+                        if (locBusy) {
+                            CircularProgressIndicator(color = NikhatRose, strokeWidth = 2.dp, modifier = Modifier.size(20.dp))
+                        } else {
+                            Icon(Icons.Default.MyLocation, contentDescription = "Use my current location", tint = NikhatRose)
+                        }
+                    }
+                },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth().testTag("kyc_location_search_input")
+            )
+
+            when {
+                locSearching -> Row(verticalAlignment = Alignment.CenterVertically) {
+                    CircularProgressIndicator(strokeWidth = 2.dp, modifier = Modifier.size(14.dp), color = NikhatRose)
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Searching…", fontSize = 12.sp, color = Color.Gray)
+                }
+                locQuery.trim().length in 1..2 -> Text("Type at least 3 letters to search", fontSize = 12.sp, color = Color.Gray)
+                locQuery.trim().length >= 3 && locSuggestions.isEmpty() -> Text(
+                    "No matches found. Try a different spelling, or use your current location.",
+                    fontSize = 12.sp, color = Color.Gray,
+                )
+            }
+
+            locSuggestions.take(6).forEach { sug ->
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            kycScope.launch {
+                                val lat = sug.lat
+                                val lon = sug.lon
+                                if (lat == null || lon == null) {
+                                    viewModel.notify("That place has no coordinates — pick another.", isError = true)
+                                    return@launch
+                                }
+                                val rev = viewModel.reverseGeocode(lat, lon)
+                                kycLat = lat; kycLon = lon
+                                kycAddress = rev?.address ?: listOfNotNull(sug.title, sug.subtitle).joinToString(", ")
+                                locQuery = ""; locSuggestions = emptyList()
+                            }
+                        }
+                        .padding(vertical = 8.dp)
+                ) {
+                    Icon(Icons.Default.LocationOn, contentDescription = null, tint = NikhatRose, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(10.dp))
+                    Column {
+                        Text(sug.title ?: "", fontWeight = FontWeight.Medium, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (!sug.subtitle.isNullOrBlank()) {
+                            Text(sug.subtitle!!, fontSize = 12.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+
+            if (locationReady) {
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = LightSage),
+                    border = BorderStroke(1.dp, NikhatRose.copy(alpha = 0.25f)),
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(10.dp))
+                        Text(
+                            kycAddress.ifBlank { "Location set" },
+                            fontSize = 13.sp, fontWeight = FontWeight.Medium,
+                            maxLines = 2, overflow = TextOverflow.Ellipsis
+                        )
+                    }
+                }
+            } else {
+                Text("Location is required to submit.", color = OrderOrange, fontSize = 11.sp)
+            }
+
             Button(
                 onClick = {
                     submitting = true
@@ -6561,6 +7020,9 @@ fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
                         legalName = legalName.trim(),
                         selfieDataUrl = selfieBmp?.toJpegDataUrl(),
                         documentDataUrl = documentBmp?.toJpegDataUrl(),
+                        baseLat = kycLat,
+                        baseLon = kycLon,
+                        baseAddress = kycAddress.ifBlank { null },
                     ) { ok ->
                         submitting = false
                         success = ok

@@ -298,10 +298,14 @@ class NikhatGlowRepository(context: Context) {
      *  list reflects who actually offers that service right now (blank until a
      *  subscribed partner adds it). §687 — accepts the device fix for near-me. */
     suspend fun loadPartnersForService(serviceId: String, lat: Double? = null, lon: Double? = null) {
-        NikhatGlowDataSource.partners = runCatching {
+        // §713 — capture the whole response so we can surface requires_location
+        // (geofencing: the customer's location is unknown → empty items + prompt).
+        val resp = runCatching {
             api.partners(serviceId = serviceId.toIntOrNull(), lat = lat, lon = lon,
-                sort = lat?.let { "distance" }).items.map { Mappers.partner(it) }
-        }.getOrDefault(emptyList())
+                sort = lat?.let { "distance" })
+        }.getOrNull()
+        NikhatGlowDataSource.partners = resp?.items?.map { Mappers.partner(it) } ?: emptyList()
+        NikhatGlowDataSource.partnersRequireLocation = resp?.requiresLocation == true
     }
 
     suspend fun hydrateForRole(role: String) {
@@ -929,11 +933,30 @@ class NikhatGlowRepository(context: Context) {
         refreshProfile(role)
     }
 
-    /** Persist the partner's base location (lat/lon) so they become discoverable
-     *  + distance-rankable. Sent only on the partner profile PATCH. */
-    suspend fun setPartnerLocation(lat: Double, lon: Double) {
-        api.updatePartnerProfile(mapOf("base_lat" to lat, "base_lon" to lon))
+    /** §713 — read the partner's saved business location (lat/lon/address + the
+     *  current + max service radius). Null on failure; callers default to "not set". */
+    suspend fun getPartnerLocation(): com.example.data.remote.PartnerLocationDto? =
+        runCatching { api.getPartnerLocation() }.getOrNull()
+
+    /** §713 — persist the partner's business location via the dedicated endpoint.
+     *  radius_km is clamped server-side to ≤ radius_max_km (10km). Returns the
+     *  resolved location (with the clamped radius) so the UI can reflect it; we
+     *  also refresh the profile so discoverability/ranking pick it up. */
+    suspend fun setPartnerLocation(
+        lat: Double,
+        lon: Double,
+        address: String? = null,
+        radiusKm: Double? = null,
+    ): com.example.data.remote.PartnerLocationDto {
+        val resp = api.putPartnerLocation(
+            com.example.data.remote.PartnerLocationReq(
+                lat = lat, lon = lon,
+                address = address?.trim()?.ifBlank { null },
+                radiusKm = radiusKm,
+            )
+        )
         refreshProfile("partner")
+        return resp
     }
 
     // ── Partner actions ──────────────────────────────────────────────────────
@@ -943,6 +966,13 @@ class NikhatGlowRepository(context: Context) {
         legalName: String? = null,
         selfieDataUrl: String? = null,
         documentDataUrl: String? = null,
+        // §713 — business location collected on the KYC screen. When geofence
+        // enforcement is on the backend REQUIRES base_lat+base_lon (else 400
+        // LOCATION_REQUIRED), so the KYC screen sends them on submit.
+        baseLat: Double? = null,
+        baseLon: Double? = null,
+        baseAddress: String? = null,
+        travelRadiusKm: Double? = null,
     ) {
         // §704 — legalName = the name on her ID; the admin locks her display name to it.
         // Photos (when captured) are sent as base64 JPEG data URLs; the backend
@@ -954,6 +984,10 @@ class NikhatGlowRepository(context: Context) {
                 selfieUploadId = selfieDataUrl,
                 documentUploadIds = listOfNotNull(documentDataUrl),
                 legalName = legalName?.trim()?.ifBlank { null },
+                baseLat = baseLat,
+                baseLon = baseLon,
+                baseAddress = baseAddress?.trim()?.ifBlank { null },
+                travelRadiusKm = travelRadiusKm,
             )
         )
         refreshProfile("partner")

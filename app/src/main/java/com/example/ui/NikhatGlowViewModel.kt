@@ -45,6 +45,8 @@ sealed class Screen {
     object PartnerProfile : Screen()
     object PartnerSubscription : Screen()
     object PartnerAvailability : Screen()
+    // §713 — partner business location (GPS / search + service-radius slider).
+    object PartnerBusinessLocation : Screen()
     object PartnerEarnings : Screen()
     object PartnerAnalytics : Screen()
     object PartnerPortfolio : Screen()
@@ -461,6 +463,63 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
                 .onSuccess { notify("Business location saved.") }
                 .onFailure { notify("Could not save location. Please try again.", isError = true) }
         }
+    }
+
+    // ── §713 Partner business location page (service-area geofence) ────────────
+    /** The partner's saved business location (lat/lon/address + current/max radius).
+     *  Null until [loadPartnerLocation] resolves; the page defaults to "not set". */
+    private val _partnerLocation = MutableStateFlow<com.example.data.remote.PartnerLocationDto?>(null)
+    val partnerLocation: StateFlow<com.example.data.remote.PartnerLocationDto?> = _partnerLocation.asStateFlow()
+
+    /** True while a business-location read/write is in flight (drives spinners). */
+    var partnerLocationBusy by mutableStateOf(false)
+        private set
+
+    /** Load the partner's saved business location for the Business Location page. */
+    fun loadPartnerLocation() {
+        viewModelScope.launch {
+            partnerLocationBusy = true
+            _partnerLocation.value = repository.getPartnerLocation()
+            partnerLocationBusy = false
+        }
+    }
+
+    /** Persist a business location chosen on the page (GPS or a search result),
+     *  with the chosen service radius (clamped server-side to ≤ radius_max_km).
+     *  Updates [partnerLocation] from the server's resolved (clamped) response so
+     *  the UI never shows a radius the server rejected. [onDone] fires on success. */
+    fun savePartnerBusinessLocation(
+        lat: Double,
+        lon: Double,
+        address: String? = null,
+        radiusKm: Double? = null,
+        onDone: () -> Unit = {},
+    ) {
+        viewModelScope.launch {
+            partnerLocationBusy = true
+            runCatching { repository.setPartnerLocation(lat, lon, address, radiusKm) }
+                .onSuccess { resolved ->
+                    _partnerLocation.value = resolved
+                    _deviceLocation.value = lat to lon
+                    resolved.radiusKm?.let { if (it > 0) partnerServiceRadiusKm = it }
+                    notify("Business location saved.")
+                    onDone()
+                }
+                .onFailure { friendly(it) }
+            partnerLocationBusy = false
+        }
+    }
+
+    /** Update ONLY the service radius from the Business Location page's slider,
+     *  reusing the saved lat/lon/address. No-op with a clear message if no base
+     *  location is set yet (radius needs a centre to mean anything). */
+    fun savePartnerLocationRadius(radiusKm: Double) {
+        val loc = _partnerLocation.value
+        if (loc?.lat == null || loc.lon == null) {
+            notify("Set your business location first, then adjust the radius.", isError = true)
+            return
+        }
+        savePartnerBusinessLocation(loc.lat, loc.lon, loc.address, radiusKm)
     }
 
     /** §690 — server-side service search (price-range + partner-filtered). Returns
@@ -992,6 +1051,7 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
             is Screen.PartnerAnalytics -> loadAnalytics()
             is Screen.PartnerPortfolio -> loadPortfolio()
             is Screen.PartnerKyc -> loadPartnerKyc()
+            is Screen.PartnerBusinessLocation -> loadPartnerLocation()
             else -> {}
         }
     }
@@ -1369,13 +1429,23 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         legalName: String? = null,
         selfieDataUrl: String? = null,
         documentDataUrl: String? = null,
+        // §713 — business location collected on the KYC screen (required by the
+        // backend when geofencing is on, else 400 LOCATION_REQUIRED).
+        baseLat: Double? = null,
+        baseLon: Double? = null,
+        baseAddress: String? = null,
+        travelRadiusKm: Double? = null,
         onResult: (Boolean) -> Unit = {},
     ) {
         viewModelScope.launch {
             runCatching {
                 // §704 — legalName is the name on her ID; admin locks display name to it.
                 // selfie/document are optional base64 JPEG data URLs captured on-device.
-                repository.submitKyc(aadhaar, pan, legalName, selfieDataUrl, documentDataUrl)
+                repository.submitKyc(
+                    aadhaar, pan, legalName, selfieDataUrl, documentDataUrl,
+                    baseLat = baseLat, baseLon = baseLon,
+                    baseAddress = baseAddress, travelRadiusKm = travelRadiusKm,
+                )
             }.onSuccess {
                 notify("KYC submitted — pending admin approval")
                 onResult(true)

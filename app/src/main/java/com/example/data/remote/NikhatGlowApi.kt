@@ -270,6 +270,14 @@ interface NikhatGlowApi {
     @PATCH("partner/profile")
     suspend fun updatePartnerProfile(@Body body: Map<String, @JvmSuppressWildcards Any?>): PartnerDto
 
+    // §713 — partner business location (service-area geofence). The PUT body's
+    // radius_km is clamped server-side to ≤ radius_max_km (10km).
+    @GET("partner/location")
+    suspend fun getPartnerLocation(): PartnerLocationDto
+
+    @retrofit2.http.PUT("partner/location")
+    suspend fun putPartnerLocation(@Body body: PartnerLocationReq): PartnerLocationDto
+
     @GET("partner/services")
     suspend fun partnerServices(): PartnerServicesResp
 
