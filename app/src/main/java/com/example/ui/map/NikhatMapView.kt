@@ -111,9 +111,9 @@ private const val SRC_CUSTOMER = "ng-customer-src"
 private const val LYR_CUSTOMER_HALO = "ng-customer-halo-lyr"
 private const val LYR_CUSTOMER = "ng-customer-lyr"
 
-private const val COLOR_PARTNER = "#1A73E8"   // Google Blue (partner / brand)
-private const val COLOR_CUSTOMER = "#1E8E3E"  // green (you) — distinct from brand blue
-private const val COLOR_ROUTE = "#1A73E8"      // brand blue route line
+private const val COLOR_PARTNER = "#009688"   // §715 brand teal (partner) — matches theme NikhatRose
+private const val COLOR_CUSTOMER = "#1E8E3E"  // green (you) — distinct from brand teal
+private const val COLOR_ROUTE = "#009688"      // §715 brand teal route line
 
 @Volatile private var httpConfigured = false
 
@@ -243,7 +243,7 @@ fun MapFallbackView(
             Icon(
                 imageVector = Icons.Default.DirectionsBike,
                 contentDescription = null,
-                tint = Color(0xFFE84A78), // NikhatRose color
+                tint = Color(0xFF009688), // §715 brand teal (was stale crimson)
                 modifier = Modifier.size(40.dp)
             )
             Spacer(modifier = Modifier.height(8.dp))
@@ -273,13 +273,13 @@ fun MapFallbackView(
                             Box(
                                 modifier = Modifier
                                     .size(32.dp)
-                                    .background(Color(0xFF1A73E8).copy(alpha = 0.2f), CircleShape),
+                                    .background(Color(0xFF009688).copy(alpha = 0.2f), CircleShape),
                                 contentAlignment = Alignment.Center
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.DirectionsBike,
                                     contentDescription = null,
-                                    tint = Color(0xFF1A73E8),
+                                    tint = Color(0xFF009688),
                                     modifier = Modifier.size(16.dp)
                                 )
                             }
@@ -298,7 +298,7 @@ fun MapFallbackView(
                                 .height(2.dp)
                                 .background(
                                     brush = Brush.linearGradient(
-                                        colors = listOf(Color(0xFF1A73E8), Color(0xFF1E8E3E))
+                                        colors = listOf(Color(0xFF009688), Color(0xFF1E8E3E))
                                     )
                                 )
                         )

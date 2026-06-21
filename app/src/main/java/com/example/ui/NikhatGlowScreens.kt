@@ -2761,6 +2761,7 @@ fun PartnerBusinessLocationScreen(viewModel: NikhatGlowViewModel) {
                                 (saved?.address ?: "").ifBlank {
                                     "%.5f, %.5f".format(savedLat, savedLon)
                                 },
+                                color = PlumDeepInk,   // §715 — dark text on the LIGHT LightSage card (forced-dark theme would render it near-white = unreadable)
                                 fontWeight = FontWeight.Medium, fontSize = 14.sp,
                                 maxLines = 2, overflow = TextOverflow.Ellipsis
                             )
@@ -3408,7 +3409,7 @@ fun PartnerSelectScreen(viewModel: NikhatGlowViewModel, service: Service) {
                                     Spacer(modifier = Modifier.width(4.dp))
                                     val isKycApproved = partner.kycStatus == "approved"
                                     Surface(
-                                        color = if (isKycApproved) Color(0xFFE3F2FD) else Color.Gray.copy(alpha = 0.12f),
+                                        color = if (isKycApproved) Color(0xFFE0F2F1) else Color.Gray.copy(alpha = 0.12f),
                                         shape = RoundedCornerShape(4.dp)
                                     ) {
                                         Row(
@@ -3418,13 +3419,13 @@ fun PartnerSelectScreen(viewModel: NikhatGlowViewModel, service: Service) {
                                             Icon(
                                                 imageVector = if (isKycApproved) Icons.Default.Verified else Icons.Default.Info,
                                                 contentDescription = if (isKycApproved) "Verified Partner" else "Not yet verified",
-                                                tint = if (isKycApproved) Color(0xFF1E88E5) else Color.Gray,
+                                                tint = if (isKycApproved) Color(0xFF00796B) else Color.Gray,
                                                 modifier = Modifier.size(11.dp)
                                             )
                                             Spacer(modifier = Modifier.width(2.dp))
                                             Text(
                                                 text = if (isKycApproved) "VERIFIED" else "Not yet verified",
-                                                color = if (isKycApproved) Color(0xFF1E88E5) else Color.Gray,
+                                                color = if (isKycApproved) Color(0xFF00796B) else Color.Gray,
                                                 fontSize = 8.sp,
                                                 fontWeight = FontWeight.Bold
                                             )
@@ -4417,7 +4418,7 @@ fun BookingDetailScreen(viewModel: NikhatGlowViewModel, bookingId: String) {
                         )
                         Text(
                             if (isPartnerView) "● You" else "● Partner",
-                            color = Color(0xFF1A73E8), fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                            color = Color(0xFF009688), fontSize = 12.sp, fontWeight = FontWeight.Medium,
                         )
                         when {
                             trackPartner == null ->
@@ -7028,6 +7029,10 @@ fun PartnerKycScreen(viewModel: NikhatGlowViewModel) {
                         Spacer(modifier = Modifier.width(10.dp))
                         Text(
                             kycAddress.ifBlank { "Location set" },
+                            // §715 — explicit dark text: the card uses a LIGHT container
+                            // (LightSage) but the app forces the dark theme, whose default
+                            // onSurface is near-white → was unreadable on the light card.
+                            color = PlumDeepInk,
                             fontSize = 13.sp, fontWeight = FontWeight.Medium,
                             maxLines = 2, overflow = TextOverflow.Ellipsis
                         )
@@ -9209,7 +9214,7 @@ fun PreBookingChatScreen(viewModel: NikhatGlowViewModel, service: Service, partn
             actions = {
                 // Verified Status Badge in chat header
                 Surface(
-                    color = Color(0xFFE3F2FD),
+                    color = Color(0xFFE0F2F1),
                     shape = RoundedCornerShape(4.dp),
                     modifier = Modifier.padding(end = 12.dp)
                 ) {
@@ -9220,13 +9225,13 @@ fun PreBookingChatScreen(viewModel: NikhatGlowViewModel, service: Service, partn
                         Icon(
                             imageVector = Icons.Default.Verified,
                             contentDescription = "Verified Status",
-                            tint = Color(0xFF1E88E5),
+                            tint = Color(0xFF00796B),
                             modifier = Modifier.size(11.dp)
                         )
                         Spacer(modifier = Modifier.width(2.dp))
                         Text(
                             text = "SEAL SECURE",
-                            color = Color(0xFF1E88E5),
+                            color = Color(0xFF00796B),
                             fontSize = 8.sp,
                             fontWeight = FontWeight.Bold
                         )

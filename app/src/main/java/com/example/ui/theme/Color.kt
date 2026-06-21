@@ -11,31 +11,33 @@ val PurpleGrey40 = Color(0xFF625b71)
 val Pink40 = Color(0xFF7D5260)
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Nikhat Glow — "Google Blue" palette (§694).
+// Nikhat Glow — "Teal" palette (§715).
 //
-// Recoloured from the founder's logo (green→blue→yellow→orange→red multicolour
-// mark). We take BLUE — the colour that bridges both halves of the logo — as the
-// single primary, with the other logo hues reserved for small status accents
-// (success/warning/error). This retune keeps the SAME value NAMES (so the
-// 3.5k-line screen code is untouched) and preserves every Material on-colour
-// contrast pairing: `primary`(blue) keeps white text, `secondary` keeps light
-// text. Only the hex shifts — the hero is now Google Blue, the gold star accent
-// becomes Google amber, and the darks become deep navy. WCAG-AA verified.
+// Founder theme change: the SINGLE brand colour is now TEAL #009688 (Material
+// Teal 500), replacing the §694 Google-Blue. This file is the ONE source of
+// truth — these named vals are consumed ~360× across the screen code and wired
+// into Material via Theme.kt, so a future re-theme is a single edit here (+ the
+// Vue token in tailwind.config.cjs). The value NAMES are kept FROZEN (NikhatRose
+// / DeepPlum / AccentBronze etc. — historically misleading but stable) so not a
+// single screen reference needs to change; only the hex shifts. Every Material
+// on-colour pairing is preserved: `primary`(teal) keeps white text, dark-mode
+// primary lifts to a light teal with dark text. White-on-#009688 ≈ 3.67:1
+// (AA-large / bold button labels — the standard Material teal-button look).
 // ─────────────────────────────────────────────────────────────────────────────
 
-val NikhatRose = Color(0xFF1A73E8)     // DOMINANT brand blue — primary (Google Blue); white text
+val NikhatRose = Color(0xFF009688)     // DOMINANT brand teal — primary (Teal 500); white text
 val NikhatGold = Color(0xFFF9AB00)     // amber accent (rating stars / premium badge only)
-val DeepPlum = Color(0xFF0F2A47)     // deep navy surface (dark)
-val DarkSlate = Color(0xFF0B1A2E)    // near-black blue background (dark)
-val SoftCream = Color(0xFFF6F9FE)    // cool near-white app background (light)
-val AccentBronze = Color(0xFF8AB4F8) // soft blue tertiary / dark-mode primary (blue-300)
-val LightSage = Color(0xFFEEF3FC)    // muted blue-grey surface variant
-val SuccessGreen = Color(0xFF1E8E3E) // AA-safe success on white (Google green)
-val OrderOrange = Color(0xFFE37400)  // AA-safe warning/order amber (Google orange)
+val DeepPlum = Color(0xFF0B2E2A)     // deep teal surface (dark)
+val DarkSlate = Color(0xFF06211E)    // near-black teal background (dark)
+val SoftCream = Color(0xFFF2FBFA)    // teal-tinted near-white app background (light)
+val AccentBronze = Color(0xFF4DB6AC) // soft teal tertiary / dark-mode primary (Teal 300)
+val LightSage = Color(0xFFE0F2F1)    // muted teal surface variant (Teal 50)
+val SuccessGreen = Color(0xFF1E8E3E) // AA-safe success on white (kept non-brand)
+val OrderOrange = Color(0xFFE37400)  // AA-safe warning/order amber (kept non-brand)
 
 // Light-scheme brand anchors.
-val PlumDeepInk = Color(0xFF174EA6)  // deep blue for light-mode secondary/brand text
-val RoseSoft = Color(0xFFD2E3FC)     // blue tint for chips / tonal containers (blue-100)
+val PlumDeepInk = Color(0xFF00695C)  // deep teal for light-mode secondary/brand text (Teal 800)
+val RoseSoft = Color(0xFFB2DFDB)     // teal tint for chips / tonal containers (Teal 100)
 
 // Bold Typography Theme Colors (M3 SPEC) — retained for any references.
 val BoldBg = Color(0xFFFEF7FF)

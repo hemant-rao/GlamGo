@@ -20,8 +20,8 @@ object Mappers {
     // slug → the icon-name / colour the original mock used, so category tiles
     // keep their look. Unknown slugs get sensible beauty defaults.
     private val categoryIcon = mapOf(
-        "salon" to ("content_cut" to "#E84A78"),
-        "beauty" to ("face" to "#C9418B"),
+        "salon" to ("content_cut" to "#009688"),   // §715 brand teal
+        "beauty" to ("face" to "#00897B"),          // §715 teal 600
         "makeup" to ("brush" to "#9C4DCC"),
         "mehndi" to ("brush" to "#B5651D"),
         "massage" to ("spa" to "#2FA36B"),
@@ -29,7 +29,7 @@ object Mappers {
     )
 
     fun category(d: CategoryDto): Category {
-        val (icon, color) = categoryIcon[(d.slug ?: "").lowercase()] ?: ("spa" to "#E84A78")
+        val (icon, color) = categoryIcon[(d.slug ?: "").lowercase()] ?: ("spa" to "#009688")  // §715 brand teal default
         return Category(
             id = d.id.toString(),
             name = d.name,
