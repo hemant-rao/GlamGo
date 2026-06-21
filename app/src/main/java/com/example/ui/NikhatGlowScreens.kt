@@ -154,6 +154,7 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
                 // The dispatcher re-fetches whatever `screen` shows (and the profile).
                 NikhatPullRefresh(onRefresh = { viewModel.refreshForScreen(screen) }) {
                 saveableStateHolder.SaveableStateProvider(screen.toString()) {
+                ComposeErrorBoundary(onGoHome = { viewModel.currentScreen = Screen.CustomerHome }) {
                 when (screen) {
                     is Screen.CustomerHome -> CustomerHomeScreen(viewModel)
                     is Screen.SearchResults -> SearchResultsScreen(viewModel, screen.query)
@@ -186,6 +187,7 @@ fun NikhatGlowMainShell(viewModel: NikhatGlowViewModel) {
                     is Screen.PartnerOffers -> PartnerOffersScreen(viewModel)
                     is Screen.PreBookingChat -> PreBookingChatScreen(viewModel, screen.service, screen.partner)
                     is Screen.Notifications -> NotificationsScreen(viewModel)
+                }
                 }
                 }
                 }
@@ -3027,7 +3029,11 @@ fun PartnerSelectScreen(viewModel: NikhatGlowViewModel, service: Service) {
         )
         
         LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
-            if (marketplaceOffers.isEmpty()) {
+            if (viewModel.partnersLoading) {
+                item {
+                    NikhatInlineLoader(message = "Connecting with marketplace sellers...")
+                }
+            } else if (marketplaceOffers.isEmpty()) {
                 item {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(top = 64.dp),
@@ -5253,7 +5259,10 @@ fun PartnerOffersScreen(viewModel: NikhatGlowViewModel) {
                             Text("Payout: ₹${offer.agreedTotalPaise / 100}", fontWeight = FontWeight.Bold, color = NikhatRose)
                             val b = offer.booking
                             if (b?.slotStart != null) {
-                                Text("When: ${b.slotStart.substringBefore("T")} · ${b.slotStart.substringAfter("T").take(5)}", fontSize = 12.sp, color = Color.Gray)
+                                val dateStr = b.slotStart.substringBefore("T", b.slotStart)
+                                val timeStr = b.slotStart.substringAfter("T", "").take(5)
+                                val finalWhen = if (timeStr.isNotEmpty()) "$dateStr • $timeStr" else dateStr
+                                Text("When: $finalWhen", fontSize = 12.sp, color = Color.Gray)
                             }
                             val place = listOfNotNull(b?.city, b?.pincode).joinToString(" · ")
                             if (place.isNotBlank()) Text("Area: $place", fontSize = 12.sp, color = Color.Gray)

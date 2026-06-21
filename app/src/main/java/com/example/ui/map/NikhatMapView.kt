@@ -1,7 +1,19 @@
 package com.example.ui.map
 
 import android.annotation.SuppressLint
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.mutableStateOf
@@ -31,6 +43,19 @@ import org.maplibre.geojson.Feature
 import org.maplibre.geojson.FeatureCollection
 import org.maplibre.geojson.LineString
 import org.maplibre.geojson.Point
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.material3.Text
+import androidx.compose.material3.Icon
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DirectionsBike
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
+import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.Arrangement
 
 /**
  * §690/§692 — Nikhat Glow live tracking map. MapLibre GL engine + FREE
@@ -119,29 +144,47 @@ fun NikhatMapView(
     val lifecycleOwner = LocalLifecycleOwner.current
     val context = LocalContext.current
 
-    val mapView = remember {
-        ensureMapHttp()
-        MapLibre.getInstance(context.applicationContext)
-        val options = MapLibreMapOptions()
-        MapView(context, options)
+    val mapViewResult = remember {
+        runCatching {
+            ensureMapHttp()
+            MapLibre.getInstance(context.applicationContext)
+            val options = MapLibreMapOptions()
+            MapView(context, options)
+        }
+    }
+
+    val mapView = mapViewResult.getOrNull()
+    if (mapView == null) {
+        val errorMsg = mapViewResult.exceptionOrNull()?.message ?: "Unsatisfied native link error"
+        android.util.Log.e("NikhatMapView", "MapLibre MapView cannot start: $errorMsg", mapViewResult.exceptionOrNull())
+        MapFallbackView(
+            modifier = modifier,
+            customer = customer,
+            partner = partner,
+            route = route,
+            errorMsg = errorMsg
+        )
+        return
     }
 
     DisposableEffect(lifecycleOwner) {
-        mapView.onCreate(null)
+        runCatching { mapView.onCreate(null) }
         val observer = LifecycleEventObserver { _, event ->
-            when (event) {
-                Lifecycle.Event.ON_START -> mapView.onStart()
-                Lifecycle.Event.ON_RESUME -> mapView.onResume()
-                Lifecycle.Event.ON_PAUSE -> mapView.onPause()
-                Lifecycle.Event.ON_STOP -> mapView.onStop()
-                else -> {}
+            runCatching {
+                when (event) {
+                    Lifecycle.Event.ON_START -> mapView.onStart()
+                    Lifecycle.Event.ON_RESUME -> mapView.onResume()
+                    Lifecycle.Event.ON_PAUSE -> mapView.onPause()
+                    Lifecycle.Event.ON_STOP -> mapView.onStop()
+                    else -> {}
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose {
             lifecycleOwner.lifecycle.removeObserver(observer)
-            mapView.onStop()
-            mapView.onDestroy()
+            runCatching { mapView.onStop() }
+            runCatching { mapView.onDestroy() }
         }
     }
 
@@ -170,10 +213,123 @@ fun NikhatMapView(
             val map = mapRef.value
             val style = styleRef.value
             if (map != null && style != null && style.isFullyLoaded) {
-                applyData(map, style, customer, partner, route, followCurrent, firstFit = false)
+                runCatching {
+                    applyData(map, style, customer, partner, route, followCurrent, firstFit = false)
+                }
             }
         },
     )
+}
+
+@Composable
+fun MapFallbackView(
+    modifier: Modifier = Modifier,
+    customer: GeoPoint? = null,
+    partner: GeoPoint? = null,
+    route: List<GeoPoint>? = null,
+    errorMsg: String = "",
+) {
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .background(Color(0xFF151224)), // Slate background matching theme
+        contentAlignment = Alignment.Center
+    ) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center,
+            modifier = Modifier.padding(16.dp)
+        ) {
+            Icon(
+                imageVector = Icons.Default.DirectionsBike,
+                contentDescription = null,
+                tint = Color(0xFFE84A78), // NikhatRose color
+                modifier = Modifier.size(40.dp)
+            )
+            Spacer(modifier = Modifier.height(8.dp))
+            Text(
+                text = "Live Tracking Grid",
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = 14.sp
+            )
+            Spacer(modifier = Modifier.height(4.dp))
+            Text(
+                text = "Secure stream active. Showing provider telemetry:",
+                color = Color.Gray,
+                fontSize = 11.sp,
+                textAlign = TextAlign.Center
+            )
+            Spacer(modifier = Modifier.height(16.dp))
+
+            if (customer != null || partner != null) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.Center,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)
+                ) {
+                    if (partner != null) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(Color(0xFF1A73E8).copy(alpha = 0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.DirectionsBike,
+                                    contentDescription = null,
+                                    tint = Color(0xFF1A73E8),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Specialist", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            val latS = "%.4f".format(partner.latitude)
+                            val lonS = "%.4f".format(partner.longitude)
+                            Text("$latS, $lonS", fontSize = 9.sp, color = Color.LightGray)
+                        }
+                    }
+
+                    if (partner != null && customer != null) {
+                        Box(
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(2.dp)
+                                .background(
+                                    brush = Brush.linearGradient(
+                                        colors = listOf(Color(0xFF1A73E8), Color(0xFF1E8E3E))
+                                    )
+                                )
+                        )
+                    }
+
+                    if (customer != null) {
+                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                            Box(
+                                modifier = Modifier
+                                    .size(32.dp)
+                                    .background(Color(0xFF1E8E3E).copy(alpha = 0.2f), CircleShape),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Home,
+                                    contentDescription = null,
+                                    tint = Color(0xFF1E8E3E),
+                                    modifier = Modifier.size(16.dp)
+                                )
+                            }
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Text("Your Home", fontSize = 10.sp, color = Color.White, fontWeight = FontWeight.Bold)
+                            val latS = "%.4f".format(customer.latitude)
+                            val lonS = "%.4f".format(customer.longitude)
+                            Text("$latS, $lonS", fontSize = 9.sp, color = Color.LightGray)
+                        }
+                    }
+                }
+            }
+        }
+    }
 }
 
 private fun initLayers(style: Style) {

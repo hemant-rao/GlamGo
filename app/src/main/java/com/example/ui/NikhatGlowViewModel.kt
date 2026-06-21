@@ -297,10 +297,17 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
     suspend fun fetchReassignmentStatus(bookingId: String) =
         repository.reassignmentStatus(bookingId)
 
+    var bookingsLoading by mutableStateOf(false)
+        private set
+
     /** Refresh the active bookings list (used to poll a reassigning booking). */
     fun refreshActiveBookings() {
         val role = repository.activeRole() ?: "customer"
-        viewModelScope.launch { runCatching { repository.refreshBookings(role) } }
+        bookingsLoading = true
+        viewModelScope.launch {
+            runCatching { repository.refreshBookings(role) }
+            bookingsLoading = false
+        }
     }
 
     fun loadAnalytics() {
@@ -389,11 +396,18 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
+    var partnersLoading by mutableStateOf(false)
+        private set
+
     /** Refresh discovery for the service the customer is about to browse.
      *  §687 — sends the device fix (if captured) so the list is distance-sorted. */
     fun loadPartnersForService(serviceId: String) {
         val loc = _deviceLocation.value
-        viewModelScope.launch { runCatching { repository.loadPartnersForService(serviceId, loc?.first, loc?.second) } }
+        partnersLoading = true
+        viewModelScope.launch {
+            runCatching { repository.loadPartnersForService(serviceId, loc?.first, loc?.second) }
+            partnersLoading = false
+        }
     }
 
     // ── §687 device location (the GPS fix) ────────────────────────────────────

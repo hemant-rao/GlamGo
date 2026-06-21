@@ -23,7 +23,11 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Info
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
@@ -162,3 +166,65 @@ fun NikhatTopLoadingBar(visible: Boolean, modifier: Modifier = Modifier) {
         )
     }
 }
+
+/**
+ * A Jetpack Compose equivalent of React Error Boundary to prevent full-app crashes
+ * and provide a user-friendly fallback UI when an unexpected error occurs.
+ */
+@Composable
+fun ComposeErrorBoundary(
+    onGoHome: () -> Unit,
+    content: @Composable () -> Unit
+) {
+    var error by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<Throwable?>(null) }
+    
+    if (error != null) {
+        Box(
+            modifier = Modifier
+                .fillMaxSize()
+                .background(Brush.verticalGradient(listOf(DeepPlum, DarkSlate)))
+                .padding(24.dp),
+            contentAlignment = Alignment.Center
+        ) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = Arrangement.Center
+            ) {
+                androidx.compose.material3.Icon(
+                    imageVector = Icons.Default.Info,
+                    contentDescription = "Error Occurred",
+                    tint = NikhatRose,
+                    modifier = Modifier.size(64.dp)
+                )
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(16.dp))
+                Text(
+                    text = "Something went wrong",
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 20.sp
+                )
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(8.dp))
+                Text(
+                    text = error?.localizedMessage ?: "An unexpected error occurred during rendering this screen.",
+                    color = Color.White.copy(alpha = 0.7f),
+                    fontSize = 14.sp,
+                    textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    modifier = Modifier.padding(horizontal = 16.dp)
+                )
+                androidx.compose.foundation.layout.Spacer(modifier = Modifier.height(24.dp))
+                androidx.compose.material3.Button(
+                    onClick = {
+                        error = null
+                        onGoHome()
+                    },
+                    colors = androidx.compose.material3.ButtonDefaults.buttonColors(containerColor = NikhatRose)
+                ) {
+                    Text("Return to Safety", color = Color.White, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
+    } else {
+        content()
+    }
+}
+

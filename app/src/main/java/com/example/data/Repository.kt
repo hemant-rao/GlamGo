@@ -573,7 +573,10 @@ class NikhatGlowRepository(context: Context) {
      *  sibling default. */
     suspend fun addAndSelectAddress(label: String, line1: String, line2: String, city: String, pincode: String, lat: Double? = null, lon: Double? = null) {
         val created = api.addAddress(AddressCreateReq(label, line1, line2.ifBlank { null }, city, pincode, lat, lon, true))
-        runCatching { api.updateAddress(created.id, mapOf("is_default" to true)) }
+        val cid = created.id
+        if (cid != null) {
+            runCatching { api.updateAddress(cid, mapOf("is_default" to true)) }
+        }
         refreshAddresses()
     }
 

@@ -392,7 +392,11 @@ fun MyBookingsScreen(viewModel: NikhatGlowViewModel) {
             )
         }
 
-        if (filteredBookings.isEmpty()) {
+        if (viewModel.bookingsLoading) {
+            Box(modifier = Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                NikhatInlineLoader(message = "Synchronizing appts...")
+            }
+        } else if (filteredBookings.isEmpty()) {
             Column(
                 modifier = Modifier
                     .weight(1f)
@@ -461,7 +465,12 @@ fun MyBookingsScreen(viewModel: NikhatGlowViewModel) {
 
                             // Provider / customer detail name
                             Text(
-                                text = if (isPartner) "Client: ${booking.addressText.substringBefore(",")}" else "Specialist: ${booking.partnerName}",
+                                text = if (isPartner) {
+                                    val clientAddr = booking.addressText.orEmpty().substringBefore(",", "Customer Address")
+                                    "Client: ${if (clientAddr.isBlank()) "Customer Address" else clientAddr}"
+                                } else {
+                                    "Specialist: ${booking.partnerName.orEmpty().ifBlank { "Beauty Specialist" }}"
+                                },
                                 fontSize = 12.sp,
                                 color = Color.White.copy(alpha = 0.8f)
                             )
