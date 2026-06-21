@@ -948,7 +948,15 @@ class NikhatGlowViewModel(application: Application) : AndroidViewModel(applicati
      *  screen entry + pull-to-refresh so an admin KYC approval (or any server-side
      *  change) shows up without a re-login. Fire-and-forget, null-safe. */
     fun refreshProfile() {
-        viewModelScope.launch { repository.refreshActiveProfile() }
+        viewModelScope.launch {
+            repository.refreshActiveProfile()
+            // §710 cycle-2 #11 — seed the service-radius slider from the SERVER profile
+            // (was a hardcoded 10.0 that went stale after restart, so the slider lied
+            // about the saved coverage). Hours-preset clamp tracked separately (P1-8).
+            repository.activeUserFlow.value?.let { u ->
+                if (u.travelRadiusKm > 0) partnerServiceRadiusKm = u.travelRadiusKm
+            }
+        }
     }
 
     /** §708 — pull-to-refresh dispatcher: re-fetch whatever the given screen shows.
