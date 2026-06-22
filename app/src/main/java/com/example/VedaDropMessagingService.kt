@@ -28,12 +28,29 @@ class VedaDropMessagingService : FirebaseMessagingService() {
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
+        val data = message.data
+
+        // §725 Batch-B — URGENT job alerts are SAFETY-critical: they ring the high-alert
+        // alarm regardless of the "Push Reminders" toggle (the toggle is for routine
+        // reminders, not an active customer waiting for a professional right now).
+        // Data-only contract: {"type":"urgent_offer",...} starts the alarm;
+        // {"type":"urgent_cleared",...} stops it.
+        when (data["type"]) {
+            "urgent_offer" -> {
+                UrgentAlarmService.start(this)
+                return
+            }
+            "urgent_cleared" -> {
+                UrgentAlarmService.stop(this)
+                return
+            }
+        }
+
         // §714 cpe-push-toggle-1 — honour the user's "Push Reminders" preference locally
         // even if a token is still registered server-side (the toggle also (de)registers).
         val remindersOn = getSharedPreferences("nikhatglow_prefs", Context.MODE_PRIVATE)
             .getBoolean("push_reminders_enabled", true)
         if (!remindersOn) return
-        val data = message.data
         val title = message.notification?.title ?: data["title"] ?: "Veda Drop"
         val body = message.notification?.body ?: data["body"] ?: ""
 

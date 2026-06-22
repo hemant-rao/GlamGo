@@ -523,6 +523,9 @@ data class ReassignmentOfferBookingDto(
     @Json(name = "item_count") val itemCount: Int = 1,
     @Json(name = "distance_km") val distanceKm: Double? = null,
     @Json(name = "eta_min") val etaMin: Int? = null,
+    // §725 Batch-B — the booking was raised as URGENT (slot inside the lead-time window,
+    // urgent_pool ON → pushed to the Flow-B pool). Drives the high-alert alarm.
+    @Json(name = "is_urgent") val isUrgent: Boolean = false,
 )
 
 @JsonClass(generateAdapter = true)
@@ -536,6 +539,9 @@ data class ReassignmentOfferDto(
     @Json(name = "exclusive_until") val exclusiveUntil: String? = null,
     @Json(name = "expires_at") val expiresAt: String? = null,
     @Json(name = "created_at") val createdAt: String? = null,
+    // §725 Batch-B — top-level urgent flag (mirrors booking.is_urgent) if the backend
+    // surfaces it on the offer; falls back to booking.isUrgent / a short-lead heuristic.
+    @Json(name = "urgent") val urgent: Boolean = false,
     val booking: ReassignmentOfferBookingDto? = null,
 )
 
@@ -547,6 +553,29 @@ data class OffersResp(
     @Json(name = "empty_reason") val emptyReason: String? = null,
     @Json(name = "empty_message") val emptyMessage: String? = null,
 )
+
+/**
+ * §725 Batch-B — is this offer URGENT (deserves the high-alert alarm)?
+ *   1. an explicit backend flag (offer.urgent or booking.is_urgent), else
+ *   2. a fallback heuristic: a broadcast offer whose slot starts within the next
+ *      ~2h (the lead-time window) — i.e. a "need someone now" job. Past/unknown
+ *      slot times are NOT treated as urgent so stale offers stay quiet.
+ */
+fun ReassignmentOfferDto.isUrgentOffer(leadMinutes: Long = 120): Boolean {
+    if (urgent || booking?.isUrgent == true) return true
+    val startIso = booking?.slotStart ?: return false
+    val start = runCatching {
+        // Accept both "...T10:00:00Z" / "...T10:00:00" and a bare local date-time.
+        java.time.OffsetDateTime.parse(startIso).toInstant()
+    }.recoverCatching {
+        java.time.LocalDateTime.parse(startIso.removeSuffix("Z"))
+            .atZone(java.time.ZoneId.systemDefault()).toInstant()
+    }.getOrNull() ?: return false
+    val now = java.time.Instant.now()
+    val lead = java.time.Duration.ofMinutes(leadMinutes)
+    // Urgent = starts in the FUTURE but inside the lead-time window.
+    return start.isAfter(now) && start.isBefore(now.plus(lead))
+}
 
 @JsonClass(generateAdapter = true)
 data class ChangePartnerResp(val booking: BookingDto? = null, val offer: ReassignmentOfferDto? = null)

@@ -56,6 +56,7 @@ import androidx.compose.ui.window.DialogProperties
 import coil.compose.AsyncImage
 import com.example.data.*
 import com.example.data.remote.CartItemDto
+import com.example.data.remote.isUrgentOffer
 import com.example.ui.theme.*
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -2888,7 +2889,10 @@ private fun OpenBookingDialog(
     onDismiss: () -> Unit,
 ) {
     val today = remember { java.time.LocalDate.now() }
-    var selDate by remember { mutableStateOf(today.plusDays(1)) }
+    // §725 Batch-B — allow SAME-DAY open bookings (was tomorrow-only). The backend
+    // accepts a future-but-soon slot as is_urgent when urgent_pool is ON, broadcasting
+    // it to the Flow-B pool instead of rejecting it.
+    var selDate by remember { mutableStateOf(today) }
     var selHour by remember { mutableStateOf(11) }
     val defaultAddr = addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull()
     val canBook = defaultAddr != null || deviceLoc != null
@@ -2918,16 +2922,23 @@ private fun OpenBookingDialog(
                 Text("Date", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 Spacer(Modifier.height(6.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
-                    (1..7).forEach { d ->
+                    (0..6).forEach { d ->
                         val date = today.plusDays(d.toLong())
-                        chip("${date.dayOfMonth}/${date.monthValue}", date == selDate) { selDate = date }
+                        val lbl = when (d) {
+                            0 -> "Today"
+                            1 -> "Tom"
+                            else -> "${date.dayOfMonth}/${date.monthValue}"
+                        }
+                        chip(lbl, date == selDate) { selDate = date }
                     }
                 }
                 Spacer(Modifier.height(12.dp))
                 Text("Time", fontWeight = FontWeight.Bold, fontSize = 13.sp)
                 Spacer(Modifier.height(6.dp))
                 Row(Modifier.horizontalScroll(rememberScrollState())) {
-                    (9..17).forEach { h -> chip("%02d:00".format(h), h == selHour) { selHour = h } }
+                    // §727 — align the open-booking dialog to the 7AM-6PM service window
+                    // (was 9-5, which hid the 7-8 / 8-9 AM slots from the pool path).
+                    (7..17).forEach { h -> chip("%02d:00".format(h), h == selHour) { selHour = h } }
                 }
                 if (!canBook) {
                     Spacer(Modifier.height(10.dp))
@@ -3388,54 +3399,18 @@ fun PartnerSelectScreen(viewModel: VedaDropViewModel, service: Service) {
 @Composable
 fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner: Partner) {
     val addresses by viewModel.addresses.collectAsState()
-    val activeUser by viewModel.activeUser.collectAsState()
-    
-    val defaultAddress = addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull()
-    var showNewAddressDialog by remember { mutableStateOf(false) }
-    
-    var labelInput by remember { mutableStateOf("Home") }
-    var line1Input by remember { mutableStateOf("") }
-    var line2Input by remember { mutableStateOf("") }
-    var cityInput by remember { mutableStateOf("") }
-    var pincodeInput by remember { mutableStateOf("") }
-    // §687 — real coordinates for the address being added (from GPS or a search
-    // suggestion). Null = pure-manual entry (distance features degrade gracefully).
-    var capturedLat by remember { mutableStateOf<Double?>(null) }
-    var capturedLon by remember { mutableStateOf<Double?>(null) }
-    var addrQuery by remember { mutableStateOf("") }
-    var addrSuggestions by remember { mutableStateOf<List<com.example.data.remote.GeoSuggestionDto>>(emptyList()) }
-    val scope = rememberCoroutineScope()
-    val ctx = androidx.compose.ui.platform.LocalContext.current
 
-    // Shared "capture GPS → reverse-geocode → prefill" used by the button below.
-    val captureAndFill: () -> Unit = {
-        viewModel.captureDeviceLocation(notifyOnFail = true) { loc ->
-            if (loc != null) {
-                capturedLat = loc.first
-                capturedLon = loc.second
-                scope.launch {
-                    val rev = viewModel.reverseGeocode(loc.first, loc.second)
-                    if (rev != null) {
-                        if (line1Input.isBlank()) line1Input = rev.address ?: ""
-                        if (!rev.city.isNullOrBlank()) cityInput = rev.city!!
-                        if (pincodeInput.isBlank() && !rev.pincode.isNullOrBlank()) pincodeInput = rev.pincode!!
-                    }
-                }
-            }
-        }
+    // §725 Batch-B — the customer can switch between saved addresses (radio list) and
+    // add a new one via the shared full-screen location picker. selectedAddressId is
+    // seeded to the current default ("last selected"); picking one persists it as the
+    // next-time default via setDefaultAddress.
+    var selectedAddressId by remember(addresses) {
+        mutableStateOf((addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull())?.id)
     }
-    // If the user previously denied location, the button was a dead no-op. This
-    // lets "Use current location" re-request the runtime permission in-context,
-    // then capture on grant — and falls back to a clear message on deny.
-    val locationPermLauncher = androidx.activity.compose.rememberLauncherForActivityResult(
-        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
-    ) { granted ->
-        if (granted.values.any { it }) captureAndFill()
-        else viewModel.notify(
-            "Location permission denied. You can still type your address below.",
-            isError = true,
-        )
-    }
+    val chosenAddress = addresses.firstOrNull { it.id == selectedAddressId }
+        ?: addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull()
+    var showLocationPicker by remember { mutableStateOf(false) }
+
     // §694 — booking-time data capture for this flow.
     var bookingNotes by remember { mutableStateOf("") }
     var genderPref by remember { mutableStateOf("female") }   // §722 women-only
@@ -3445,17 +3420,6 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
     var bookingBusy by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         viewModel.uiMessages.collect { bookingBusy = false }
-    }
-
-    // §687 — address search-as-you-type via the geo proxy (free OSM); only fires after
-    // 3 characters, debounced 300ms (per the founder's "show after 3 letters").
-    LaunchedEffect(addrQuery) {
-        if (addrQuery.trim().length >= 3) {
-            delay(300)
-            addrSuggestions = viewModel.searchPlaces(addrQuery.trim())
-        } else {
-            addrSuggestions = emptyList()
-        }
     }
 
     val quote = viewModel.quoteBreakdown
@@ -3480,24 +3444,50 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
-                    if (defaultAddress != null) {
-                        Text(defaultAddress.labelText, fontWeight = FontWeight.Bold)
-                        Text("${defaultAddress.line1} ${defaultAddress.line2}", fontSize = 13.sp)
-                        Text("${defaultAddress.city} - ${defaultAddress.pincode}", fontSize = 13.sp)
-                        
-                        Spacer(modifier = Modifier.height(12.dp))
-                    } else {
+                    if (addresses.isEmpty()) {
                         Text("No delivery addresses saved yet", color = Color.Gray, fontSize = 13.sp)
+                    } else {
+                        // §725 — selectable radio list; the current default is pre-selected.
+                        addresses.forEach { addr ->
+                            val isSel = addr.id == selectedAddressId
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clickable {
+                                        selectedAddressId = addr.id
+                                        // Persist as next-time default ("last selected").
+                                        viewModel.setDefaultAddress(addr.id)
+                                    }
+                                    .padding(vertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(4.dp)
+                            ) {
+                                RadioButton(
+                                    selected = isSel,
+                                    onClick = {
+                                        selectedAddressId = addr.id
+                                        viewModel.setDefaultAddress(addr.id)
+                                    },
+                                    colors = RadioButtonDefaults.colors(selectedColor = VedaDropRose)
+                                )
+                                Column(modifier = Modifier.weight(1f)) {
+                                    Text(addr.labelText, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                    Text("${addr.line1} ${addr.line2}".trim(), fontSize = 12.sp, color = Color.Gray)
+                                    Text("${addr.city} - ${addr.pincode}", fontSize = 12.sp, color = Color.Gray)
+                                }
+                            }
+                        }
+                        Spacer(modifier = Modifier.height(8.dp))
                     }
                     OutlinedButton(
-                        onClick = { showNewAddressDialog = true },
+                        onClick = { showLocationPicker = true },
                         modifier = Modifier
                             .fillMaxWidth()
                             .testTag("add_address_btn")
                     ) {
                         Icon(Icons.Default.AddLocation, contentDescription = null)
                         Spacer(modifier = Modifier.width(8.dp))
-                        Text("Add New Custom Address", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                        Text("Add new location", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -3530,16 +3520,23 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
                             .horizontalScroll(rememberScrollState()),
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
-                        // §707 — 1-day advance minimum (matches OpenBookingDialog):
-                        // offer the next 7 days starting tomorrow, never today.
-                        for (offset in 1..7) {
+                        // §725 Batch-B — allow SAME-DAY booking: offer the next 7 days
+                        // starting TODAY (offset 0). The backend marks each slot's
+                        // available=false for past / too-soon (<2h lead) / over-window
+                        // times, so today still shows but unbookable slots are disabled.
+                        for (offset in 0..6) {
                             val d = today.plusDays(offset.toLong())
                             val iso = d.toString()
                             val isSel = iso == selectedDate
+                            val dayLabel = when (offset) {
+                                0 -> "Today"
+                                1 -> "Tomorrow"
+                                else -> d.format(dayFmt)
+                            }
                             FilterChip(
                                 selected = isSel,
                                 onClick = { viewModel.loadSlots(partner.id, service.id, iso) },
-                                label = { Text(d.format(dayFmt), fontSize = 12.sp) },
+                                label = { Text(dayLabel, fontSize = 12.sp) },
                                 colors = FilterChipDefaults.filterChipColors(
                                     selectedContainerColor = VedaDropRose,
                                     selectedLabelColor = Color.White,
@@ -3577,18 +3574,32 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
                                     // §722 — show the slot as a 1-hour RANGE ("7AM-8AM").
                                     val hourLabel = slotHourRange(slot.start, slot.slotId)
                                     val isSel = slot.slotId == selectedSlotId
-                                    FilterChip(
-                                        selected = isSel,
-                                        enabled = slot.available,
-                                        onClick = { viewModel.selectedSlotId = slot.slotId },
-                                        label = { Text(hourLabel, fontSize = 12.sp) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = VedaDropRose,
-                                            selectedLabelColor = Color.White,
-                                            disabledLabelColor = Color.Gray.copy(alpha = 0.5f),
+                                    // §725 — subtle hint for slots the server disabled.
+                                    val hint = disabledSlotHint(slot)
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        FilterChip(
+                                            selected = isSel,
+                                            enabled = slot.available,
+                                            onClick = { viewModel.selectedSlotId = slot.slotId },
+                                            label = { Text(hourLabel, fontSize = 12.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = VedaDropRose,
+                                                selectedLabelColor = Color.White,
+                                                disabledLabelColor = Color.Gray.copy(alpha = 0.5f),
+                                            )
                                         )
-                                    )
+                                        if (hint != null) {
+                                            Text(hint, fontSize = 9.sp, color = Color.Gray.copy(alpha = 0.7f))
+                                        }
+                                    }
                                 }
+                                // §725 — let the customer fine-tune to :15/:30/:45.
+                                CustomTimeChip(
+                                    selectedDate = selectedDate,
+                                    partnerId = partner.id,
+                                    selectedSlotId = selectedSlotId,
+                                    onPicked = { viewModel.selectedSlotId = it },
+                                )
                             }
                         }
                     }
@@ -3718,11 +3729,11 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
             var showBookingConfirm by remember { mutableStateOf(false) }
             Button(
                 onClick = {
-                    if (!bookingBusy && defaultAddress != null && viewModel.selectedSlotId != null) {
+                    if (!bookingBusy && chosenAddress != null && viewModel.selectedSlotId != null) {
                         showBookingConfirm = true
                     }
                 },
-                enabled = !bookingBusy && defaultAddress != null && viewModel.selectedSlotId != null,
+                enabled = !bookingBusy && chosenAddress != null && viewModel.selectedSlotId != null,
                 modifier = Modifier
                     .fillMaxWidth()
                     .testTag("pay_book_action_btn"),
@@ -3745,7 +3756,7 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
                     overflow = TextOverflow.Ellipsis,
                 )
             }
-            if (showBookingConfirm && defaultAddress != null) {
+            if (showBookingConfirm && chosenAddress != null) {
                 val selSlot = viewModel.availableSlots.firstOrNull { it.slotId == viewModel.selectedSlotId }
                 val slotLabel = if (selSlot != null) slotHourRange(selSlot.start, selSlot.slotId) else "your slot"
                 val dateLabel = runCatching {
@@ -3766,7 +3777,7 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
                             Row(verticalAlignment = Alignment.Top) {
                                 Icon(Icons.Default.Home, contentDescription = null, tint = VedaDropRose, modifier = Modifier.size(16.dp))
                                 Spacer(modifier = Modifier.width(8.dp))
-                                Text("${defaultAddress.labelText}, ${defaultAddress.line1}", maxLines = 2, overflow = TextOverflow.Ellipsis)
+                                Text("${chosenAddress.labelText}, ${chosenAddress.line1}", maxLines = 2, overflow = TextOverflow.Ellipsis)
                             }
                             Text("Pay the professional directly — no charges in the app.", fontSize = 11.sp, color = Color.Gray)
                         }
@@ -3778,7 +3789,7 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
                                 bookingBusy = true
                                 viewModel.bookingNotes = bookingNotes
                                 viewModel.bookingGenderPref = genderPref
-                                viewModel.confirmAndBook(service, partner, defaultAddress)
+                                viewModel.confirmAndBook(service, partner, chosenAddress)
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
                             modifier = Modifier.testTag("confirm_booking_final_btn"),
@@ -3794,115 +3805,28 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
             Spacer(modifier = Modifier.height(24.dp))
         }
     }
-    
-    // Dialog for adding address
-    if (showNewAddressDialog) {
-        Dialog(onDismissRequest = { showNewAddressDialog = false }) {
-            Card(
-                shape = RoundedCornerShape(16.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-            ) {
-                Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text("Add Address", fontWeight = FontWeight.Bold, fontSize = 18.sp, color = MaterialTheme.colorScheme.primary)
 
-                    // §687 — use current device location (GPS) to prefill the form.
-                    OutlinedButton(
-                        onClick = {
-                            if (com.example.data.LocationHelper.hasPermission(ctx)) {
-                                captureAndFill()
-                            } else {
-                                locationPermLauncher.launch(
-                                    arrayOf(
-                                        android.Manifest.permission.ACCESS_FINE_LOCATION,
-                                        android.Manifest.permission.ACCESS_COARSE_LOCATION,
-                                    )
-                                )
-                            }
-                        },
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
-                        Spacer(modifier = Modifier.width(8.dp))
-                        Text("Use current location", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
-                    }
-
-                    // §687 — search-as-you-type (suggestions appear after 3 letters).
-                    OutlinedTextField(
-                        value = addrQuery,
-                        onValueChange = { addrQuery = it },
-                        label = { Text("Search address") },
-                        leadingIcon = { Icon(Icons.Default.Search, contentDescription = null) },
-                        singleLine = true,
-                        modifier = Modifier.fillMaxWidth()
-                    )
-                    addrSuggestions.take(5).forEach { sug ->
-                        Text(
-                            text = listOfNotNull(sug.title, sug.subtitle).joinToString(", "),
-                            fontSize = 13.sp,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable {
-                                    line1Input = sug.title ?: line1Input
-                                    if (!sug.subtitle.isNullOrBlank()) cityInput = sug.subtitle!!
-                                    capturedLat = sug.lat
-                                    capturedLon = sug.lon
-                                    addrQuery = ""
-                                    addrSuggestions = emptyList()
-                                }
-                                .padding(vertical = 6.dp)
-                        )
-                    }
-
-                    OutlinedTextField(
-                        value = labelInput,
-                        onValueChange = { labelInput = it },
-                        label = { Text("Address Label (e.g. Home, Office)") },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = line1Input,
-                        onValueChange = { line1Input = it },
-                        label = { Text("Building/Street Name (Line 1)") },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = line2Input,
-                        onValueChange = { line2Input = it },
-                        label = { Text("Floor/Flat/Area (Line 2)") },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = cityInput,
-                        onValueChange = { cityInput = it },
-                        label = { Text("City") },
-                        singleLine = true
-                    )
-                    OutlinedTextField(
-                        value = pincodeInput,
-                        onValueChange = { pincodeInput = it.filter { c -> c.isDigit() }.take(6) },
-                        label = { Text("Pincode") },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                    )
-                    
-                    Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                        TextButton(onClick = { showNewAddressDialog = false }) {
-                            Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
-                        }
-                        Button(
-                            onClick = {
-                                if (line1Input.isNotBlank() && cityInput.isNotBlank() && pincodeInput.length == 6) {
-                                    viewModel.addNewAddress(labelInput, line1Input, line2Input, cityInput, pincodeInput, capturedLat, capturedLon)
-                                    showNewAddressDialog = false
-                                }
-                            }
-                        ) {
-                            Text("Add Address", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
-                        }
-                    }
-                }
-            }
-        }
+    // §725 Batch-B — add a new delivery location via the shared full-screen picker
+    // (GPS / search-as-you-type), replacing the old manual address dialog. On pick we
+    // call setActiveLocation, which POSTs the address AND sets it as the default; the
+    // addresses flow refresh re-seeds selectedAddressId to that new default.
+    if (showLocationPicker) {
+        LocationSearchOverlay(
+            viewModel = viewModel,
+            title = "Add delivery location",
+            onDismiss = { showLocationPicker = false },
+            onPicked = { picked ->
+                viewModel.setActiveLocation(
+                    label = picked.title.ifBlank { "Home" },
+                    line1 = picked.address,
+                    line2 = "",
+                    city = picked.city,
+                    pincode = picked.pincode,
+                    lat = picked.lat,
+                    lon = picked.lon,
+                )
+            },
+        )
     }
 }
 
@@ -5133,12 +5057,158 @@ fun slotHourRange(startIso: String?, slotId: String): String {
     val h = startIso?.substringAfter("T", "")?.take(2)?.toIntOrNull()
         ?: slotId.split(":").getOrNull(2)?.toIntOrNull()
         ?: return slotId
-    fun lbl(x: Int): String {
+    // §725 — 4-segment slot ids ("{partner}:{date}:{hour}:{minute}") carry a minute.
+    val minute = slotId.split(":").getOrNull(3)?.toIntOrNull()
+    fun lbl(x: Int, m: Int): String {
         val hr = (x % 12).let { if (it == 0) 12 else it }
         val ap = if (x % 24 < 12) "AM" else "PM"
-        return "$hr$ap"
+        return if (m > 0) "%d:%02d%s".format(hr, m, ap) else "$hr$ap"
     }
-    return "${lbl(h)}-${lbl(h + 1)}"
+    return if (minute != null && minute > 0) {
+        // A custom-minute slot is a 1-hour window from HH:MM (e.g. 1:15-2:15 PM).
+        "${lbl(h, minute)}-${lbl(h + 1, minute)}"
+    } else {
+        "${lbl(h, 0)}-${lbl(h + 1, 0)}"
+    }
+}
+
+/** §725 Batch-B — short, subtle reason a disabled slot can't be booked. The backend
+ *  sets available=false for past / too-soon(<2h lead) / over-window slots; we infer a
+ *  friendly label from the slot's start vs now ("too soon" if it's later today but
+ *  inside the lead window, else "closed"). Returns null for an available slot. */
+fun disabledSlotHint(slot: com.example.data.remote.SlotDto): String? {
+    if (slot.available) return null
+    val start = parseSlotStartInstant(slot)
+        ?: return "closed"
+    val now = java.time.Instant.now()
+    return when {
+        !start.isAfter(now) -> "closed"                                  // already passed
+        start.isBefore(now.plus(java.time.Duration.ofHours(2))) -> "too soon"  // inside lead window
+        else -> "closed"                                                  // over-window / day off
+    }
+}
+
+/** Best-effort parse of a slot's start into an Instant from its ISO start or slot_id. */
+private fun parseSlotStartInstant(slot: com.example.data.remote.SlotDto): java.time.Instant? {
+    val iso = slot.start
+    if (!iso.isNullOrBlank()) {
+        runCatching { return java.time.OffsetDateTime.parse(iso).toInstant() }
+        runCatching {
+            return java.time.LocalDateTime.parse(iso.removeSuffix("Z"))
+                .atZone(java.time.ZoneId.systemDefault()).toInstant()
+        }
+    }
+    // Fall back to the slot_id grammar "{partner}:{YYYY-MM-DD}:{hour}[:{minute}]".
+    val parts = slot.slotId.split(":")
+    val date = parts.getOrNull(1) ?: return null
+    val hour = parts.getOrNull(2)?.toIntOrNull() ?: return null
+    val minute = parts.getOrNull(3)?.toIntOrNull() ?: 0
+    return runCatching {
+        java.time.LocalDate.parse(date).atTime(hour, minute)
+            .atZone(java.time.ZoneId.systemDefault()).toInstant()
+    }.getOrNull()
+}
+
+/**
+ * §725 Batch-B (founder: "1:15 / 1:30 / 1:45 bhi chunna ho to"). A "Custom time"
+ * affordance shown after the hour chips. Tapping it opens a small picker — pick the
+ * HOUR (7am-6pm window) and a MINUTE (0/15/30/45) — and builds a 4-segment slot id
+ * "{partner}:{date}:{hour}:{minute}" (the LOCKED grammar), set as the selected slot.
+ *
+ * The chosen custom slot is still subject to the server's available rules at quote/
+ * book time (past / <2h lead / over-window are rejected there), so this only widens
+ * the *granularity* a customer can request, not the validity window.
+ */
+@Composable
+fun CustomTimeChip(
+    selectedDate: String,
+    partnerId: String,
+    selectedSlotId: String?,
+    onPicked: (String) -> Unit,
+) {
+    var showPicker by remember { mutableStateOf(false) }
+    // Is the current selection a custom (4-segment, non-zero minute) slot? If so, show it.
+    val selParts = selectedSlotId?.split(":") ?: emptyList()
+    val selMinute = selParts.getOrNull(3)?.toIntOrNull() ?: 0
+    val isCustomSelected = selectedSlotId != null && selMinute > 0 &&
+        selParts.getOrNull(1) == selectedDate
+    val chipLabel = if (isCustomSelected) "Custom · ${slotHourRange(null, selectedSlotId!!)}" else "Custom time"
+
+    FilterChip(
+        selected = isCustomSelected,
+        onClick = { showPicker = true },
+        leadingIcon = { Icon(Icons.Default.Schedule, contentDescription = null, modifier = Modifier.size(16.dp)) },
+        label = { Text(chipLabel, fontSize = 12.sp, maxLines = 1, softWrap = false) },
+        colors = FilterChipDefaults.filterChipColors(
+            selectedContainerColor = VedaDropRose,
+            selectedLabelColor = Color.White,
+        )
+    )
+
+    if (showPicker) {
+        var pickHour by remember { mutableStateOf(selParts.getOrNull(2)?.toIntOrNull() ?: 10) }
+        var pickMinute by remember { mutableStateOf(if (selMinute > 0) selMinute else 15) }
+        AlertDialog(
+            onDismissRequest = { showPicker = false },
+            title = { Text("Pick a custom time") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    Text("Hour (7 AM – 6 PM)", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        // Start hours 7..17 (each is a 1-hour window ending by 6 PM).
+                        (7..17).forEach { h ->
+                            FilterChip(
+                                selected = h == pickHour,
+                                onClick = { pickHour = h },
+                                label = {
+                                    val hr = (h % 12).let { if (it == 0) 12 else it }
+                                    val ap = if (h < 12) "AM" else "PM"
+                                    Text("$hr $ap", fontSize = 12.sp, maxLines = 1, softWrap = false)
+                                },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = VedaDropRose, selectedLabelColor = Color.White,
+                                )
+                            )
+                        }
+                    }
+                    Text("Minutes", fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        listOf(0, 15, 30, 45).forEach { m ->
+                            FilterChip(
+                                selected = m == pickMinute,
+                                onClick = { pickMinute = m },
+                                label = { Text(":%02d".format(m), fontSize = 12.sp) },
+                                colors = FilterChipDefaults.filterChipColors(
+                                    selectedContainerColor = VedaDropRose, selectedLabelColor = Color.White,
+                                )
+                            )
+                        }
+                    }
+                    val hr = (pickHour % 12).let { if (it == 0) 12 else it }
+                    val ap = if (pickHour < 12) "AM" else "PM"
+                    Text("Requesting %d:%02d %s — the professional confirms availability.".format(hr, pickMinute, ap),
+                        fontSize = 11.sp, color = Color.Gray)
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        // LOCKED grammar: 3-segment when minute 0 (back-compat), else 4-segment.
+                        val slotId = if (pickMinute == 0) "$partnerId:$selectedDate:$pickHour"
+                        else "$partnerId:$selectedDate:$pickHour:$pickMinute"
+                        onPicked(slotId)
+                        showPicker = false
+                    },
+                    colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
+                ) { Text("Use this time", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPicker = false }) {
+                    Text("Cancel", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                }
+            },
+        )
+    }
 }
 
 
@@ -5523,6 +5593,13 @@ fun PartnerOffersScreen(viewModel: VedaDropViewModel) {
         }
     }
 
+    // §725 Batch-B — viewing the Rescue Board is the "partner has seen the urgent job"
+    // signal: silence the high-alert alarm while it's on screen, and re-arm when leaving.
+    DisposableEffect(Unit) {
+        viewModel.onUrgentOffersViewed()
+        onDispose { viewModel.onUrgentOffersLeft() }
+    }
+
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
             title = { Text("Open Jobs", fontWeight = FontWeight.Bold) },
@@ -5567,6 +5644,23 @@ fun PartnerOffersScreen(viewModel: VedaDropViewModel) {
                         modifier = Modifier.fillMaxWidth(),
                     ) {
                         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            // §725 Batch-B — flag urgent jobs prominently (these are what
+                            // ring the high-alert alarm). Claiming silences the alarm.
+                            if (offer.isUrgentOffer()) {
+                                Surface(color = Color(0xFFD32F2F).copy(alpha = 0.14f), shape = RoundedCornerShape(6.dp)) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(8.dp, 3.dp),
+                                    ) {
+                                        Icon(Icons.Default.Bolt, contentDescription = null, tint = Color(0xFFD32F2F), modifier = Modifier.size(14.dp))
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Text(
+                                            "URGENT · customer needs someone now",
+                                            color = Color(0xFFD32F2F), fontSize = 10.sp, fontWeight = FontWeight.Bold,
+                                        )
+                                    }
+                                }
+                            }
                             if (offer.isTargetedToMeWindow) {
                                 Surface(color = VedaDropRose.copy(alpha = 0.12f), shape = RoundedCornerShape(6.dp)) {
                                     Text(

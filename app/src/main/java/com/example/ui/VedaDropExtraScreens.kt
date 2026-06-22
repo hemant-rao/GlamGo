@@ -75,6 +75,8 @@ fun CartScreen(viewModel: VedaDropViewModel) {
             (addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull())?.id
         )
     }
+    // §725 Batch-B — shared full-screen "Add new location" picker.
+    var showLocationPicker by remember { mutableStateOf(false) }
 
     Column(modifier = Modifier.fillMaxSize()) {
         TopAppBar(
@@ -244,16 +246,32 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                                 viewModel.availableSlots.forEach { slot ->
                                     // §722 — show the slot as a 1-hour RANGE ("7AM-8AM").
                                     val hourLabel = slotHourRange(slot.start, slot.slotId)
-                                    FilterChip(
-                                        selected = slot.slotId == selectedSlotId,
-                                        enabled = slot.available,
-                                        onClick = { viewModel.selectedSlotId = slot.slotId },
-                                        label = { Text(hourLabel, fontSize = 12.sp) },
-                                        colors = FilterChipDefaults.filterChipColors(
-                                            selectedContainerColor = VedaDropRose,
-                                            selectedLabelColor = Color.White,
-                                            disabledLabelColor = Color.Gray.copy(alpha = 0.5f),
+                                    // §725 — subtle hint for slots the server disabled.
+                                    val hint = disabledSlotHint(slot)
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                        FilterChip(
+                                            selected = slot.slotId == selectedSlotId,
+                                            enabled = slot.available,
+                                            onClick = { viewModel.selectedSlotId = slot.slotId },
+                                            label = { Text(hourLabel, fontSize = 12.sp) },
+                                            colors = FilterChipDefaults.filterChipColors(
+                                                selectedContainerColor = VedaDropRose,
+                                                selectedLabelColor = Color.White,
+                                                disabledLabelColor = Color.Gray.copy(alpha = 0.5f),
+                                            )
                                         )
+                                        if (hint != null) {
+                                            Text(hint, fontSize = 9.sp, color = Color.Gray.copy(alpha = 0.7f))
+                                        }
+                                    }
+                                }
+                                // §725 — custom :15/:30/:45 fine-tune for the cart slot.
+                                if (partnerIdStr != null) {
+                                    CustomTimeChip(
+                                        selectedDate = selectedDate,
+                                        partnerId = partnerIdStr,
+                                        selectedSlotId = selectedSlotId,
+                                        onPicked = { viewModel.selectedSlotId = it },
                                     )
                                 }
                             }
@@ -267,21 +285,28 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                     Text("DELIVERY ADDRESS", fontWeight = FontWeight.Bold, color = VedaDropRose, fontSize = 13.sp)
                     if (addresses.isEmpty()) {
-                        Text("No saved address - add one from your profile first.", fontSize = 12.sp, color = Color.Gray)
+                        Text("No saved address - add one below.", fontSize = 12.sp, color = Color.Gray)
                     } else {
                         addresses.forEach { addr ->
                             val isSel = addr.id == selectedAddressId
                             Row(
                                 modifier = Modifier
                                     .fillMaxWidth()
-                                    .clickable { selectedAddressId = addr.id }
+                                    .clickable {
+                                        selectedAddressId = addr.id
+                                        // §725 — persist as next-time default ("last selected").
+                                        viewModel.setDefaultAddress(addr.id)
+                                    }
                                     .padding(vertical = 4.dp),
                                 verticalAlignment = Alignment.CenterVertically,
                                 horizontalArrangement = Arrangement.spacedBy(8.dp)
                             ) {
                                 RadioButton(
                                     selected = isSel,
-                                    onClick = { selectedAddressId = addr.id },
+                                    onClick = {
+                                        selectedAddressId = addr.id
+                                        viewModel.setDefaultAddress(addr.id)
+                                    },
                                     colors = RadioButtonDefaults.colors(selectedColor = VedaDropRose)
                                 )
                                 Column {
@@ -290,6 +315,17 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                                 }
                             }
                         }
+                    }
+                    // §725 Batch-B — add a new location via the shared full-screen picker;
+                    // setActiveLocation POSTs + sets it as default, the flow refresh
+                    // re-seeds selectedAddressId to the new default.
+                    OutlinedButton(
+                        onClick = { showLocationPicker = true },
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Add new location", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -371,6 +407,26 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                     }
                 }
             }
+        }
+
+        // §725 Batch-B — "Add new location" full-screen picker for the cart checkout.
+        if (showLocationPicker) {
+            LocationSearchOverlay(
+                viewModel = viewModel,
+                title = "Add delivery location",
+                onDismiss = { showLocationPicker = false },
+                onPicked = { picked ->
+                    viewModel.setActiveLocation(
+                        label = picked.title.ifBlank { "Home" },
+                        line1 = picked.address,
+                        line2 = "",
+                        city = picked.city,
+                        pincode = picked.pincode,
+                        lat = picked.lat,
+                        lon = picked.lon,
+                    )
+                },
+            )
         }
     }
 }

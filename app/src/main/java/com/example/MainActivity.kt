@@ -1,6 +1,7 @@
 package com.example
 
 import android.Manifest
+import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.content.Context
@@ -26,6 +27,24 @@ class MainActivity : ComponentActivity() {
      *  FirebaseMessagingService.onMessageReceived) MUST target this same id, and
      *  the channel must exist before the first notification is posted on API 26+. */
     const val FCM_CHANNEL_ID = "nikhatglow_default"
+
+    /** §725 Batch-B — dedicated HIGH-importance channel for URGENT job alerts. Uses an
+     *  ALARM-stream sound, bypasses DND and vibrates, so a partner cannot miss a job a
+     *  customer needs right now. Targeted by [UrgentAlarmService]'s full-screen notification. */
+    const val URGENT_CHANNEL_ID = "vedadrop_urgent"
+  }
+
+  /** §725 Batch-B — the live VM (set during composition) so onNewIntent can route a
+   *  warm-start notification tap. Null before first composition / after teardown. */
+  private var activeViewModel: VedaDropViewModel? = null
+
+  override fun onNewIntent(newIntent: android.content.Intent) {
+    super.onNewIntent(newIntent)
+    setIntent(newIntent)
+    if (newIntent.getBooleanExtra("open_urgent_offers", false)) {
+      activeViewModel?.openUrgentOffers()
+    }
+    newIntent.getStringExtra("notif_booking_id")?.let { activeViewModel?.openBookingFromPush(it) }
   }
 
   override fun onCreate(savedInstanceState: Bundle?) {
@@ -46,6 +65,32 @@ class MainActivity : ComponentActivity() {
           }
         )
       }
+      // §725 Batch-B — urgent-job channel: ALARM sound, max importance, bypass DND,
+      // vibrate. A channel's sound/importance are LOCKED after creation, so this must
+      // be configured here once (uninstall/reinstall to change).
+      if (manager.getNotificationChannel(URGENT_CHANNEL_ID) == null) {
+        val alarmUri = android.media.RingtoneManager
+          .getDefaultUri(android.media.RingtoneManager.TYPE_ALARM)
+          ?: android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION)
+        val alarmAttrs = android.media.AudioAttributes.Builder()
+          .setUsage(android.media.AudioAttributes.USAGE_ALARM)
+          .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SONIFICATION)
+          .build()
+        manager.createNotificationChannel(
+          NotificationChannel(
+            URGENT_CHANNEL_ID,
+            "Urgent jobs",
+            NotificationManager.IMPORTANCE_HIGH
+          ).apply {
+            description = "Loud alert when a customer needs a professional right away."
+            if (alarmUri != null) setSound(alarmUri, alarmAttrs)
+            enableVibration(true)
+            vibrationPattern = longArrayOf(0, 600, 300, 600, 300, 600)
+            setBypassDnd(true)
+            lockscreenVisibility = Notification.VISIBILITY_PUBLIC
+          }
+        )
+      }
     }
     enableEdgeToEdge()
     setContent {
@@ -55,6 +100,9 @@ class MainActivity : ComponentActivity() {
           color = androidx.compose.material3.MaterialTheme.colorScheme.background
         ) {
           val viewModel = androidx.lifecycle.viewmodel.compose.viewModel<VedaDropViewModel>()
+          // §725 Batch-B — keep a handle so a warm-start onNewIntent (tapping the
+          // urgent full-screen notification while the app is alive) can route too.
+          activeViewModel = viewModel
           // §687 — request location once on launch; on grant (or if already
           // granted) capture the device fix so "near me" discovery engages. The
           // app works fine if the user denies — discovery just isn't distance-sorted
@@ -72,6 +120,10 @@ class MainActivity : ComponentActivity() {
             // deep-link a cold-start that came from tapping a push.
             viewModel.registerFcmToken()
             intent?.getStringExtra("notif_booking_id")?.let { viewModel.openBookingFromPush(it) }
+            // §725 Batch-B — a tapped urgent full-screen notification cold-starts here.
+            if (intent?.getBooleanExtra("open_urgent_offers", false) == true) {
+              viewModel.openUrgentOffers()
+            }
             if (LocationHelper.hasPermission(this@MainActivity)) {
               viewModel.captureDeviceLocation()
               if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {

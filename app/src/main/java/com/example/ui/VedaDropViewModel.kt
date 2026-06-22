@@ -7,9 +7,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.example.UrgentAlarmService
 import com.example.data.*
 import com.example.data.remote.GeoAppConfigDto
 import com.example.data.remote.LiveTrackingSocket
+import com.example.data.remote.isUrgentOffer
 import com.example.ui.map.GeoPoint
 import com.example.ui.map.VedaDropMaps
 import kotlinx.coroutines.flow.*
@@ -283,20 +285,86 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    // §725 Batch-B — urgent-offer alarm coordination. We remember which urgent offer
+    // ids we've ALREADY rung for, so the 20s poll doesn't re-trigger the alarm for the
+    // same job every cycle, and so a "viewed" state truly silences it until a NEW urgent
+    // job appears. Cleared on logout via resetSessionState (offers list empties).
+    private val _ringingUrgentOfferIds = mutableSetOf<Int>()
+    private var _urgentOffersOnScreen = false
+
     fun loadOffers() {
-        viewModelScope.launch { runCatching { repository.loadOffers() } }
+        viewModelScope.launch {
+            runCatching { repository.loadOffers() }
+            evaluateUrgentOffers()
+        }
+    }
+
+    /** Start/stop the high-alert alarm based on the freshly-loaded offers list. Called
+     *  after every offers refresh AND drivable from an FCM urgent push. Foreground-only
+     *  ring decision (FCM handles backgrounded). Safe to call repeatedly (idempotent). */
+    private fun evaluateUrgentOffers() {
+        val app = getApplication<Application>()
+        val open = offers.value.filter { it.status == "open" }
+        val urgent = open.filter { it.isUrgentOffer() }
+        // Drop ids that are no longer open (claimed/taken/expired) so they can re-ring
+        // if the same booking is ever re-broadcast as urgent later.
+        val openIds = open.map { it.offerId }.toSet()
+        _ringingUrgentOfferIds.retainAll(openIds)
+
+        if (urgent.isEmpty()) {
+            // Nothing urgent anymore → silence.
+            UrgentAlarmService.stop(app)
+            _ringingUrgentOfferIds.clear()
+            return
+        }
+        // If the partner is already looking at the Rescue Board, never ring — they're
+        // viewing it. Just mark these as seen so we don't ring when they navigate away.
+        if (_urgentOffersOnScreen) {
+            _ringingUrgentOfferIds.addAll(urgent.map { it.offerId })
+            UrgentAlarmService.stop(app)
+            return
+        }
+        // Ring only if there's at least one urgent offer we haven't rung for yet.
+        val hasNew = urgent.any { it.offerId !in _ringingUrgentOfferIds }
+        if (hasNew) {
+            _ringingUrgentOfferIds.addAll(urgent.map { it.offerId })
+            UrgentAlarmService.start(app)
+        }
+    }
+
+    /** §725 — the Rescue Board (Open Jobs) is now on screen → stop the alarm + remember
+     *  these urgent offers as seen so re-loads don't re-ring them. */
+    fun onUrgentOffersViewed() {
+        _urgentOffersOnScreen = true
+        _ringingUrgentOfferIds.addAll(offers.value.filter { it.isUrgentOffer() }.map { it.offerId })
+        UrgentAlarmService.stop(getApplication())
+    }
+
+    /** §725 — the Rescue Board left the screen; future urgent offers may ring again. */
+    fun onUrgentOffersLeft() { _urgentOffersOnScreen = false }
+
+    /** §725 — open the Rescue Board (from a tapped urgent push / full-screen intent) and
+     *  silence the alarm. */
+    fun openUrgentOffers() {
+        currentScreen = Screen.PartnerOffers
+        onUrgentOffersViewed()
     }
 
     fun acceptOffer(offerId: Int, onResult: (String?) -> Unit = {}) {
+        // §725 — claiming silences the alarm locally (the job is being handled).
+        UrgentAlarmService.stop(getApplication())
         viewModelScope.launch {
             runCatching { repository.acceptOffer(offerId) }
-                .onSuccess { reassignmentToast = "Job claimed — it's yours."; onResult(null) }
-                .onFailure { val m = friendly(it); reassignmentToast = m; onResult(m) }
+                .onSuccess { reassignmentToast = "Job claimed — it's yours."; onResult(null); evaluateUrgentOffers() }
+                .onFailure { val m = friendly(it); reassignmentToast = m; onResult(m); evaluateUrgentOffers() }
         }
     }
 
     fun declineOffer(offerId: Int) {
-        viewModelScope.launch { runCatching { repository.declineOffer(offerId) } }
+        viewModelScope.launch {
+            runCatching { repository.declineOffer(offerId) }
+            evaluateUrgentOffers()
+        }
     }
 
     /** Poll the live reassignment status for a booking (null-safe). */
@@ -936,6 +1004,10 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         complaintDetail = null
         complaintMessages = emptyList()
         _deviceLocation.value = null
+        // §725 Batch-B — never leave the urgent alarm ringing after logout.
+        _ringingUrgentOfferIds.clear()
+        _urgentOffersOnScreen = false
+        runCatching { UrgentAlarmService.stop(getApplication()) }
         clearNavHistory()
         stopLiveTracking()
         currentScreen = Screen.CustomerHome

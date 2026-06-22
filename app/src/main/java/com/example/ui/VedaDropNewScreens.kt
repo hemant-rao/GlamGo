@@ -287,14 +287,16 @@ private fun StatTile(label: String, value: String, modifier: Modifier = Modifier
 // Platform window: slot-start hours 7..17 inclusive (12 one-hour slots, 7am-6pm).
 private val SLOT_HOURS: List<Int> = (7..17).toList()
 
-/** Friendly 12-hour label for a slot-start hour (e.g. 7 -> "7 AM", 13 -> "1 PM"). */
-private fun hourLabel(h: Int): String {
-    val period = if (h < 12) "AM" else "PM"
-    val twelve = when {
-        h % 12 == 0 -> 12
-        else -> h % 12
-    }
-    return "$twelve $period"
+/** §725 Batch-B — a per-hour bookable RANGE label, e.g. 7 -> "7-8 AM", 17 -> "5-6 PM".
+ *  Shows the slot as the hour window it actually books (start..start+1), so the partner
+ *  reads the 7am-6pm grid as explicit ranges instead of single start times. */
+private fun hourRangeLabel(h: Int): String {
+    fun twelve(x: Int) = (x % 12).let { if (it == 0) 12 else it }
+    fun period(x: Int) = if (x % 24 < 12) "AM" else "PM"
+    val end = h + 1
+    // Collapse the AM/PM suffix when both ends share it ("7-8 AM"); else show both ("11-12 PM").
+    return if (period(h) == period(end)) "${twelve(h)}-${twelve(end)} ${period(h)}"
+    else "${twelve(h)} ${period(h)}-${twelve(end)} ${period(end)}"
 }
 
 /** Convert a java.time DayOfWeek (Mon=1..Sun=7) to JS dow (Sun=0..Sat=6). */
@@ -327,6 +329,11 @@ fun PartnerAvailabilityScreen(viewModel: VedaDropViewModel) {
     // Editor: ISO-date -> DayPlan. Hydrated from server when it arrives.
     var plans by remember { mutableStateOf<Map<String, DayPlan>>(emptyMap()) }
     var hydrated by remember { mutableStateOf(false) }
+    // §725 Batch-B — auto-save: bump this counter on every user edit so a debounced
+    // LaunchedEffect persists the change ~600ms later. Hydration/seeding must NOT bump
+    // it (we only save what the partner actually changed), so it starts at 0 and the
+    // saver skips the very first composition.
+    var editSeq by remember { mutableStateOf(0) }
 
     LaunchedEffect(avail, today) {
         val a = avail
@@ -368,8 +375,29 @@ fun PartnerAvailabilityScreen(viewModel: VedaDropViewModel) {
     }
 
     fun planFor(iso: String): DayPlan = plans[iso] ?: DayPlan(on = true, hours = SLOT_HOURS.toSet())
+    // Every edit goes through here → it both mutates state AND flags an auto-save.
     fun updatePlan(iso: String, transform: (DayPlan) -> DayPlan) {
         plans = plans.toMutableMap().apply { put(iso, transform(planFor(iso))) }
+        editSeq++
+    }
+
+    // §725 Batch-B — debounced AUTO-SAVE. Each edit bumps editSeq; we wait 600ms (so a
+    // burst of taps collapses into one PUT) then persist via the existing save fn. The
+    // initial run (editSeq==0) is skipped so hydration doesn't trigger a spurious save.
+    LaunchedEffect(editSeq) {
+        if (editSeq == 0) return@LaunchedEffect
+        delay(600)
+        val overrides = LinkedHashMap<String, List<Int>>()
+        for (d in dates) {
+            val iso = d.toString()
+            val p = planFor(iso)
+            // Day off OR day-on-with-no-hours => unavailable => [].
+            overrides[iso] = if (p.on) p.hours.filter { it in 7..17 }.sorted() else emptyList()
+        }
+        // §714 pda-7day-clobbers-weekly-1 — this per-date editor fully defines the visible
+        // 7 days via hour_overrides; do NOT send days/leaves so the partner's underlying
+        // weekly recurrence (e.g. Sundays off) is preserved.
+        viewModel.saveAvailability(start = "07:00", end = "18:00", hourOverrides = overrides)
     }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -379,10 +407,29 @@ fun PartnerAvailabilityScreen(viewModel: VedaDropViewModel) {
             onBack = { viewModel.currentScreen = Screen.PartnerProfile },
         )
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            Text(
-                "Toggle each day on or off, then pick the hours you can take bookings. Slots are 1 hour, 7 AM to 6 PM.",
-                fontSize = 12.sp, color = Color.Gray
-            )
+            // §725 Batch-B — explain the bookable window as RANGES + that changes save
+            // themselves (no Save button). The status line below mirrors save state.
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    "Bookable window is 7 AM to 6 PM in 1-hour slots (7-8, 8-9 … 5-6 PM). Turn a day off, or pick the exact hours you can take bookings. Changes save automatically.",
+                    fontSize = 12.sp, color = Color.Gray, modifier = Modifier.weight(1f)
+                )
+            }
+            // Subtle auto-save indicator (no explicit submit button).
+            val saveStatus: Pair<String, Color>? = when {
+                viewModel.availabilityBusy -> "Saving…" to Color.Gray
+                viewModel.availabilityError != null -> (viewModel.availabilityError ?: "Couldn't save") to MaterialTheme.colorScheme.error
+                viewModel.availabilitySaved -> "✓ Saved" to VedaDropRose
+                else -> null
+            }
+            saveStatus?.let { (label, color) ->
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    if (viewModel.availabilityBusy) {
+                        CircularProgressIndicator(modifier = Modifier.size(12.dp), strokeWidth = 2.dp, color = VedaDropRose)
+                    }
+                    Text(label, fontSize = 12.sp, color = color, fontWeight = FontWeight.Medium)
+                }
+            }
 
             dates.forEachIndexed { idx, date ->
                 val iso = date.toString()
@@ -438,7 +485,7 @@ fun PartnerAvailabilityScreen(viewModel: VedaDropViewModel) {
                                         },
                                         label = {
                                             Text(
-                                                hourLabel(h),
+                                                hourRangeLabel(h),
                                                 fontSize = 12.sp,
                                                 maxLines = 1,
                                                 softWrap = false
@@ -456,42 +503,8 @@ fun PartnerAvailabilityScreen(viewModel: VedaDropViewModel) {
                 }
             }
 
-            viewModel.availabilityError?.let {
-                Text(it, color = MaterialTheme.colorScheme.error, fontSize = 13.sp)
-            }
-            if (viewModel.availabilitySaved) {
-                Text("✓ Availability saved.", color = VedaDropRose, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-            }
-            Button(
-                onClick = {
-                    val overrides = LinkedHashMap<String, List<Int>>()
-                    for (d in dates) {
-                        val iso = d.toString()
-                        val p = planFor(iso)
-                        // Day off OR day-on-with-no-hours => unavailable => [].
-                        overrides[iso] = if (p.on) p.hours.filter { it in 7..17 }.sorted() else emptyList()
-                    }
-                    // §714 pda-7day-clobbers-weekly-1 — this per-date editor fully defines
-                    // the visible 7 days via hour_overrides; do NOT send days/leaves so the
-                    // partner's underlying weekly recurrence (e.g. Sundays off) is preserved.
-                    viewModel.saveAvailability(
-                        start = "07:00",
-                        end = "18:00",
-                        hourOverrides = overrides,
-                    )
-                },
-                enabled = !viewModel.availabilityBusy,
-                colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
-                modifier = Modifier.fillMaxWidth().height(50.dp)
-            ) {
-                Text(
-                    if (viewModel.availabilityBusy) "Saving…" else "Save Availability",
-                    fontWeight = FontWeight.SemiBold,
-                    maxLines = 1,
-                    softWrap = false,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
+            // §725 Batch-B — no Save button: every toggle above auto-saves (debounced).
+            // The status line near the top reflects "Saving…" / "✓ Saved" / errors.
             Spacer(Modifier.height(24.dp))
         }
     }

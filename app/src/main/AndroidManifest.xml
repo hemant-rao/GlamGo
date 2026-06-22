@@ -18,6 +18,14 @@
     <!-- §710 P0-5 — show FCM push notifications (booking accepted, chat, new job).
          POST_NOTIFICATIONS is runtime-requested on Android 13+. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- §725 Batch-B — urgent-job high-alert alarm. A foreground service loops an
+         ALARM-stream sound + posts a full-screen-intent notification so a partner
+         cannot miss a customer waiting right now. MEDIA_PLAYBACK is the FGS type
+         required on targetSdk 34+. USE_FULL_SCREEN_INTENT lights the screen / shows
+         the alert even when locked. -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT" />
 
     <application
         android:allowBackup="true"
@@ -48,6 +56,12 @@
                 <action android:name="com.google.firebase.MESSAGING_EVENT" />
             </intent-filter>
         </service>
+
+        <!-- §725 Batch-B — urgent-job high-alert alarm foreground service. -->
+        <service
+            android:name=".UrgentAlarmService"
+            android:exported="false"
+            android:foregroundServiceType="mediaPlayback" />
     </application>
 
 </manifest>
