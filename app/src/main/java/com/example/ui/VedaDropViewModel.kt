@@ -926,6 +926,7 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         notifiedBookingIds.clear()
         _autoLocationAttempted = false
         detailStartOtp = null
+        detailStartOtpFor = null
         partnerKycReason = null
         quoteBreakdown = null
         availableSlots = emptyList()
@@ -1039,10 +1040,15 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
 
     /** §702 — customer start-OTP shown on demand on the booking detail. */
     var detailStartOtp by mutableStateOf<String?>(null)
+    /** Booking id that [detailStartOtp] belongs to. Keyed so a cached OTP can never
+     *  leak onto another booking's screen when that booking's entity start_otp is
+     *  momentarily blank (stale list row / pre-detail-refresh). booking.id is a String. */
+    var detailStartOtpFor: String? by mutableStateOf(null)
     fun loadStartOtp(bookingId: String) {
         viewModelScope.launch {
             val id = bookingId.toIntOrNull() ?: return@launch
             detailStartOtp = repository.fetchStartOtp(id)
+            detailStartOtpFor = bookingId
         }
     }
 

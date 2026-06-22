@@ -4583,7 +4583,12 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                     // else fetch on demand via a "Show code" button.
                     val otpVisibleStates = setOf("accepted", "assigned", "in_progress", "partner_on_the_way", "arrived", "started")
                     if (!isPartnerView && booking.status in otpVisibleStates) {
-                        val otp = booking.startOtp.ifBlank { viewModel.detailStartOtp ?: "" }
+                        // Only fall back to the VM-cached OTP when it was fetched for
+                        // THIS booking — otherwise a code cached from a previously-opened
+                        // booking would leak onto this screen and get relayed wrongly.
+                        val otp = booking.startOtp.ifBlank {
+                            if (viewModel.detailStartOtpFor == booking.id) (viewModel.detailStartOtp ?: "") else ""
+                        }
                         Card(
                             modifier = Modifier.fillMaxWidth(),
                             colors = CardDefaults.cardColors(containerColor = VedaDropRose.copy(alpha = 0.08f))
