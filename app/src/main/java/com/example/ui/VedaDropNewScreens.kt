@@ -721,7 +721,10 @@ fun PartnerPortfolioScreen(viewModel: VedaDropViewModel) {
                         Column {
                             if (!item.imageUrl.isNullOrBlank()) {
                                 AsyncImage(
-                                    model = item.imageUrl,
+                                    // §726 — resolve a self-hosted relative url against
+                                    // the API origin (the partner portfolio flow holds
+                                    // raw DTOs, not mapped models).
+                                    model = com.example.data.remote.Mappers.absUrl(item.imageUrl),
                                     contentDescription = item.caption,
                                     contentScale = ContentScale.Crop,
                                     modifier = Modifier.fillMaxWidth().height(180.dp)
@@ -822,7 +825,7 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         AsyncImage(
-                            model = partner.avatarUrl.ifBlank { "https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&q=80&w=200" },
+                            model = partner.avatarUrl.ifBlank { "" },
                             contentDescription = partner.name,
                             contentScale = ContentScale.Crop,
                             modifier = Modifier

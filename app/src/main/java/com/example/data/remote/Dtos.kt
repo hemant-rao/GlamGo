@@ -110,6 +110,13 @@ data class CategoriesResp(val items: List<CategoryDto> = emptyList())
 @JsonClass(generateAdapter = true)
 data class ServicesResp(val items: List<ServiceDto> = emptyList())
 
+// §726 — the partner's add-from dictionary: ALL active categories + services.
+@JsonClass(generateAdapter = true)
+data class PartnerCatalogResp(
+    val categories: List<CategoryDto> = emptyList(),
+    val services: List<ServiceDto> = emptyList(),
+)
+
 // ── Partners ─────────────────────────────────────────────────────────────────
 @JsonClass(generateAdapter = true)
 data class PartnerDto(

@@ -17,6 +17,29 @@ import com.example.data.WalletTransactionEntity
  */
 object Mappers {
 
+    /**
+     * §726 — resolve a (possibly relative) image url against the API origin.
+     *
+     * The backend self-hosts catalog / avatar / portfolio images and stores RELATIVE
+     * urls ("/media/vedadrop/…", and historically "/uploads/…", "/static/…") so it
+     * works on localhost, LAN and prod alike. Coil 2.x will NOT load a path-only url,
+     * so we prefix it with the server origin (baseUrl without the "/api/…" suffix —
+     * the same trick LiveTrackingSocket uses). Absolute http(s) urls and base64 data:
+     * urls are returned unchanged. Doing this in the mappers means every AsyncImage
+     * call site gets an already-absolute url without per-site changes.
+     */
+    fun absUrl(raw: String?): String {
+        val u = (raw ?: "").trim()
+        if (u.isEmpty()) return ""
+        if (u.startsWith("http://", true) || u.startsWith("https://", true) ||
+            u.startsWith("data:", true)) return u
+        if (u.startsWith("/media/") || u.startsWith("/uploads/") || u.startsWith("/static/")) {
+            val origin = NetworkConfig.baseUrl.substringBefore("/api/").trimEnd('/')
+            return origin + u
+        }
+        return u
+    }
+
     // slug → the icon-name / colour the original mock used, so category tiles
     // keep their look. Unknown slugs get sensible beauty defaults.
     private val categoryIcon = mapOf(
@@ -51,7 +74,7 @@ object Mappers {
         reviewsCount = d.ratingCount,
         inclusions = d.inclusions ?: emptyList(),
         faqs = emptyList(),
-        imageUrl = d.imageUrl ?: "",
+        imageUrl = absUrl(d.imageUrl),   // §726 — resolve self-hosted relative urls
         priceMinPaise = d.priceMinPaise,
         priceMaxPaise = d.priceMaxPaise,
         partnerCount = d.partnerCount,
@@ -60,7 +83,7 @@ object Mappers {
     fun partner(d: PartnerDto): Partner = Partner(
         id = d.id.toString(),
         name = d.name ?: "Veda Drop Partner",
-        avatarUrl = d.avatarUrl ?: "",
+        avatarUrl = absUrl(d.avatarUrl),   // §726 — resolve self-hosted relative urls
         rating = d.ratingAvg,
         reviewsCount = d.ratingCount,
         distanceKm = d.distanceKm ?: 0.0,
@@ -69,7 +92,7 @@ object Mappers {
         description = d.bio ?: "",
         categories = d.categories ?: emptyList(),
         servicesOffered = (d.servicesOffered ?: emptyList()).map { it.toString() },
-        portfolioUrls = d.portfolio ?: emptyList(),
+        portfolioUrls = (d.portfolio ?: emptyList()).map { absUrl(it) },   // §726
         recentReviews = emptyList(),
         fromPricePaise = d.fromPricePaise ?: 0,
         kycStatus = d.kycStatus ?: "not_started",
@@ -128,11 +151,11 @@ object Mappers {
         // sentinel so downstream code/UI can detect and reject the invalid value.
         serviceId = (d.serviceId ?: -1).toString(),
         serviceName = d.serviceName ?: "Service",
-        serviceImageUrl = d.serviceImageUrl ?: "",
+        serviceImageUrl = absUrl(d.serviceImageUrl),
         categoryName = d.categoryName ?: "",
         partnerId = (d.partnerId ?: -1).toString(),
         partnerName = d.partnerName ?: "Assigning…",
-        partnerAvatar = d.partnerAvatar ?: "",
+        partnerAvatar = absUrl(d.partnerAvatar),
         dateTimeSlot = prettySlot(d.slotStart),
         slotStartIso = d.slotStart ?: "",
         addressText = addressText(d.address),

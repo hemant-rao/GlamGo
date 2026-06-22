@@ -286,6 +286,13 @@ interface VedaDropApi {
     @retrofit2.http.PUT("partner/location")
     suspend fun putPartnerLocation(@Body body: PartnerLocationReq): PartnerLocationDto
 
+    // §726 — the FULL service dictionary the partner can pick from. Unlike the
+    // customer catalog (offered-only), this returns EVERY active service so a partner
+    // can list a service no one offers yet. Fixes "partner adds a service but it
+    // never appears / doesn't save" (the add-from list was the filtered catalog).
+    @GET("partner/catalog")
+    suspend fun partnerCatalog(): PartnerCatalogResp
+
     @GET("partner/services")
     suspend fun partnerServices(): PartnerServicesResp
 

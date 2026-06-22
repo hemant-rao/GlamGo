@@ -1234,7 +1234,7 @@ fun VedaDropMarketplaceFeed(viewModel: VedaDropViewModel) {
                     Column(modifier = Modifier.padding(14.dp)) {
                         Row(verticalAlignment = Alignment.Top) {
                             AsyncImage(
-                                model = partner.avatarUrl.ifBlank { "https://images.unsplash.com/photo-1522335789203-aabd1fc54bc9?auto=format&fit=crop&q=80&w=200" },
+                                model = partner.avatarUrl.ifBlank { "" },
                                 contentDescription = partner.name,
                                 contentScale = ContentScale.Crop,
                                 modifier = Modifier
@@ -1783,7 +1783,7 @@ fun BeautyShowcaseSection(viewModel: VedaDropViewModel) {
                 expertName = "Anya Varma",
                 rating = 5.0,
                 category = "Facials",
-                imageUrl = "https://images.unsplash.com/photo-1512496015851-a90fb38ba796?q=80&w=600&auto=format&fit=crop",
+                imageUrl = "",
                 reviewer = "Meera Kapoor",
                 review = "My skin looked absolutely like glass. Extremely hydrating, no post-treatment redness! Truly a premium glow session.",
                 productsUsed = listOf("Dior Forever Glow Star Filter", "Estée Lauder Advanced Night Repair", "Clinique Moisture Surge"),
@@ -1795,7 +1795,7 @@ fun BeautyShowcaseSection(viewModel: VedaDropViewModel) {
                 expertName = "Nisha Sen",
                 rating = 4.9,
                 category = "Hair Spa",
-                imageUrl = "https://images.unsplash.com/photo-1562322140-8baeececf3df?q=80&w=600&auto=format&fit=crop",
+                imageUrl = "",
                 reviewer = "Surbhi Gupta",
                 review = "Unbelievable shine, my hair feels ten times healthier. Highly recommend Nisha!",
                 productsUsed = listOf("Kérastase Chronologiste Caviar", "L'Oréal Expert Absolute Repair Oil"),
@@ -1807,7 +1807,7 @@ fun BeautyShowcaseSection(viewModel: VedaDropViewModel) {
                 expertName = "Priya Sharma",
                 rating = 5.0,
                 category = "Makeup Artistry",
-                imageUrl = "https://images.unsplash.com/photo-1487412720507-e7ab37603c6f?q=80&w=600&auto=format&fit=crop",
+                imageUrl = "",
                 reviewer = "Aparna Roy",
                 review = "Priya did my makeup for my wedding and it was flawless from morning till midnight. Not cakey at all, loved it!",
                 productsUsed = listOf("Chanel Les Beiges Foundation", "Dior Backstage Highlight Palette", "Charlotte Tilbury Setting Spray"),
@@ -1819,7 +1819,7 @@ fun BeautyShowcaseSection(viewModel: VedaDropViewModel) {
                 expertName = "Kiran Goel",
                 rating = 4.8,
                 category = "Body Wellness",
-                imageUrl = "https://images.unsplash.com/photo-1540555700478-4be289fbecef?q=80&w=600&auto=format&fit=crop",
+                imageUrl = "",
                 reviewer = "Nalini Joshi",
                 review = "Absolute heaven. The hot stone technique relaxed my back pain completely. A five-star wellness specialist.",
                 productsUsed = listOf("Therapeutic Grade Lavender Essential Oil", "Organic Cold-Pressed Almond Oil"),
@@ -7138,7 +7138,12 @@ private fun KycPhotoCapture(
 @Composable
 fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
     val activeServices by viewModel.partnerServices.collectAsState()
-    
+
+    // §726 — load the FULL service dictionary (all active services) so the partner
+    // can add ANY service, not just the offered-only customer catalog. loadPartnerCatalog
+    // also refreshes her own offerings so the list reflects the server, not a stale cache.
+    LaunchedEffect(Unit) { viewModel.loadPartnerCatalog() }
+
     val allServices = VedaDropDataSource.services
 
     Column(modifier = Modifier.fillMaxSize()) {

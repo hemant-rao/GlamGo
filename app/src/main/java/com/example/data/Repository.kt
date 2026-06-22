@@ -598,6 +598,20 @@ class VedaDropRepository(context: Context) {
         refreshPartnerServices()
     }
 
+    /** §726 — load the FULL service dictionary (all active services, NOT just the
+     *  offered-only customer catalog) so the partner's "Catalog Pricing Editor" can
+     *  list every service available to add. Without this the add-from list was the
+     *  filtered customer catalog, so a service no eligible partner offered yet was
+     *  invisible — the partner literally could not add it (looked like "doesn't save").
+     *  Merges into the in-memory catalog so categories/services elsewhere stay valid. */
+    suspend fun loadPartnerCatalog() {
+        val resp = runCatching { api.partnerCatalog() }.getOrNull() ?: return
+        if (resp.categories.isNotEmpty()) {
+            VedaDropDataSource.categories = resp.categories.map { Mappers.category(it) }
+        }
+        VedaDropDataSource.services = resp.services.map { Mappers.service(it) }
+    }
+
     suspend fun refreshPartnerServices() {
         // Null-safe like the other refreshers: if the remote fetch fails we leave
         // the cache untouched rather than wiping it, and — critically — we do NOT
@@ -1073,11 +1087,20 @@ class VedaDropRepository(context: Context) {
         // invisible to customers/admin). Keep the local cache as an optimistic fallback.
         customProductsUsed[serviceId] = productsUsed
         val existing = _partnerServices.value.firstOrNull { it.serviceId == serviceId }
-        if (existing != null) {
-            api.patchPartnerService(existing.id.toInt(),
+        // §726 — a server-listed offering has a numeric row id → PATCH it. A catalog
+        // service the partner hasn't listed yet has a numeric serviceId → POST (upsert).
+        // A locally-created custom service has a NON-numeric id ("srv_custom_…") that
+        // the backend has no row for; calling toInt() on it threw NumberFormatException
+        // and (because the VM swallowed it) the partner saw nothing save. Guard it.
+        val existingServerId = existing?.id?.toIntOrNull()
+        if (existing != null && existingServerId != null) {
+            api.patchPartnerService(existingServerId,
                 mapOf("price_paise" to pricePaise, "active" to active, "products_used" to productsUsed))
         } else {
-            api.addPartnerService(PartnerServiceReq(serviceId.toInt(), pricePaise, active, productsUsed))
+            val numericServiceId = serviceId.toIntOrNull()
+                ?: throw IllegalArgumentException(
+                    "This is a custom service that hasn't been published to the catalog yet.")
+            api.addPartnerService(PartnerServiceReq(numericServiceId, pricePaise, active, productsUsed))
         }
         refreshPartnerServices()
     }

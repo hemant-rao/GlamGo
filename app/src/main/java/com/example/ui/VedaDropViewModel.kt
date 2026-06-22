@@ -1092,7 +1092,7 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
             is Screen.ComplaintsList -> refreshComplaints()
             is Screen.PartnerDashboard -> { loadOffers(); loadNotifications(); refreshActiveBookings() }
             is Screen.PartnerOffers -> loadOffers()
-            is Screen.PartnerServices -> viewModelScope.launch { repository.refreshPartnerServices() }
+            is Screen.PartnerServices -> viewModelScope.launch { repository.loadPartnerCatalog(); repository.refreshPartnerServices() }
             is Screen.PartnerEarnings -> loadEarnings()
             is Screen.PartnerAnalytics -> loadAnalytics()
             is Screen.PartnerPortfolio -> loadPortfolio()
@@ -1570,10 +1570,24 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** §726 — pull the FULL service dictionary so the partner can add ANY active
+     *  service (not just the offered-only customer catalog). Call on opening the
+     *  Catalog Pricing Editor. */
+    fun loadPartnerCatalog() {
+        viewModelScope.launch {
+            runCatching { repository.loadPartnerCatalog() }
+            runCatching { repository.refreshPartnerServices() }
+        }
+    }
+
     fun setPartnerServicePrice(serviceId: String, name: String, category: String, pricePaise: Long, active: Boolean, productsUsed: String) {
         viewModelScope.launch {
+            // §726 — surface failures. Previously only .onSuccess was wired, so a
+            // bad service id / network error silently dropped the save and the
+            // partner saw nothing happen ("added a service but it didn't save").
             runCatching { repository.setServicePrice(serviceId, pricePaise, active, productsUsed) }
                 .onSuccess { notify("Service updated") }
+                .onFailure { notify("Could not save service: ${com.example.data.remote.ApiErrors.friendlyMessage(it)}", isError = true) }
         }
     }
 
@@ -1600,7 +1614,9 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
             reviewsCount = 1,
             inclusions = listOf("Expert consult", "Custom service delivery", "Premium seal checked products"),
             faqs = listOf("Is this verified?" to "Yes, 100% verified by Veda Drop quality team."),
-            imageUrl = "https://images.unsplash.com/photo-1560066984-138dadb4c035?auto=format&fit=crop&q=80&w=300",
+            // §726 — no third-party image. A locally-created custom service has no
+            // catalog image until the admin sets one; the UI falls back to a tile.
+            imageUrl = "",
             priceMinPaise = pricePaise,
             priceMaxPaise = pricePaise,
             partnerCount = 1
