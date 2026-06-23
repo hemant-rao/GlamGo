@@ -30,6 +30,9 @@ data class Service(
     val priceMinPaise: Long? = null,
     val priceMaxPaise: Long? = null,
     val partnerCount: Int = 0,
+    // §737 — real "see the work" gallery (portfolio images of partners who offer
+    // this service). Trailing optional → no positional call-site breakage.
+    val gallery: List<String> = emptyList(),
 )
 
 /**

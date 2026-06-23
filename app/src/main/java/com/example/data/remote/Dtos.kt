@@ -102,6 +102,10 @@ data class ServiceDto(
     @Json(name = "price_max_paise") val priceMaxPaise: Long? = null,
     @Json(name = "from_price_paise") val fromPricePaise: Long? = null,
     @Json(name = "partner_count") val partnerCount: Int = 0,
+    // §737 — service-detail enrichment: FAQ rows + a real portfolio gallery (the
+    // backend filled these long-stubbed `[]` fields). Nullable for older backends.
+    val faqs: List<FaqDto>? = null,
+    val gallery: List<String>? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -115,6 +119,60 @@ data class ServicesResp(val items: List<ServiceDto> = emptyList())
 data class PartnerCatalogResp(
     val categories: List<CategoryDto> = emptyList(),
     val services: List<ServiceDto> = emptyList(),
+)
+
+// ── §737 Packages (partner-curated bundles) + Deals/Featured + service FAQs ──
+// PAYMENT-FREE: a package price is the informational SUM of the partner's own
+// service prices; booking one expands into the existing cart → no new booking path.
+@JsonClass(generateAdapter = true)
+data class FaqDto(val q: String = "", val a: String = "")
+
+@JsonClass(generateAdapter = true)
+data class PackageItemDto(
+    @Json(name = "service_id") val serviceId: Int = 0,
+    val name: String? = null,
+    @Json(name = "image_url") val imageUrl: String? = null,
+    val qty: Int = 1,
+    @Json(name = "unit_price_paise") val unitPricePaise: Long = 0,
+    @Json(name = "line_total_paise") val lineTotalPaise: Long = 0,
+    @Json(name = "duration_min") val durationMin: Int = 0,
+    // false = partner currently doesn't offer this line (shown only in the partner editor).
+    val available: Boolean = true,
+)
+
+@JsonClass(generateAdapter = true)
+data class PackageDto(
+    val id: Int,
+    @Json(name = "partner_id") val partnerId: Int = 0,
+    @Json(name = "partner_name") val partnerName: String? = null,
+    @Json(name = "partner_avatar_url") val partnerAvatarUrl: String? = null,
+    @Json(name = "partner_rating_avg") val partnerRatingAvg: Float = 0f,
+    @Json(name = "partner_public_code") val partnerPublicCode: String? = null,
+    val name: String = "",
+    val description: String? = null,
+    @Json(name = "image_url") val imageUrl: String? = null,
+    @Json(name = "is_featured") val isFeatured: Boolean = false,
+    @Json(name = "featured_headline") val featuredHeadline: String? = null,
+    val active: Boolean = true,
+    val sort: Int = 0,
+    @Json(name = "service_count") val serviceCount: Int = 0,
+    // Informational only — the SUM of the partner's own service prices (no discount).
+    @Json(name = "total_paise") val totalPaise: Long = 0,
+    @Json(name = "total_duration_min") val totalDurationMin: Int = 0,
+    @Json(name = "item_names") val itemNames: List<String> = emptyList(),
+    val items: List<PackageItemDto> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class PackagesResp(
+    val items: List<PackageDto> = emptyList(),
+    @Json(name = "partner_id") val partnerId: Int? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class FeaturedResp(
+    val packages: List<PackageDto> = emptyList(),
+    @Json(name = "new_partners") val newPartners: List<PartnerDto> = emptyList(),
 )
 
 // ── Partners ─────────────────────────────────────────────────────────────────

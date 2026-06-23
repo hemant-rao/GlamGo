@@ -73,11 +73,12 @@ object Mappers {
         rating = d.ratingAvg,
         reviewsCount = d.ratingCount,
         inclusions = d.inclusions ?: emptyList(),
-        faqs = emptyList(),
+        faqs = d.faqs?.map { it.q to it.a } ?: emptyList(),   // §737 — real FAQ rows (was [])
         imageUrl = absUrl(d.imageUrl),   // §726 — resolve self-hosted relative urls
         priceMinPaise = d.priceMinPaise,
         priceMaxPaise = d.priceMaxPaise,
         partnerCount = d.partnerCount,
+        gallery = (d.gallery ?: emptyList()).map { absUrl(it) },   // §737 — portfolio gallery
     )
 
     fun partner(d: PartnerDto): Partner = Partner(

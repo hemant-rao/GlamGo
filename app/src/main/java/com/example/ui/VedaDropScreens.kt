@@ -1265,6 +1265,82 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
         
         // (active-booking tracker moved to the top of the home — §731)
 
+        // §737 — DEALS & BUNDLES carousel. Pure merchandising (NO discounts/coupons):
+        // featured packages from eligible pros. Tap a deal → add to cart → go to cart.
+        val featuredData by viewModel.featuredPackages.collectAsState()
+        LaunchedEffect(Unit) { viewModel.loadFeatured() }
+        featuredData?.packages?.takeIf { it.isNotEmpty() }?.let { deals ->
+            Column(modifier = Modifier.padding(top = 8.dp, bottom = 8.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text("✨ DEALS & BUNDLES", fontSize = 13.sp, fontWeight = FontWeight.Bold, color = VedaDropRose)
+                    Text("pay the pro directly", fontSize = 10.sp, color = Color.Gray)
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp),
+                    horizontalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    deals.forEach { pkg ->
+                        Card(
+                            modifier = Modifier.width(190.dp).clickable {
+                                viewModel.addPackageToCart(pkg.id) { err ->
+                                    if (err == null) viewModel.currentScreen = Screen.Cart
+                                }
+                            },
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            border = BorderStroke(1.dp, VedaDropRose.copy(alpha = 0.30f))
+                        ) {
+                            Column {
+                                Box(
+                                    modifier = Modifier.fillMaxWidth().height(110.dp)
+                                        .background(VedaDropRose.copy(alpha = 0.10f))
+                                ) {
+                                    if (!pkg.imageUrl.isNullOrBlank()) {
+                                        AsyncImage(
+                                            model = pkg.imageUrl, contentDescription = pkg.name,
+                                            contentScale = ContentScale.Crop,
+                                            modifier = Modifier.fillMaxSize()
+                                        )
+                                    }
+                                    if (pkg.isFeatured) {
+                                        Box(
+                                            modifier = Modifier.align(Alignment.TopStart).padding(8.dp)
+                                                .background(VedaDropGold, CircleShape)
+                                                .padding(horizontal = 8.dp, vertical = 3.dp)
+                                        ) {
+                                            Text(
+                                                pkg.featuredHeadline?.takeIf { it.isNotBlank() } ?: "DEAL",
+                                                fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                                                color = DeepPlum, maxLines = 1
+                                            )
+                                        }
+                                    }
+                                }
+                                Column(modifier = Modifier.padding(10.dp)) {
+                                    Text(pkg.name, fontWeight = FontWeight.Bold, fontSize = 13.sp,
+                                        maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    if (!pkg.partnerName.isNullOrBlank()) {
+                                        Text("by ${pkg.partnerName}", fontSize = 10.sp, color = Color.Gray,
+                                            maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    }
+                                    Spacer(modifier = Modifier.height(4.dp))
+                                    Text("${pkg.serviceCount} services • ${pkg.totalDurationMin} min",
+                                        fontSize = 10.sp, color = Color.Gray)
+                                    Spacer(modifier = Modifier.height(2.dp))
+                                    Text("≈ ₹${pkg.totalPaise / 100}", fontWeight = FontWeight.Bold,
+                                        color = VedaDropRose, fontSize = 14.sp)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
         // CATEGORY SECTION — Clean horizontal layout with large beautiful circular glow cards
         // §734 — narrow the categories by the active "FILTER TREATMENTS" chip so the
         // filter has a visible effect right here (not just in the far-down Trending list).
@@ -3740,8 +3816,16 @@ fun ServiceDetailScreen(viewModel: VedaDropViewModel, service: Service) {
     // GET /catalog/services/{id} returns them. Fetch the detail on entry so the
     // admin-curated "What's included" list actually reaches the customer.
     var detailInclusions by remember(service.id) { mutableStateOf(service.inclusions) }
+    // §737 — the detail endpoint now also fills FAQs + a real portfolio gallery (the
+    // list serializer omits them). Capture all three from the single detail fetch.
+    var detailFaqs by remember(service.id) { mutableStateOf(service.faqs) }
+    var detailGallery by remember(service.id) { mutableStateOf(service.gallery) }
     LaunchedEffect(service.id) {
-        viewModel.loadServiceDetail(service.id) { full -> detailInclusions = full.inclusions }
+        viewModel.loadServiceDetail(service.id) { full ->
+            detailInclusions = full.inclusions
+            detailFaqs = full.faqs
+            detailGallery = full.gallery
+        }
     }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
@@ -3860,6 +3944,29 @@ fun ServiceDetailScreen(viewModel: VedaDropViewModel, service: Service) {
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
+            // §737 — GALLERY: real portfolio work from pros who actually offer this
+            // service (was an empty stub). A "see the work before you book" trust lever.
+            if (detailGallery.isNotEmpty()) {
+                Text("RECENT WORK", fontWeight = FontWeight.Bold, color = VedaDropRose, letterSpacing = 1.sp)
+                Spacer(modifier = Modifier.height(8.dp))
+                Row(
+                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    detailGallery.forEach { url ->
+                        AsyncImage(
+                            model = url,
+                            contentDescription = "Recent work",
+                            contentScale = ContentScale.Crop,
+                            modifier = Modifier.size(120.dp)
+                                .clip(RoundedCornerShape(10.dp))
+                                .background(VedaDropRose.copy(alpha = 0.08f))
+                        )
+                    }
+                }
+                Spacer(modifier = Modifier.height(24.dp))
+            }
+
             // §729 (parity C2) — SMART ADD-ONS: services frequently booked with this one.
             // Tapping a chip opens that service's detail so the customer can book it next.
             RelatedServicesRow(
@@ -3870,9 +3977,9 @@ fun ServiceDetailScreen(viewModel: VedaDropViewModel, service: Service) {
             Spacer(modifier = Modifier.height(24.dp))
 
             // §714 cust-catalog-2 — only show the FAQ accordion when there are real FAQs.
-            // service.faqs is currently always empty (no data source), so the control used
-            // to expand to a blank section — a dead, misleading affordance.
-            if (service.faqs.isNotEmpty()) {
+            // §737 — the detail fetch now fills these (was always empty), so the accordion
+            // shows real, payment-free Q&A (duration / what's-included / how-you-pay / safety).
+            if (detailFaqs.isNotEmpty()) {
             Card(
                 modifier = Modifier.fillMaxWidth(),
                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
@@ -3890,7 +3997,7 @@ fun ServiceDetailScreen(viewModel: VedaDropViewModel, service: Service) {
                         )
                     }
                     if (isFaqExpanded) {
-                        service.faqs.forEach { faq ->
+                        detailFaqs.forEach { faq ->
                             Spacer(modifier = Modifier.height(12.dp))
                             Text("Q: ${faq.first}", fontWeight = FontWeight.Bold, color = VedaDropRose)
                             Text("A: ${faq.second}", color = Color.Gray, fontSize = 13.sp)
@@ -8913,11 +9020,15 @@ private fun KycPhotoCapture(
 @Composable
 fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
     val activeServices by viewModel.partnerServices.collectAsState()
+    val myPackages by viewModel.myPackages.collectAsState()   // §737 — her bundles
 
     // §726 — load the FULL service dictionary (all active services) so the partner
     // can add ANY service, not just the offered-only customer catalog. loadPartnerCatalog
     // also refreshes her own offerings so the list reflects the server, not a stale cache.
-    LaunchedEffect(Unit) { viewModel.loadPartnerCatalog() }
+    LaunchedEffect(Unit) {
+        viewModel.loadPartnerCatalog()
+        viewModel.loadMyPackages()   // §737 — her existing packages for the builder
+    }
 
     val allServices = VedaDropDataSource.services
 
@@ -8933,6 +9044,150 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
         Spacer(modifier = Modifier.height(12.dp))
         
         LazyColumn(modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp)) {
+            // §737 — MY BUNDLES (packages) builder. Group your OWN services into a combo
+            // customers book in one tap. Payment-free: the price is just the sum of your
+            // own rates and the customer pays you directly. Mark a bundle "featured" to
+            // surface it on the customer Deals row.
+            item {
+                var showPkgForm by remember { mutableStateOf(false) }
+                var pkgName by remember { mutableStateOf("") }
+                var pkgDesc by remember { mutableStateOf("") }
+                var pkgFeatured by remember { mutableStateOf(false) }
+                var pkgHeadline by remember { mutableStateOf("") }
+                var pickedIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+                val offered = activeServices.filter { it.active }
+                fun nameFor(ps: com.example.data.remote.PartnerServiceDto): String =
+                    ps.name ?: allServices.firstOrNull { it.id == ps.serviceId.toString() }?.name
+                        ?: "Service #${ps.serviceId}"
+
+                Card(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
+                    colors = CardDefaults.cardColors(containerColor = VedaDropRose.copy(alpha = 0.10f)),
+                    border = BorderStroke(1.dp, VedaDropRose.copy(alpha = 0.3f))
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.SpaceBetween
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropRose)
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text("My bundles & deals", fontWeight = FontWeight.Bold, color = VedaDropRose)
+                            }
+                            TextButton(onClick = { showPkgForm = !showPkgForm }) {
+                                Text(if (showPkgForm) "Close" else "New bundle", color = VedaDropRose,
+                                    fontWeight = FontWeight.Bold, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis, softWrap = false)
+                            }
+                        }
+                        Text(
+                            "Group your services into a combo (e.g. \"Bridal Glow\"). Customers pay you " +
+                                "directly — no charges in the app.",
+                            fontSize = 11.sp, color = Color.Gray
+                        )
+
+                        if (myPackages.isNotEmpty()) {
+                            Spacer(modifier = Modifier.height(10.dp))
+                            myPackages.forEach { pkg ->
+                                Card(
+                                    modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                                ) {
+                                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(pkg.name, fontWeight = FontWeight.Bold, fontSize = 13.sp)
+                                            Text("${pkg.serviceCount} services • ≈ ₹${pkg.totalPaise / 100}",
+                                                fontSize = 11.sp, color = Color.Gray)
+                                            if (pkg.items.any { !it.available }) {
+                                                Text("Some services no longer offered — edit or remove.",
+                                                    fontSize = 10.sp, color = OrderOrange)
+                                            }
+                                        }
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                            Text("Deal", fontSize = 9.sp, color = Color.Gray)
+                                            Switch(checked = pkg.isFeatured,
+                                                onCheckedChange = { viewModel.setPackageFeatured(pkg.id, it) })
+                                        }
+                                        IconButton(onClick = { viewModel.deleteMyPackage(pkg.id) }) {
+                                            Icon(Icons.Default.Delete, contentDescription = "Delete bundle",
+                                                tint = Color(0xFFD32F2F))
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        if (showPkgForm) {
+                            Spacer(modifier = Modifier.height(12.dp))
+                            OutlinedTextField(value = pkgName, onValueChange = { pkgName = it },
+                                label = { Text("Bundle name (e.g. Bridal Glow)") },
+                                modifier = Modifier.fillMaxWidth(), singleLine = true)
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(value = pkgDesc, onValueChange = { pkgDesc = it },
+                                label = { Text("Short description (optional)") },
+                                modifier = Modifier.fillMaxWidth())
+                            Spacer(modifier = Modifier.height(8.dp))
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Checkbox(checked = pkgFeatured, onCheckedChange = { pkgFeatured = it })
+                                Text("Show as a featured deal", fontSize = 13.sp)
+                            }
+                            if (pkgFeatured) {
+                                OutlinedTextField(value = pkgHeadline, onValueChange = { pkgHeadline = it },
+                                    label = { Text("Deal headline (e.g. Bridal season special)") },
+                                    modifier = Modifier.fillMaxWidth(), singleLine = true)
+                                Spacer(modifier = Modifier.height(8.dp))
+                            }
+                            Text("Pick services to include:", fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                            if (offered.isEmpty()) {
+                                Text("List at least one service below first, then add it to a bundle.",
+                                    fontSize = 11.sp, color = Color.Gray)
+                            }
+                            offered.forEach { ps ->
+                                val checked = ps.serviceId in pickedIds
+                                Row(
+                                    modifier = Modifier.fillMaxWidth().clickable {
+                                        pickedIds = if (checked) pickedIds - ps.serviceId else pickedIds + ps.serviceId
+                                    },
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Checkbox(checked = checked, onCheckedChange = { c ->
+                                        pickedIds = if (c) pickedIds + ps.serviceId else pickedIds - ps.serviceId
+                                    })
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(nameFor(ps), fontSize = 13.sp)
+                                        Text("₹${ps.pricePaise / 100}", fontSize = 11.sp, color = Color.Gray)
+                                    }
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(10.dp))
+                            Button(
+                                onClick = {
+                                    val items = pickedIds.map { it to 1 }
+                                    viewModel.createMyPackage(pkgName, pkgDesc.ifBlank { null }, pkgFeatured,
+                                        pkgHeadline.ifBlank { null }, items) { err ->
+                                        if (err == null) {
+                                            pkgName = ""; pkgDesc = ""; pkgHeadline = ""
+                                            pkgFeatured = false; pickedIds = emptySet(); showPkgForm = false
+                                        } else viewModel.notify(err, isError = true)
+                                    }
+                                },
+                                enabled = !viewModel.packageBuilderBusy && pkgName.isNotBlank() && pickedIds.isNotEmpty(),
+                                modifier = Modifier.fillMaxWidth(),
+                                colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose)
+                            ) {
+                                Text(if (viewModel.packageBuilderBusy) "Saving…" else "Create bundle",
+                                    fontWeight = FontWeight.Bold, color = Color.White, maxLines = 1,
+                                    overflow = TextOverflow.Ellipsis, softWrap = false)
+                            }
+                        }
+                    }
+                }
+                Spacer(modifier = Modifier.height(8.dp))
+                Divider(color = Color.Gray.copy(alpha = 0.2f))
+                Spacer(modifier = Modifier.height(8.dp))
+            }
             item {
                 var showAddForm by remember { mutableStateOf(false) }
                 Card(

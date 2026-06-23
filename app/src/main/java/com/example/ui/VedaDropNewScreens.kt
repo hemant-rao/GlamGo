@@ -851,9 +851,11 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
     var selectedCategory by remember { mutableStateOf("All") }
 
     val reviews by viewModel.partnerReviews.collectAsState()
+    val storePackages by viewModel.partnerStorePackages.collectAsState()   // §737 — bundles
     LaunchedEffect(partner.id) {
         viewModel.loadPartnerReviews(partner.id)
         viewModel.loadPartnerServicePrices(partner.id)   // §710 P0-8 — real per-service prices
+        viewModel.loadPartnerPackages(partner.id)        // §737 — this partner's packages
     }
 
     // §734 — per-screen TopAppBar removed; shell header shows the partner name + back.
@@ -1052,6 +1054,85 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                     }
                 }
                 Divider(color = Color.Gray.copy(alpha = 0.15f))
+            }
+
+            // §737 — SPECIAL BUNDLES (packages): the partner's curated multi-service
+            // combos. Adding one expands into the EXISTING cart (no new booking path).
+            // The price is the informational SUM of her own rates — you pay the pro.
+            if (storePackages.isNotEmpty()) {
+                item {
+                    Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                        Text(
+                            text = "SPECIAL BUNDLES",
+                            fontSize = 11.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = VedaDropRose,
+                            letterSpacing = 1.sp
+                        )
+                        Spacer(modifier = Modifier.height(8.dp))
+                        storePackages.forEach { pkg ->
+                            Card(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 6.dp),
+                                colors = CardDefaults.cardColors(containerColor = VedaDropRose.copy(alpha = 0.08f)),
+                                border = BorderStroke(1.dp, VedaDropRose.copy(alpha = 0.30f))
+                            ) {
+                                Row(
+                                    modifier = Modifier.padding(12.dp),
+                                    verticalAlignment = Alignment.CenterVertically
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Text(pkg.name, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                                            if (pkg.isFeatured) {
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Box(
+                                                    modifier = Modifier
+                                                        .background(VedaDropGold, CircleShape)
+                                                        .padding(horizontal = 7.dp, vertical = 2.dp)
+                                                ) {
+                                                    Text("DEAL", fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                                                        color = DeepPlum)
+                                                }
+                                            }
+                                        }
+                                        Spacer(modifier = Modifier.height(2.dp))
+                                        Text(
+                                            "${pkg.serviceCount} services • ${pkg.totalDurationMin} min",
+                                            fontSize = 11.sp, color = Color.Gray
+                                        )
+                                        if (pkg.itemNames.isNotEmpty()) {
+                                            Text(
+                                                pkg.itemNames.joinToString(" • "),
+                                                fontSize = 11.sp, color = Color.Gray.copy(alpha = 0.85f),
+                                                maxLines = 2, overflow = TextOverflow.Ellipsis
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.height(3.dp))
+                                        Text(
+                                            "≈ ${rupees(pkg.totalPaise)} · pay the pro directly",
+                                            fontSize = 12.sp, fontWeight = FontWeight.Bold, color = VedaDropRose
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                    Button(
+                                        onClick = { viewModel.addPackageToCart(pkg.id) },
+                                        colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
+                                        contentPadding = PaddingValues(horizontal = 16.dp, vertical = 4.dp),
+                                        shape = RoundedCornerShape(8.dp),
+                                        modifier = Modifier.height(38.dp)
+                                    ) {
+                                        Text("Add", fontSize = 12.sp, color = Color.White,
+                                            fontWeight = FontWeight.Bold, maxLines = 1,
+                                            overflow = TextOverflow.Ellipsis, softWrap = false)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    Divider(color = Color.Gray.copy(alpha = 0.15f))
+                }
             }
 
             // Category Selector Filter Chips

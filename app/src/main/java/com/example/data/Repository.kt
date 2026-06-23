@@ -95,6 +95,15 @@ class VedaDropRepository(context: Context) {
     private val _cart = MutableStateFlow<CartResp?>(null)
     val cartFlow: StateFlow<CartResp?> = _cart.asStateFlow()
 
+    // §737 — service packages (bundles) + Deals/Featured. Customer: packages for the
+    // partner store being viewed + the featured surface; partner: her own builder list.
+    private val _partnerPackages = MutableStateFlow<List<com.example.data.remote.PackageDto>>(emptyList())
+    val partnerPackagesFlow: StateFlow<List<com.example.data.remote.PackageDto>> = _partnerPackages.asStateFlow()
+    private val _featured = MutableStateFlow<com.example.data.remote.FeaturedResp?>(null)
+    val featuredFlow: StateFlow<com.example.data.remote.FeaturedResp?> = _featured.asStateFlow()
+    private val _myPackages = MutableStateFlow<List<com.example.data.remote.PackageDto>>(emptyList())
+    val myPackagesFlow: StateFlow<List<com.example.data.remote.PackageDto>> = _myPackages.asStateFlow()
+
     // partner ₹99/month subscription (null = not yet loaded)
     private val _subscription = MutableStateFlow<com.example.data.remote.SubscriptionDto?>(null)
     val subscriptionFlow: StateFlow<com.example.data.remote.SubscriptionDto?> = _subscription.asStateFlow()
@@ -217,6 +226,9 @@ class VedaDropRepository(context: Context) {
         _preBooking.value = emptyList()
         _chat.value = emptyList()
         _cart.value = null
+        _partnerPackages.value = emptyList()
+        _featured.value = null
+        _myPackages.value = emptyList()
         _subscription.value = null
         _subscriptionPayments.value = emptyList()
         _earnings.value = null
@@ -494,6 +506,68 @@ class VedaDropRepository(context: Context) {
 
     suspend fun clearCart() {
         _cart.value = api.clearCart()
+    }
+
+    // ── §737 Packages (bundles) + Deals/Featured ────────────────────────────
+    suspend fun loadPartnerPackages(partnerId: String) {
+        val pid = partnerId.toIntOrNull() ?: return
+        _partnerPackages.value = runCatching { api.partnerPackages(pid).items }.getOrDefault(emptyList())
+    }
+
+    suspend fun fetchPackageDetail(packageId: Int): com.example.data.remote.PackageDto? =
+        runCatching { api.packageDetail(packageId) }.getOrNull()
+
+    /** Expand a package into the existing single-partner cart. Throws on failure
+     *  (e.g. 409 CART_PARTNER_CONFLICT) so the caller can offer "start a new cart". */
+    suspend fun addPackageToCart(packageId: Int, replace: Boolean = false) {
+        _cart.value = api.addPackageToCart(packageId, mapOf("replace" to replace))
+    }
+
+    suspend fun loadFeatured() {
+        _featured.value = runCatching { api.featured() }.getOrNull()
+    }
+
+    suspend fun loadMyPackages() {
+        _myPackages.value = runCatching { api.partnerOwnPackages().items }.getOrDefault(emptyList())
+    }
+
+    suspend fun createMyPackage(
+        name: String, description: String?, imageUrl: String?,
+        isFeatured: Boolean, featuredHeadline: String?, items: List<Pair<Int, Int>>,
+    ) {
+        val body = buildMap<String, Any?> {
+            put("name", name)
+            description?.takeIf { it.isNotBlank() }?.let { put("description", it) }
+            imageUrl?.takeIf { it.isNotBlank() }?.let { put("image_url", it) }
+            put("is_featured", isFeatured)
+            featuredHeadline?.takeIf { it.isNotBlank() }?.let { put("featured_headline", it) }
+            put("items", items.map { mapOf("service_id" to it.first, "qty" to it.second) })
+        }
+        api.createPartnerPackage(body)
+        loadMyPackages()
+    }
+
+    suspend fun updateMyPackage(
+        packageId: Int, name: String? = null, description: String? = null,
+        imageUrl: String? = null, isFeatured: Boolean? = null, featuredHeadline: String? = null,
+        active: Boolean? = null, items: List<Pair<Int, Int>>? = null,
+    ) {
+        val body = buildMap<String, Any?> {
+            name?.let { put("name", it) }
+            description?.let { put("description", it) }
+            imageUrl?.let { put("image_url", it) }
+            isFeatured?.let { put("is_featured", it) }
+            featuredHeadline?.let { put("featured_headline", it) }
+            active?.let { put("active", it) }
+            items?.let { put("items", it.map { p -> mapOf("service_id" to p.first, "qty" to p.second) }) }
+        }
+        api.patchPartnerPackage(packageId, body)
+        loadMyPackages()
+    }
+
+    suspend fun deleteMyPackage(packageId: Int) {
+        api.deletePartnerPackage(packageId)
+        loadMyPackages()
     }
 
     /** Build a single multi-line quote from the whole cart; stores quote_id so

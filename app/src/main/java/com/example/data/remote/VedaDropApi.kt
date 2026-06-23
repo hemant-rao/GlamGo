@@ -315,6 +315,33 @@ interface VedaDropApi {
     @GET("customer/partners/{id}/services")
     suspend fun partnerPricedServices(@retrofit2.http.Path("id") id: Int): PartnerPricedServicesResp
 
+    // ── §737 Packages (partner-curated bundles) + Deals/Featured — payment-free.
+    // A package books through the EXISTING cart → quote → booking path (its items
+    // expand into the single-partner cart); no new booking endpoint.
+    @GET("customer/partners/{id}/packages")
+    suspend fun partnerPackages(@Path("id") id: Int): PackagesResp
+
+    @GET("customer/packages/{id}")
+    suspend fun packageDetail(@Path("id") id: Int): PackageDto
+
+    @POST("customer/packages/{id}/add-to-cart")
+    suspend fun addPackageToCart(@Path("id") id: Int, @Body body: Map<String, @JvmSuppressWildcards Any?>): CartResp
+
+    @GET("customer/featured")
+    suspend fun featured(): FeaturedResp
+
+    @GET("partner/packages")
+    suspend fun partnerOwnPackages(): PackagesResp
+
+    @POST("partner/packages")
+    suspend fun createPartnerPackage(@Body body: Map<String, @JvmSuppressWildcards Any?>): PackageDto
+
+    @PATCH("partner/packages/{id}")
+    suspend fun patchPartnerPackage(@Path("id") id: Int, @Body body: Map<String, @JvmSuppressWildcards Any?>): PackageDto
+
+    @DELETE("partner/packages/{id}")
+    suspend fun deletePartnerPackage(@Path("id") id: Int): OkResp
+
     @GET("partner/availability")
     suspend fun partnerAvailability(): PartnerAvailabilityResp
 

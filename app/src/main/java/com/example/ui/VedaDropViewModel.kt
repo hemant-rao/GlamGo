@@ -1369,6 +1369,80 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { runCatching { repository.clearCart() } }
     }
 
+    // ── §737 Packages (bundles) + Deals/Featured — payment-free ─────────────
+    // Customer: packages on the partner store + the home Deals row. Adding a package
+    // expands into the EXISTING cart, so the booking path is unchanged.
+    val partnerStorePackages = repository.partnerPackagesFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+    val featuredPackages = repository.featuredFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), null
+    )
+    val myPackages = repository.myPackagesFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList()
+    )
+
+    fun loadPartnerPackages(partnerId: String) {
+        viewModelScope.launch { runCatching { repository.loadPartnerPackages(partnerId) } }
+    }
+
+    fun loadFeatured() {
+        viewModelScope.launch { runCatching { repository.loadFeatured() } }
+    }
+
+    /** Add a whole package to the cart (expands into the existing single-partner cart).
+     *  Mirrors [addToCart]: on a single-partner conflict the friendly message already
+     *  says to clear the cart; pass replace=true to start fresh. */
+    fun addPackageToCart(packageId: Int, replace: Boolean = false, onResult: (String?) -> Unit = {}) {
+        if (!isLoggedIn) { triggerLoginPrompt(); return }
+        viewModelScope.launch {
+            runCatching { repository.addPackageToCart(packageId, replace) }
+                .onSuccess { notify("Package added to cart"); onResult(null) }
+                .onFailure { onResult(friendly(it)) }
+        }
+    }
+
+    // Partner package builder.
+    var packageBuilderBusy by mutableStateOf(false)
+        private set
+
+    fun loadMyPackages() {
+        viewModelScope.launch { runCatching { repository.loadMyPackages() } }
+    }
+
+    fun createMyPackage(
+        name: String, description: String?, isFeatured: Boolean, featuredHeadline: String?,
+        items: List<Pair<Int, Int>>, onResult: (String?) -> Unit = {},
+    ) {
+        if (name.isBlank()) { onResult("Please give your package a name."); return }
+        if (items.isEmpty()) { onResult("Add at least one of your services to the package."); return }
+        packageBuilderBusy = true
+        viewModelScope.launch {
+            runCatching {
+                repository.createMyPackage(name.trim(), description?.trim(), null, isFeatured,
+                    featuredHeadline?.trim(), items)
+            }
+                .onSuccess { notify("Package created"); onResult(null) }
+                .onFailure { onResult(friendly(it)) }
+            packageBuilderBusy = false
+        }
+    }
+
+    fun setPackageFeatured(packageId: Int, featured: Boolean) {
+        viewModelScope.launch {
+            runCatching { repository.updateMyPackage(packageId, isFeatured = featured) }
+                .onFailure { notify(friendly(it), isError = true) }
+        }
+    }
+
+    fun deleteMyPackage(packageId: Int, onResult: (String?) -> Unit = {}) {
+        viewModelScope.launch {
+            runCatching { repository.deleteMyPackage(packageId) }
+                .onSuccess { notify("Package removed"); onResult(null) }
+                .onFailure { onResult(friendly(it)) }
+        }
+    }
+
     fun bookAgain(booking: com.example.data.BookingEntity) {
         if (!isLoggedIn) { triggerLoginPrompt(); return }
         // §714 cust-book-1 — a cancelled Flow-B (open) booking has no fixed partner
