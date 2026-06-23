@@ -14,6 +14,7 @@ import com.example.data.remote.LiveTrackingSocket
 import com.example.data.remote.isUrgentOffer
 import com.example.ui.map.GeoPoint
 import com.example.ui.map.VedaDropMaps
+import com.example.ui.theme.ThemeMode
 import kotlinx.coroutines.flow.*
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -955,6 +956,20 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
     /** Reset history (called on login/logout/role switch so the new session starts
      *  with a clean back-stack rooted at its home). */
     fun clearNavHistory() { _navStack.clear() }
+
+    /** §738 — top-level bottom-bar navigation. Tabs are ROOTS, not pushed onto the
+     *  back-stack: switching tabs resets history so Back from any tab returns to the
+     *  role home (and Back on the home tab triggers the shell's double-back-to-exit).
+     *  Previously every tab tap pushed the previous tab, so casual toggling
+     *  (Explore→Cart→Bookings→Profile→…) inflated Back history unboundedly and the user
+     *  had to press Back many times, walking back through tabs they'd already left. */
+    fun navigateTab(screen: Screen) {
+        if (!isLoggedIn && isGuestMode && isScreenRestricted(screen)) { triggerLoginPrompt(); return }
+        val home: Screen = if (activeUser.value?.role == "partner") Screen.PartnerDashboard else Screen.CustomerHome
+        _navStack.clear()
+        if (screen != home) _navStack.addLast(home)
+        _currentScreen = screen
+    }
     // §732 — first-run onboarding: false until the user finishes the intro once
     // (persisted), so a brand-new user sees the welcome flow before login.
     var onboardingComplete by mutableStateOf(
@@ -967,6 +982,29 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         onboardingComplete = true
         getApplication<Application>().getSharedPreferences("nikhat_prefs", Context.MODE_PRIVATE)
             .edit().putBoolean("onboarding_seen", true).apply()
+    }
+
+    // ── §738 Light / Dark / System theme ────────────────────────────────────────
+    // Persisted user choice. Defaults to DARK so existing installs keep the
+    // established "dark luxury teal" brand look until the user opts into Light or
+    // System from Profile → Appearance. MainActivity collects this and feeds it to
+    // MyApplicationTheme, which flips the Material colorScheme + LocalVedaDropPalette.
+    private val _themeMode = MutableStateFlow(
+        runCatching {
+            ThemeMode.valueOf(
+                getApplication<Application>()
+                    .getSharedPreferences("nikhat_prefs", Context.MODE_PRIVATE)
+                    .getString("theme_mode", ThemeMode.DARK.name) ?: ThemeMode.DARK.name
+            )
+        }.getOrDefault(ThemeMode.DARK)
+    )
+    val themeMode: StateFlow<ThemeMode> = _themeMode.asStateFlow()
+
+    fun setThemeMode(mode: ThemeMode) {
+        _themeMode.value = mode
+        getApplication<Application>()
+            .getSharedPreferences("nikhat_prefs", Context.MODE_PRIVATE)
+            .edit().putString("theme_mode", mode.name).apply()
     }
 
     // ── Auth / session ─────────────────────────────────────────────────────────
@@ -1078,7 +1116,18 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
                     otpSent = false
                     otpToken = null
                     devOtpHint = null
+                    // §738 — root the new session at its OWN home with a CLEAN back-stack.
+                    // Without this, a guest who browsed customer screens and then logged in
+                    // as a partner kept that customer history on the stack, so hardware-Back
+                    // walked back into customer screens under the partner shell (role bleed).
+                    clearNavHistory()
                     currentScreen = if (role == "partner") Screen.PartnerDashboard else Screen.CustomerHome
+                    // §738 — honour a push/notification deep-link that arrived while logged
+                    // out (the LoginScreen had overridden the content) instead of dropping it.
+                    pendingDeepLink?.let { target ->
+                        pendingDeepLink = null
+                        currentScreen = target
+                    }
                     loadNotifications()
                     registerFcmToken()   // §710 P0-5 — enable background push for this account
                 }
@@ -1110,9 +1159,18 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         lastFcmToken = null
     }
 
+    // §738 — a deep-link target captured while the user is logged OUT (push tapped on
+    // the login screen). Consumed by verifyOtp on a successful sign-in.
+    private var pendingDeepLink: Screen? = null
+
     /** §710 P0-5 — a tapped push (carrying notif_booking_id) deep-links to that booking. */
     fun openBookingFromPush(bookingId: String?) {
-        if (!bookingId.isNullOrBlank()) currentScreen = Screen.BookingDetail(bookingId)
+        if (bookingId.isNullOrBlank()) return
+        val target = Screen.BookingDetail(bookingId)
+        // §738 — if tapped while logged out, the LoginScreen overrides the content and the
+        // target would be lost; stash it and open it right after login instead.
+        if (!isLoggedIn) { pendingDeepLink = target; return }
+        currentScreen = target
     }
 
     /** Go back from the OTP-entry step to the phone/role step. */
@@ -1182,6 +1240,10 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
     /** A guest tapped a login-gated action — drop guest mode so the login screen
      *  shows. Role defaults to customer (guests browse the customer side). */
     fun triggerLoginPrompt() {
+        // §738 — remember the login-gated screen the guest wanted so we can return them
+        // there right after sign-in (consumed by verifyOtp) instead of stranding them on
+        // the home with their intent lost.
+        if (isScreenRestricted(currentScreen)) pendingDeepLink = currentScreen
         isGuestMode = false
         otpSent = false
         loginRole = "customer"
@@ -1747,7 +1809,7 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun confirmAndBook(service: Service, partner: Partner, address: AddressEntity) {
+    fun confirmAndBook(service: Service, partner: Partner, address: AddressEntity, onComplete: () -> Unit = {}) {
         viewModelScope.launch {
             runCatching {
                 // Hold the lock across BOTH the quote and the booking so a
@@ -1787,6 +1849,9 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
                 notify("Booking request sent")
                 currentScreen = Screen.BookingDetail(booking.id)
             }.onFailure { friendly(it) }
+            // §738 — signal THIS booking's completion (success or failure) so the caller's
+            // double-submit guard resets on the real result, not on any unrelated toast.
+            onComplete()
         }
     }
 
@@ -1980,7 +2045,12 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
                 productsUsed = productsUsed
             )
             repository.insertLocalPartnerService(customEntity)
-            notify("Custom service '$name' successfully added to your menu!")
+            // §738 — be HONEST: a free-form custom service is saved only on this device.
+            // The backend only accepts catalog (dictionary) services, so customers can
+            // NEVER see or book a custom one. The old "successfully added to your menu!"
+            // toast falsely implied it was live. Guide the partner to the catalog flow,
+            // which DOES persist + reach customers.
+            notify("'$name' saved to your drafts on this device. Customers can only book listed services — use Manage Catalog to add and price your services so they go live.")
         }
     }
 

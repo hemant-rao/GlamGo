@@ -5,8 +5,12 @@ import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
 import androidx.core.app.NotificationCompat
+import com.example.data.VedaDropRepository
 import com.google.firebase.messaging.FirebaseMessagingService
 import com.google.firebase.messaging.RemoteMessage
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 /**
  * §710 P0-5 — receives FCM pushes while the app is backgrounded/killed and posts a
@@ -25,6 +29,17 @@ class VedaDropMessagingService : FirebaseMessagingService() {
         // token, so this is a belt-and-suspenders for rotation).
         getSharedPreferences("nikhatglow_session", Context.MODE_PRIVATE)
             .edit().putString("pending_fcm_token", token).apply()
+
+        // …but if the app stays backgrounded for a long time the cache is never
+        // read and the backend keeps a stale token, so pushes stop reaching this
+        // device until next launch. Register the rotated token NOW, best-effort,
+        // off a short-lived IO coroutine. VedaDropRepository.registerDevice is the
+        // same path the app uses (AuthInterceptor injects the saved Bearer token),
+        // and it's an authed no-op when logged out — runCatching swallows the
+        // resulting failure, so this never crashes.
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching { VedaDropRepository(applicationContext).registerDevice(token) }
+        }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {

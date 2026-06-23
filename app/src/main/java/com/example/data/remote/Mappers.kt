@@ -235,15 +235,32 @@ object Mappers {
         status = d.status.replaceFirstChar { it.uppercase() },
     )
 
+    private val slotFormatter = java.time.format.DateTimeFormatter.ofPattern("d MMM, HH:mm")
+
     private fun prettySlot(iso: String?): String {
         if (iso.isNullOrBlank()) return "Scheduled"
-        // "2026-06-18T10:00:00Z" → "18 Jun, 10:00"
+        // "2026-06-18T10:00:00Z" → "18 Jun, 10:00" (in the device time zone).
+        // Reuse isUrgentOffer's tolerant parse: an offset/Z instant first, then a
+        // bare local date-time fallback. Render in the device zone via the shared
+        // formatter. On any failure fall back to the raw split so a malformed value
+        // never crashes (and at worst shows the old "yyyy-MM-dd · HH:mm" form).
         return try {
-            val date = iso.substringBefore("T")
-            val time = iso.substringAfter("T").take(5)
-            "$date · $time"
+            val zoned = runCatching {
+                java.time.OffsetDateTime.parse(iso)
+                    .atZoneSameInstant(java.time.ZoneId.systemDefault())
+            }.recoverCatching {
+                java.time.LocalDateTime.parse(iso.removeSuffix("Z"))
+                    .atZone(java.time.ZoneId.systemDefault())
+            }.getOrThrow()
+            zoned.format(slotFormatter)
         } catch (e: Exception) {
-            "Scheduled"
+            try {
+                val date = iso.substringBefore("T")
+                val time = iso.substringAfter("T").take(5)
+                "$date · $time"
+            } catch (e2: Exception) {
+                "Scheduled"
+            }
         }
     }
 }

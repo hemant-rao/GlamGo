@@ -15,6 +15,8 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import com.example.data.LocationHelper
 import com.example.ui.VedaDropViewModel
@@ -94,15 +96,20 @@ class MainActivity : ComponentActivity() {
     }
     enableEdgeToEdge()
     setContent {
-      MyApplicationTheme {
+      // §738 — the ViewModel is created OUTSIDE the theme so the user-selected
+      // light/dark/system mode (persisted in prefs, exposed as a StateFlow) can be
+      // read and fed into MyApplicationTheme. Flipping the mode recomposes the whole
+      // tree with the new colorScheme + palette.
+      val viewModel = androidx.lifecycle.viewmodel.compose.viewModel<VedaDropViewModel>()
+      // §725 Batch-B — keep a handle so a warm-start onNewIntent (tapping the
+      // urgent full-screen notification while the app is alive) can route too.
+      activeViewModel = viewModel
+      val themeMode by viewModel.themeMode.collectAsState()
+      MyApplicationTheme(themeMode = themeMode) {
         androidx.compose.material3.Surface(
           modifier = Modifier.fillMaxSize(),
           color = androidx.compose.material3.MaterialTheme.colorScheme.background
         ) {
-          val viewModel = androidx.lifecycle.viewmodel.compose.viewModel<VedaDropViewModel>()
-          // §725 Batch-B — keep a handle so a warm-start onNewIntent (tapping the
-          // urgent full-screen notification while the app is alive) can route too.
-          activeViewModel = viewModel
           // §687 — request location once on launch; on grant (or if already
           // granted) capture the device fix so "near me" discovery engages. The
           // app works fine if the user denies — discovery just isn't distance-sorted

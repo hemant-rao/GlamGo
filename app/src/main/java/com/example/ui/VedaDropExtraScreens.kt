@@ -40,6 +40,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.border
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Brush
@@ -61,6 +62,11 @@ import com.example.ui.theme.DeepPlum
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.VedaDropGold
 import com.example.ui.theme.VedaDropRose
+import com.example.ui.theme.LocalVedaDropPalette
+import com.example.ui.theme.ThemeMode
+import com.example.ui.theme.vedaScreenBg
+import com.example.ui.theme.vedaTextPrimary
+import com.example.ui.theme.vedaTextSecondary
 import androidx.compose.material.icons.filled.Verified
 
 // ---------------- CART (single-partner, multi-service) ----------------
@@ -284,7 +290,9 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                             IconButton(onClick = { viewModel.updateCartQty(item.id, item.qty + 1) }) {
                                 Icon(Icons.Default.Add, contentDescription = "More")
                             }
-                            Text("Rs ${"%.2f".format(item.lineTotalPaise / 100.0)}", fontWeight = FontWeight.Bold, color = VedaDropRose)
+                            // §738 — keep the line total on one line so a large amount can't
+                            // wrap and shove the delete button off the right edge.
+                            Text("Rs ${"%.2f".format(item.lineTotalPaise / 100.0)}", fontWeight = FontWeight.Bold, color = VedaDropRose, maxLines = 1, softWrap = false)
                             IconButton(onClick = { viewModel.removeCartItem(item.id) }) {
                                 Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color.Gray)
                             }
@@ -636,7 +644,7 @@ fun VedaDropEmptyState(
             text = title,
             style = MaterialTheme.typography.titleMedium,
             fontWeight = FontWeight.Bold,
-            color = Color.White,
+            color = vedaTextPrimary,
             textAlign = TextAlign.Center
         )
         
@@ -940,7 +948,7 @@ fun MyBookingsScreen(viewModel: VedaDropViewModel) {
                                     text = booking.serviceName,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp,
-                                    color = Color.White
+                                    color = vedaTextPrimary
                                 )
                                 Text(
                                     text = "₹${"%.2f".format(booking.totalPaise / 100.0)}",
@@ -962,7 +970,7 @@ fun MyBookingsScreen(viewModel: VedaDropViewModel) {
                                     "Specialist: ${booking.partnerName.orEmpty().ifBlank { "Beauty Specialist" }}"
                                 },
                                 fontSize = 12.sp,
-                                color = Color.White.copy(alpha = 0.8f)
+                                color = vedaTextSecondary.copy(alpha = 0.8f)
                             )
 
                             // Date Slot row
@@ -1009,6 +1017,10 @@ fun MyBookingsScreen(viewModel: VedaDropViewModel) {
 
                                 Box(
                                     modifier = Modifier
+                                        // §738 — let the status chip shrink (ellipsis) so a long
+                                        // live status like "PARTNER ON THE WAY" can't push the
+                                        // action buttons off the right edge of this SpaceBetween row.
+                                        .weight(1f, fill = false)
                                         .background(color = statusBgColor, shape = RoundedCornerShape(6.dp))
                                         .padding(horizontal = 8.dp, vertical = 4.dp)
                                 ) {
@@ -1016,7 +1028,9 @@ fun MyBookingsScreen(viewModel: VedaDropViewModel) {
                                         text = booking.status.replace("_", " ").uppercase(),
                                         fontSize = 10.sp,
                                         fontWeight = FontWeight.Bold,
-                                        color = statusTextColor
+                                        color = statusTextColor,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
                                     )
                                 }
 
@@ -1067,7 +1081,8 @@ fun MyBookingsScreen(viewModel: VedaDropViewModel) {
 
                                     IconButton(
                                         onClick = { viewModel.currentScreen = Screen.BookingDetail(booking.id) },
-                                        modifier = Modifier.size(28.dp)
+                                        // §738 — 48dp touch target (was 28dp, below the a11y minimum).
+                                        modifier = Modifier.size(48.dp)
                                     ) {
                                         Icon(Icons.Default.ArrowForward, contentDescription = "Open Detail", tint = VedaDropRose, modifier = Modifier.size(16.dp))
                                     }
@@ -1508,6 +1523,10 @@ fun PartnerProfileScreen(viewModel: VedaDropViewModel) {
                 }
             }
 
+            // §738 — light/dark/system appearance toggle.
+            ThemeModeSelector(viewModel)
+            Spacer(modifier = Modifier.height(16.dp))
+
             // §714 cust-auth-logout-noconfirm — confirm before logging out (one tap used
             // to immediately revoke the refresh token + wipe all caches).
             var showLogout by remember { mutableStateOf(false) }
@@ -1651,42 +1670,107 @@ fun ComplaintDetailScreen(viewModel: VedaDropViewModel, complaintId: String) {
 @Composable
 fun NotificationBell(viewModel: VedaDropViewModel) {
     val unread by viewModel.unreadCount.collectAsState()
-    IconButton(
-        onClick = { viewModel.currentScreen = Screen.Notifications },
-        modifier = Modifier.testTag("notifications_bell")
-    ) {
-        if (unread > 0) {
-            // §734 — explicit, high-contrast count badge. The default Material3 Badge
-            // rendered low-contrast / looked clipped on the dark header; this draws a
-            // solid rose pill with a white number + a thin ring so the count is always
-            // readable on the DeepPlum gradient.
-            BadgedBox(
-                badge = {
-                    Badge(
-                        containerColor = VedaDropRose,
-                        contentColor = Color.White,
-                        modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape)
-                    ) {
-                        Text(
-                            text = if (unread > 99) "99+" else "$unread",
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                        )
-                    }
-                }
-            ) {
-                Icon(
-                    Icons.Default.Notifications,
-                    contentDescription = "Notifications ($unread unread)",
-                    tint = Color.White
-                )
-            }
-        } else {
+    // §738 — badge no longer clips at the top-right corner. The previous version put
+    // a Material BadgedBox INSIDE an IconButton; IconButton clips its content to a
+    // circular state-layer, so the badge that overflows the bell's top-right corner
+    // got cut off. Now the circular ripple is confined to an inner Box, and the count
+    // pill is drawn in an OUTER, un-clipped Box (aligned to the top-end and inset a
+    // few dp) so the whole pill — number and ring — is always fully visible.
+    Box(contentAlignment = Alignment.Center) {
+        Box(
+            modifier = Modifier
+                .size(48.dp)
+                .clip(CircleShape)
+                .clickable { viewModel.currentScreen = Screen.Notifications }
+                .testTag("notifications_bell"),
+            contentAlignment = Alignment.Center
+        ) {
             Icon(
                 Icons.Default.Notifications,
-                contentDescription = "Notifications",
+                contentDescription = if (unread > 0) "Notifications ($unread unread)" else "Notifications",
                 tint = Color.White
             )
+        }
+        if (unread > 0) {
+            // High-contrast count pill: solid teal with a white ring + white number,
+            // readable on the dark teal header. Inset from the icon's corner so the
+            // ring is never clipped by any parent.
+            Box(
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 7.dp, end = 6.dp)
+                    .defaultMinSize(minWidth = 17.dp, minHeight = 17.dp)
+                    .background(VedaDropRose, CircleShape)
+                    .border(1.5.dp, Color.White, CircleShape)
+                    .padding(horizontal = 4.dp, vertical = 1.dp),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(
+                    text = if (unread > 99) "99+" else "$unread",
+                    color = Color.White,
+                    fontSize = 9.sp,
+                    lineHeight = 10.sp,
+                    fontWeight = FontWeight.Bold,
+                    maxLines = 1
+                )
+            }
+        }
+    }
+}
+
+/**
+ * §738 — Appearance selector (System / Light / Dark) shown in both the customer and
+ * partner profile screens. Persists the choice via the ViewModel, which flips the
+ * whole app's Material colorScheme + semantic palette. Text-only segmented pills so
+ * it depends on no icon library and renders correctly in either theme.
+ */
+@Composable
+fun ThemeModeSelector(viewModel: VedaDropViewModel) {
+    val palette = LocalVedaDropPalette.current
+    val mode by viewModel.themeMode.collectAsState()
+    Column(modifier = Modifier.fillMaxWidth()) {
+        Text(
+            "APPEARANCE",
+            fontSize = 11.sp,
+            fontWeight = FontWeight.Bold,
+            color = VedaDropRose,
+            letterSpacing = 1.sp,
+            modifier = Modifier.padding(bottom = 8.dp)
+        )
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(12.dp))
+                .background(palette.surfaceAlt)
+                .padding(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp)
+        ) {
+            ThemeMode.values().forEach { option ->
+                val selected = option == mode
+                val label = when (option) {
+                    ThemeMode.SYSTEM -> "System"
+                    ThemeMode.LIGHT -> "Light"
+                    ThemeMode.DARK -> "Dark"
+                }
+                Box(
+                    modifier = Modifier
+                        .weight(1f)
+                        .clip(RoundedCornerShape(9.dp))
+                        .background(if (selected) VedaDropRose else Color.Transparent)
+                        .clickable { viewModel.setThemeMode(option) }
+                        .padding(vertical = 10.dp)
+                        .testTag("theme_${option.name.lowercase()}"),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        label,
+                        color = if (selected) Color.White else palette.textSecondary,
+                        fontSize = 13.sp,
+                        fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                        maxLines = 1
+                    )
+                }
+            }
         }
     }
 }
@@ -1701,7 +1785,7 @@ fun NotificationsScreen(viewModel: VedaDropViewModel) {
     LaunchedEffect(Unit) { viewModel.loadNotifications() }
 
     // §734 — per-screen TopAppBar removed; shell header shows "Notifications" + back.
-    Column(modifier = Modifier.fillMaxSize().background(DarkSlate)) {
+    Column(modifier = Modifier.fillMaxSize().background(vedaScreenBg)) {
         if (notifications.isEmpty()) {
             VedaDropEmptyState(
                 icon = Icons.Default.Notifications,
@@ -1729,7 +1813,7 @@ fun NotificationsScreen(viewModel: VedaDropViewModel) {
                     text = "INBOX",
                     style = MaterialTheme.typography.labelMedium,
                     fontWeight = FontWeight.Bold,
-                    color = Color.White.copy(alpha = 0.5f)
+                    color = vedaTextSecondary.copy(alpha = 0.5f)
                 )
                 
                 if (notifications.any { !it.read }) {
@@ -1775,18 +1859,18 @@ fun NotificationsScreen(viewModel: VedaDropViewModel) {
                                     n.title ?: "Notification",
                                     fontSize = 15.sp,
                                     fontWeight = if (unread) FontWeight.Bold else FontWeight.SemiBold,
-                                    color = Color.White
+                                    color = vedaTextPrimary
                                 )
                                 n.body?.takeIf { it.isNotBlank() }?.let { body ->
                                     Spacer(modifier = Modifier.height(4.dp))
-                                    Text(body, fontSize = 13.sp, color = Color.White.copy(alpha = 0.82f), lineHeight = 18.sp)
+                                    Text(body, fontSize = 13.sp, color = vedaTextSecondary.copy(alpha = 0.82f), lineHeight = 18.sp)
                                 }
                                 n.createdAt?.takeIf { it.isNotBlank() }?.let { createdAt ->
                                     Spacer(modifier = Modifier.height(6.dp))
                                     Text(
                                         notificationTimeShort(createdAt),
                                         fontSize = 11.sp,
-                                        color = Color.White.copy(alpha = 0.55f)
+                                        color = vedaTextSecondary.copy(alpha = 0.55f)
                                     )
                                 }
                             }

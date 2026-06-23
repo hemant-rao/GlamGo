@@ -47,6 +47,7 @@ import com.example.ui.theme.VedaDropGold
 import com.example.ui.theme.VedaDropRose
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.OrderOrange
+import com.example.ui.theme.vedaTextPrimary
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.animation.*
@@ -104,7 +105,11 @@ fun FavouritesScreen(viewModel: VedaDropViewModel) {
             subtitle = "Professionals you saved",
             onBack = { viewModel.currentScreen = Screen.CustomerProfile },
         )
-        if (favorites.isEmpty()) {
+        // Guard on the ACTUALLY-RENDERED list: `favorites` can be non-empty while none
+        // of them resolve against the volatile partners catalog, which would otherwise
+        // leave just the header over a blank body. Guarding on `favPartners` ensures the
+        // "No favourites yet" state always shows when nothing renders.
+        if (favPartners.isEmpty()) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally,
@@ -1027,7 +1032,7 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                                     text = "${partner.rating} Stars",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 14.sp,
-                                    color = Color.White
+                                    color = vedaTextPrimary
                                 )
                                 Text(
                                     text = " (${reviews.size} reviews)",
@@ -1170,7 +1175,11 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
 
             // Menu Items List — restrict to the partner's OWN listed services so the
             // customer can't add something the §690 quote/cart gate will reject.
-            val partnerServices = allServices.filter { it.id in partner.servicesOffered }
+            // The Partner object's servicesOffered is empty/stale from some entry points
+            // (BookingDetail / Favourites "Book"), so derive the offered ids from the
+            // AUTHORITATIVE loaded price map too, unioned with servicesOffered as fallback.
+            val offeredIds = (partner.servicesOffered + viewModel.partnerServicePrices.keys).toSet()
+            val partnerServices = allServices.filter { it.id in offeredIds }
             val filteredServices = partnerServices.filter { srv ->
                 if (selectedCategory == "All") true
                 else srv.categoryId.lowercase().contains(selectedCategory.lowercase()) ||
@@ -1178,9 +1187,18 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
             }
 
             if (partnerServices.isEmpty()) {
+                // While the authoritative price map is still loading (no prices yet AND
+                // no servicesOffered to fall back on), show a spinner instead of flashing
+                // the misleading "hasn't listed services" empty-state. Once the map lands
+                // (empty ⇒ genuinely zero services) we drop into the real empty-state.
+                val stillLoading = viewModel.partnerServicePrices.isEmpty() && partner.servicesOffered.isEmpty()
                 item {
                     Box(modifier = Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
-                        Text("This partner hasn't listed services yet", color = Color.Gray, fontSize = 13.sp)
+                        if (stillLoading) {
+                            CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.dp, color = VedaDropRose)
+                        } else {
+                            Text("This partner hasn't listed services yet", color = Color.Gray, fontSize = 13.sp)
+                        }
                     }
                 }
             } else if (filteredServices.isEmpty()) {
@@ -1219,7 +1237,7 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                                     text = service.name,
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp,
-                                    color = Color.White
+                                    color = vedaTextPrimary
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Row(verticalAlignment = Alignment.CenterVertically) {

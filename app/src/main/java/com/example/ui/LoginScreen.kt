@@ -54,6 +54,9 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
     val isPartner = role == "partner"
     var phone by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
+    // §738 — explicit Terms/Privacy consent + a "read the full terms" dialog.
+    var acceptedTerms by remember { mutableStateOf(false) }
+    var showTermsDialog by remember { mutableStateOf(false) }
 
     Box(
         modifier = Modifier
@@ -280,7 +283,46 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                     }
 
                     Spacer(Modifier.height(16.dp))
-                    
+
+                    // §738 — explicit Terms/Privacy consent before sign-in/sign-up. The
+                    // checkbox gates the "Send code" action; a tap on "Read..." opens the
+                    // full Terms & Privacy (which spells out the connector / who's-responsible
+                    // model in plain language). Shown only on the phone step, not the OTP step.
+                    if (!viewModel.otpSent) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Checkbox(
+                                checked = acceptedTerms,
+                                onCheckedChange = { acceptedTerms = it },
+                                colors = CheckboxDefaults.colors(checkedColor = VedaDropRose),
+                                modifier = Modifier.testTag("terms_checkbox")
+                            )
+                            Text(
+                                text = "I have read and agree to the Terms of Service & Privacy Policy",
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .clickable { acceptedTerms = !acceptedTerms }
+                            )
+                        }
+                        TextButton(
+                            onClick = { showTermsDialog = true },
+                            contentPadding = PaddingValues(start = 12.dp),
+                            modifier = Modifier.testTag("read_terms_btn")
+                        ) {
+                            Text(
+                                "Read Terms of Service & Privacy Policy",
+                                color = VedaDropRose,
+                                fontWeight = FontWeight.SemiBold,
+                                fontSize = 12.sp
+                            )
+                        }
+                        Spacer(Modifier.height(8.dp))
+                    }
+
                     // Main Action Button (highly intuitive design)
                     Button(
                         onClick = {
@@ -288,7 +330,7 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                             else viewModel.verifyOtp(phone, code)
                         },
                         enabled = !viewModel.authBusy &&
-                            (if (!viewModel.otpSent) phone.length == 10 else code.length == 6),
+                            (if (!viewModel.otpSent) (phone.length == 10 && acceptedTerms) else code.length == 6),
                         shape = RoundedCornerShape(12.dp),
                         colors = ButtonDefaults.buttonColors(
                             containerColor = VedaDropRose,
@@ -325,6 +367,18 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                             }
                         }
                     }
+
+                    // §738 — connector/marketplace transparency, right under the action
+                    // button. States plainly that Veda Drop is not the service provider.
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        text = "Veda Drop only connects customers with independent, verified women professionals — we are not the service provider. Each professional is independent and fully responsible for the service she provides; you deal and pay her directly.",
+                        fontSize = 11.sp,
+                        lineHeight = 15.sp,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.85f),
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 4.dp)
+                    )
 
                     // Optional Quick-Browse for Customer
                     if (!viewModel.otpSent && !isPartner) {
@@ -388,7 +442,7 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
             
             // Reassurance and trust note
             Text(
-                text = "🛡️ 100% Safe and Secure. By continuing, you agree to Veda Drop's Terms & Privacy Guidelines.",
+                text = "🛡️ Safe & women-only — every member is a verified woman. Tap “Read Terms of Service & Privacy Policy” above to see exactly how Veda Drop works.",
                 style = MaterialTheme.typography.labelMedium,
                 fontWeight = FontWeight.Normal,
                 lineHeight = 16.sp,
@@ -396,6 +450,60 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                 textAlign = TextAlign.Center,
                 modifier = Modifier.padding(horizontal = 16.dp)
             )
+
+            // §738 — full Terms of Service & Privacy, in plain language. Spells out the
+            // connector model: Veda Drop connects the two sides and is NOT the provider;
+            // each professional is independent and responsible for her own service.
+            if (showTermsDialog) {
+                AlertDialog(
+                    onDismissRequest = { showTermsDialog = false },
+                    confirmButton = {
+                        TextButton(onClick = { showTermsDialog = false }) {
+                            Text("Got it", color = VedaDropRose, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    title = { Text("Terms of Service & Privacy", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Column(modifier = Modifier.verticalScroll(rememberScrollState())) {
+                            TermsSection(
+                                "How Veda Drop works",
+                                "Veda Drop is a technology platform that connects customers with independent beauty & wellness professionals (“Professionals”). We provide discovery, booking, in-app chat, location and safety tools only. Veda Drop is NOT the provider of any beauty or wellness service."
+                            )
+                            TermsSection(
+                                "Independent professionals",
+                                "Every Professional on Veda Drop is independent and self-employed. The Professional you choose — not Veda Drop — is solely responsible for the service she provides, including its quality, safety, conduct, timing, pricing and any licences or compliance required by law. Customers engage Professionals directly."
+                            )
+                            TermsSection(
+                                "A platform for both sides",
+                                "Veda Drop connects both customers and Professionals. Each member is responsible for their own conduct and for honouring the bookings they make."
+                            )
+                            TermsSection(
+                                "Payments",
+                                "You pay the Professional directly. Veda Drop never handles your service payment and adds ₹0 to it — our only charge is the Professional’s ₹99/month listing fee."
+                            )
+                            TermsSection(
+                                "Safety — women only",
+                                "• Every customer and Professional is a verified woman.\n• Phone numbers stay hidden until a booking is accepted, and are hidden again afterwards.\n• A Professional sets out only after you confirm the visit on chat or call.\n• Tap SOS on the booking screen to reach 112 / women helpline 1091 anytime.\n• Never share OTPs, money or documents in chat. If anything feels unsafe, cancel and leave — no penalty."
+                            )
+                            TermsSection(
+                                "Your privacy",
+                                "We collect only what we need to run the service: your phone number (for OTP login), your service location (to match you with nearby Professionals) and your profile/booking details. We do not sell your personal data. Your number is shared with the other party only after a booking is accepted, and hidden again afterwards."
+                            )
+                            TermsSection(
+                                "Liability",
+                                "Veda Drop facilitates connections and provides safety tools, but is not a party to the service agreement between a customer and a Professional. To the extent permitted by law, Veda Drop is not responsible for the acts, omissions or conduct of any customer or Professional. Any dispute about a service is between the customer and the Professional; our Support team will help where it can."
+                            )
+                            Text(
+                                "By ticking the box and continuing, you confirm you have read and agree to these Terms and the Privacy note above.",
+                                fontSize = 12.sp,
+                                fontWeight = FontWeight.SemiBold,
+                                color = MaterialTheme.colorScheme.onSurface,
+                                modifier = Modifier.padding(top = 8.dp)
+                            )
+                        }
+                    }
+                )
+            }
         }
     }
 }
@@ -484,6 +592,21 @@ private fun VisualRoleCard(
                 }
             }
         }
+    }
+}
+
+/** §738 — one titled paragraph inside the Terms & Privacy dialog. */
+@Composable
+private fun TermsSection(title: String, body: String) {
+    Column(modifier = Modifier.padding(bottom = 12.dp)) {
+        Text(title, fontWeight = FontWeight.Bold, fontSize = 13.sp, color = VedaDropRose)
+        Spacer(Modifier.height(2.dp))
+        Text(
+            body,
+            fontSize = 12.sp,
+            lineHeight = 17.sp,
+            color = MaterialTheme.colorScheme.onSurfaceVariant
+        )
     }
 }
 

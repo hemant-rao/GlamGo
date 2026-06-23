@@ -298,9 +298,14 @@ class VedaDropRepository(context: Context) {
         // §687 — pass the device fix (when known) so the backend can sort/limit
         // by distance ("near me"). Pre-§687 coords were never sent so distance
         // sorting silently did nothing. null coords → backend returns un-sorted.
-        VedaDropDataSource.partners = runCatching {
+        // A transient blip (5xx / timeout / network) must NOT wipe discovery to
+        // "no professionals": only overwrite on SUCCESS, keep the prior cache on
+        // failure (mirrors refreshSubscription/loadEarnings' getOrNull pattern).
+        // An EMPTY success is a real geofence-empty result and IS applied.
+        val fetched = runCatching {
             api.partners(lat = lat, lon = lon, sort = lat?.let { "distance" }).items.map { Mappers.partner(it) }
-        }.getOrDefault(emptyList())
+        }.getOrNull()
+        if (fetched != null) VedaDropDataSource.partners = fetched
     }
 
     /** §690 — server-side service search. Returns null on failure so the caller

@@ -359,7 +359,9 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
         }
     }
 
-    val currentThemeDark = true
+    // §738 — real theme state (was hardcoded `true`). Drives the scaffold body bg
+    // and any screen that needs to know which mode is active.
+    val currentThemeDark = LocalVedaDropPalette.current.isDark
 
     // §735 — ONE message surface. The ViewModel emits friendly API messages (every
     // error path funnels through friendly()); we show each via the custom floating
@@ -402,6 +404,25 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
                 }
             }
         }
+    } else {
+        // §738 — the login screen previously had NO BackHandler, so the app-level one
+        // (gated on !showLogin) was inactive and hardware-Back fell through to finishing
+        // the Activity — silently ejecting a guest mid-browse. Handle Back here: from the
+        // OTP step go back to the phone/role step; from the phone step, double-back-to-exit
+        // (a hint first) instead of an instant, surprising app exit.
+        BackHandler {
+            if (viewModel.otpSent) {
+                viewModel.resetOtpFlow()
+            } else {
+                val now = System.currentTimeMillis()
+                if (now - lastBackMs < 2000L) {
+                    (context as? android.app.Activity)?.finish()
+                } else {
+                    lastBackMs = now
+                    viewModel.notify("Press back again to exit")
+                }
+            }
+        }
     }
 
     Scaffold(
@@ -410,7 +431,11 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
                 val current = viewModel.currentScreen
                 val shouldShowTopHeader = when (current) {
                     is Screen.CustomerHome,
-                    is Screen.PartnerDashboard -> false
+                    is Screen.PartnerDashboard,
+                    // §738 — ServiceDetail draws its OWN immersive hero header with a
+                    // back arrow (+ statusBarsPadding). Suppress the shell header here so
+                    // the user doesn't see two back buttons and a doubled status-bar inset.
+                    is Screen.ServiceDetail -> false
                     else -> true
                 }
                 if (shouldShowTopHeader) {
@@ -431,7 +456,8 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
                     userRole = activeUser?.role ?: "customer",
                     cartCount = cart?.count ?: 0,
                     offersCount = offers.size,
-                    onNavigate = { screen -> viewModel.currentScreen = screen },
+                    // §738 — tab roots: reset history instead of pushing each tab.
+                    onNavigate = { screen -> viewModel.navigateTab(screen) },
                 )
             }
         }
@@ -440,7 +466,7 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
             modifier = Modifier
                 .fillMaxSize()
                 .padding(innerPadding)
-                .background(if (currentThemeDark) DarkSlate else SoftCream)
+                .background(vedaScreenBg)
         ) {
             if (showLogin) {
                 VedaDropLoginScreen(viewModel)
@@ -602,7 +628,9 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
                             
                             IconButton(
                                 onClick = { activeToastMessage = null },
-                                modifier = Modifier.size(24.dp)
+                                // §738 — 40dp touch target (was a 24dp tap area on an
+                                // auto-dismissing toast, easy to miss); 14dp glyph unchanged.
+                                modifier = Modifier.size(40.dp)
                             ) {
                                 Icon(
                                     imageVector = Icons.Default.Close,
@@ -878,7 +906,12 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
                         colors = listOf(DeepPlum, DarkSlate)
                     )
                 )
-                .padding(horizontal = 20.dp, vertical = 26.dp)
+                // §738 — raise the brand row (and its notification bell) so it sits at
+                // the same height as the sticky header's bell on every other screen.
+                // The home suppresses the shell header, so the Scaffold already insets
+                // for the status bar; a big 26dp top pad pushed the bell ~16dp lower
+                // than other pages. Trimmed the top pad (kept generous bottom spacing).
+                .padding(start = 20.dp, end = 20.dp, top = 10.dp, bottom = 22.dp)
         ) {
             Column {
                 // §736 — brand lockup: logo + "Veda Drop" with a smaller "SPA &
@@ -1234,7 +1267,7 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
                         Surface(
                             onClick = { selectedSegment = segment },
                             shape = RoundedCornerShape(14.dp),
-                            color = if (isSelected) VedaDropRose else DeepPlum,
+                            color = if (isSelected) VedaDropRose else vedaSurfaceAlt,
                             border = BorderStroke(1.dp, if (isSelected) VedaDropRose else VedaDropRose.copy(alpha = 0.2f)),
                             shadowElevation = if (isSelected) 4.dp else 0.dp,
                             modifier = Modifier.testTag("segment_chip_$segment")
@@ -1254,7 +1287,7 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
                                     text = segment,
                                     fontSize = 12.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = if (isSelected) Color.White else Color.White.copy(alpha = 0.9f)
+                                    color = if (isSelected) Color.White else vedaTextPrimary.copy(alpha = 0.9f)
                                 )
                             }
                         }
@@ -2000,7 +2033,7 @@ fun VedaDropMarketplaceFeed(viewModel: VedaDropViewModel) {
                 Text(
                     text = "Salons & studios near you",
                     style = MaterialTheme.typography.titleMedium,
-                    color = Color.White,
+                    color = vedaTextPrimary,
                     fontWeight = FontWeight.Bold
                 )
             }
@@ -2125,7 +2158,7 @@ fun VedaDropMarketplaceFeed(viewModel: VedaDropViewModel) {
                                         text = partner.name,
                                         fontWeight = FontWeight.Bold,
                                         fontSize = 16.sp,
-                                        color = Color.White,
+                                        color = vedaTextPrimary,
                                         maxLines = 1,
                                         overflow = TextOverflow.Ellipsis,
                                         modifier = Modifier.weight(1f, fill = false)
@@ -2144,7 +2177,9 @@ fun VedaDropMarketplaceFeed(viewModel: VedaDropViewModel) {
                                         }
                                         IconButton(
                                             onClick = { viewModel.toggleFavorite(partner.id) },
-                                            modifier = Modifier.size(24.dp).testTag("partner_heart_toggle_${partner.id}")
+                                            // §738 — 48dp touch target (was 24dp, below the
+                                            // Material/a11y minimum); the 18dp glyph is unchanged.
+                                            modifier = Modifier.size(48.dp).testTag("partner_heart_toggle_${partner.id}")
                                         ) {
                                             Icon(
                                                 imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -2174,7 +2209,7 @@ fun VedaDropMarketplaceFeed(viewModel: VedaDropViewModel) {
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.Star, null, tint = VedaDropGold, modifier = Modifier.size(14.dp))
                                         Spacer(modifier = Modifier.width(2.dp))
-                                        Text("${partner.rating}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = Color.White, maxLines = 1, softWrap = false)
+                                        Text("${partner.rating}", fontWeight = FontWeight.Bold, fontSize = 12.sp, color = vedaTextPrimary, maxLines = 1, softWrap = false)
                                         Text(" (${partner.reviewsCount})", fontSize = 11.sp, color = Color.Gray, maxLines = 1, softWrap = false)
                                     }
                                     Text("${partner.experienceYears} Yrs Exp", fontSize = 11.sp, color = Color.Gray, maxLines = 1, softWrap = false)
@@ -2266,7 +2301,7 @@ fun VedaDropMarketplaceFeed(viewModel: VedaDropViewModel) {
                                                 fontWeight = FontWeight.Bold,
                                                 maxLines = 1,
                                                 overflow = TextOverflow.Ellipsis,
-                                                color = Color.White
+                                                color = vedaTextPrimary
                                             )
                                             Spacer(modifier = Modifier.height(2.dp))
                                             Row(
@@ -2396,7 +2431,7 @@ fun PartnerComparisonModal(
                 horizontalArrangement = Arrangement.spacedBy(8.dp)
             ) {
                 Icon(Icons.Default.CompareArrows, contentDescription = null, tint = VedaDropRose)
-                Text("Specialist Comparison ⚖️", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                Text("Specialist Comparison ⚖️", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = vedaTextPrimary)
             }
         },
         text = {
@@ -2422,7 +2457,7 @@ fun PartnerComparisonModal(
                         OutlinedButton(
                             onClick = { p1Expanded = true },
                             modifier = Modifier.fillMaxWidth().testTag("compare_selector_p1"),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = vedaTextPrimary),
                             border = BorderStroke(1.dp, if (partner1 != null) VedaDropRose else Color.Gray.copy(alpha = 0.5f))
                         ) {
                             Text(partner1?.name ?: "Select Slot 1 👤", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
@@ -2430,11 +2465,11 @@ fun PartnerComparisonModal(
                         DropdownMenu(
                             expanded = p1Expanded,
                             onDismissRequest = { p1Expanded = false },
-                            modifier = Modifier.background(DeepPlum)
+                            modifier = Modifier.background(vedaSurface)
                         ) {
                             allPartners.forEach { partner ->
                                 DropdownMenuItem(
-                                    text = { Text("${partner.name} (⭐${partner.rating})", color = Color.White, fontSize = 12.sp) },
+                                    text = { Text("${partner.name} (⭐${partner.rating})", color = vedaTextPrimary, fontSize = 12.sp) },
                                     onClick = {
                                         partner1 = partner
                                         p1Expanded = false
@@ -2449,7 +2484,7 @@ fun PartnerComparisonModal(
                         OutlinedButton(
                             onClick = { p2Expanded = true },
                             modifier = Modifier.fillMaxWidth().testTag("compare_selector_p2"),
-                            colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                            colors = ButtonDefaults.outlinedButtonColors(contentColor = vedaTextPrimary),
                             border = BorderStroke(1.dp, if (partner2 != null) VedaDropRose else Color.Gray.copy(alpha = 0.5f))
                         ) {
                             Text(partner2?.name ?: "Select Slot 2 👤", fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
@@ -2457,11 +2492,11 @@ fun PartnerComparisonModal(
                         DropdownMenu(
                             expanded = p2Expanded,
                             onDismissRequest = { p2Expanded = false },
-                            modifier = Modifier.background(DeepPlum)
+                            modifier = Modifier.background(vedaSurface)
                         ) {
                             allPartners.forEach { partner ->
                                 DropdownMenuItem(
-                                    text = { Text("${partner.name} (⭐${partner.rating})", color = Color.White, fontSize = 12.sp) },
+                                    text = { Text("${partner.name} (⭐${partner.rating})", color = vedaTextPrimary, fontSize = 12.sp) },
                                     onClick = {
                                         partner2 = partner
                                         p2Expanded = false
@@ -2484,23 +2519,23 @@ fun PartnerComparisonModal(
                             // Metrics header row
                             Row(modifier = Modifier.fillMaxWidth().padding(bottom = 4.dp), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("Feature Metric", fontWeight = FontWeight.Bold, color = VedaDropRose, fontSize = 11.sp, modifier = Modifier.weight(1.3f))
-                                Text(partner1?.name?.substringBefore(" ") ?: "[P1]", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-                                Text(partner2?.name?.substringBefore(" ") ?: "[P2]", fontWeight = FontWeight.Bold, color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                                Text(partner1?.name?.substringBefore(" ") ?: "[P1]", fontWeight = FontWeight.Bold, color = vedaTextPrimary, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                                Text(partner2?.name?.substringBefore(" ") ?: "[P2]", fontWeight = FontWeight.Bold, color = vedaTextPrimary, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
                             }
                             Divider(color = Color.Gray.copy(alpha = 0.12f))
 
                             // Row: Rating
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("Client Rating", color = Color.LightGray, fontSize = 11.sp, modifier = Modifier.weight(1.3f))
-                                Text(partner1?.let { "⭐ ${it.rating} (${it.reviewsCount})" } ?: "—", color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-                                Text(partner2?.let { "⭐ ${it.rating} (${it.reviewsCount})" } ?: "—", color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                                Text(partner1?.let { "⭐ ${it.rating} (${it.reviewsCount})" } ?: "—", color = vedaTextPrimary, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                                Text(partner2?.let { "⭐ ${it.rating} (${it.reviewsCount})" } ?: "—", color = vedaTextPrimary, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
                             }
 
                             // Row: Experience
                             Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
                                 Text("Experience Level", color = Color.LightGray, fontSize = 11.sp, modifier = Modifier.weight(1.3f))
-                                Text(partner1?.let { "${it.experienceYears} Years" } ?: "—", color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
-                                Text(partner2?.let { "${it.experienceYears} Years" } ?: "—", color = Color.White, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                                Text(partner1?.let { "${it.experienceYears} Years" } ?: "—", color = vedaTextPrimary, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
+                                Text(partner2?.let { "${it.experienceYears} Years" } ?: "—", color = vedaTextPrimary, fontSize = 11.sp, modifier = Modifier.weight(1f), textAlign = TextAlign.End)
                             }
 
                             // Row: Minimum starting rate
@@ -2541,7 +2576,7 @@ fun PartnerComparisonModal(
                                     ) {
                                         Text(
                                             text = service.name,
-                                            color = Color.White,
+                                            color = vedaTextPrimary,
                                             fontSize = 11.sp,
                                             modifier = Modifier.weight(1.3f),
                                             maxLines = 2,
@@ -2549,14 +2584,14 @@ fun PartnerComparisonModal(
                                         )
                                         Text(
                                             text = if (hasP1) "₹${service.pricePaise / 100}" else "—",
-                                            color = if (hasP1) Color.White else Color.Gray,
+                                            color = if (hasP1) vedaTextPrimary else Color.Gray,
                                             fontSize = 11.sp,
                                             modifier = Modifier.weight(1f),
                                             textAlign = TextAlign.End
                                         )
                                         Text(
                                             text = if (hasP2) "₹${service.pricePaise / 100}" else "—",
-                                            color = if (hasP2) Color.White else Color.Gray,
+                                            color = if (hasP2) vedaTextPrimary else Color.Gray,
                                             fontSize = 11.sp,
                                             modifier = Modifier.weight(1f),
                                             textAlign = TextAlign.End
@@ -2587,7 +2622,7 @@ fun PartnerComparisonModal(
                 Text("Close", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
             }
         },
-        containerColor = DeepPlum
+        containerColor = vedaSurface
     )
 }
 
@@ -3500,7 +3535,7 @@ fun PartnerBusinessLocationScreen(viewModel: VedaDropViewModel) {
             val savedLat = saved?.lat
             val savedLon = saved?.lon
             Card(
-                colors = CardDefaults.cardColors(containerColor = LightSage),
+                colors = CardDefaults.cardColors(containerColor = vedaSurfaceAlt),
                 border = BorderStroke(1.dp, VedaDropRose.copy(alpha = 0.25f)),
             ) {
                 Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -3513,7 +3548,7 @@ fun PartnerBusinessLocationScreen(viewModel: VedaDropViewModel) {
                                 (saved?.address ?: "").ifBlank {
                                     "%.5f, %.5f".format(savedLat, savedLon)
                                 },
-                                color = PlumDeepInk,   // §715 — dark text on the LIGHT LightSage card (forced-dark theme would render it near-white = unreadable)
+                                color = vedaTextPrimary,   // §715 — dark text on the LIGHT LightSage card (forced-dark theme would render it near-white = unreadable)
                                 fontWeight = FontWeight.Medium, fontSize = 14.sp,
                                 maxLines = 2, overflow = TextOverflow.Ellipsis
                             )
@@ -3610,7 +3645,7 @@ fun CategoryDetailScreen(viewModel: VedaDropViewModel, category: Category) {
                     modifier = Modifier.fillMaxWidth().padding(bottom = 8.dp),
                     shape = RoundedCornerShape(16.dp),
                     border = BorderStroke(0.5.dp, VedaDropRose.copy(alpha = 0.3f)),
-                    colors = CardDefaults.cardColors(containerColor = DeepPlum.copy(alpha = 0.6f))
+                    colors = CardDefaults.cardColors(containerColor = vedaSurface.copy(alpha = 0.6f))
                 ) {
                     Column(modifier = Modifier.padding(16.dp)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
@@ -3647,7 +3682,7 @@ fun CategoryDetailScreen(viewModel: VedaDropViewModel, category: Category) {
                     shape = RoundedCornerShape(18.dp),
                     elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
                     border = BorderStroke(1.dp, VedaDropRose.copy(alpha = 0.15f)),
-                    colors = CardDefaults.cardColors(containerColor = DeepPlum)
+                    colors = CardDefaults.cardColors(containerColor = vedaSurface)
                 ) {
                     Row(
                         modifier = Modifier
@@ -3662,7 +3697,7 @@ fun CategoryDetailScreen(viewModel: VedaDropViewModel, category: Category) {
                             modifier = Modifier
                                 .size(96.dp)
                                 .clip(RoundedCornerShape(14.dp))
-                                .border(0.5.dp, Color.White.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
+                                .border(0.5.dp, vedaDivider.copy(alpha = 0.1f), RoundedCornerShape(14.dp))
                         )
                         Spacer(modifier = Modifier.width(16.dp))
                         Column(modifier = Modifier.weight(1f)) {
@@ -3670,7 +3705,7 @@ fun CategoryDetailScreen(viewModel: VedaDropViewModel, category: Category) {
                                 text = service.name,
                                 style = MaterialTheme.typography.titleMedium,
                                 fontWeight = FontWeight.Bold,
-                                color = Color.White,
+                                color = vedaTextPrimary,
                                 maxLines = 1,
                                 overflow = TextOverflow.Ellipsis
                             )
@@ -3954,10 +3989,11 @@ fun ServiceDetailScreen(viewModel: VedaDropViewModel, service: Service) {
                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                 ) {
                     detailGallery.forEach { url ->
-                        AsyncImage(
-                            model = url,
+                        // §738 — data:-aware so base64 portfolio images render (Coil 2.x has
+                        // no data: fetcher); plain http(s) urls still load via Coil.
+                        SelfieProofImage(
+                            url = url,
                             contentDescription = "Recent work",
-                            contentScale = ContentScale.Crop,
                             modifier = Modifier.size(120.dp)
                                 .clip(RoundedCornerShape(10.dp))
                                 .background(VedaDropRose.copy(alpha = 0.08f))
@@ -4303,7 +4339,8 @@ fun PartnerSelectScreen(viewModel: VedaDropViewModel, service: Service) {
                                     val isFav by viewModel.isFavorite(partner.id).collectAsState(initial = false)
                                     IconButton(
                                         onClick = { viewModel.toggleFavorite(partner.id) },
-                                        modifier = Modifier.size(24.dp).testTag("fav_toggle_${partner.id}")
+                                        // §738 — 48dp touch target (was 24dp); 18dp glyph unchanged.
+                                        modifier = Modifier.size(48.dp).testTag("fav_toggle_${partner.id}")
                                     ) {
                                         Icon(
                                             imageVector = if (isFav) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -4431,10 +4468,10 @@ fun PartnerSelectScreen(viewModel: VedaDropViewModel, service: Service) {
                             Text("PORTFOLIO SHOWCASE", fontSize = 10.sp, fontWeight = FontWeight.Bold, color = VedaDropRose)
                             Row(modifier = Modifier.padding(vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                 partner.portfolioUrls.forEach { url ->
-                                    AsyncImage(
-                                        model = url,
+                                    // §738 — data:-aware portfolio tile (see SelfieProofImage).
+                                    SelfieProofImage(
+                                        url = url,
                                         contentDescription = null,
-                                        contentScale = ContentScale.Crop,
                                         modifier = Modifier
                                             .size(45.dp)
                                             .clip(RoundedCornerShape(4.dp))
@@ -4579,13 +4616,12 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
     // §694 — booking-time data capture for this flow.
     var bookingNotes by remember { mutableStateOf("") }
     var genderPref by remember { mutableStateOf("female") }   // §722 women-only
-    // Guard against duplicate submissions: confirmAndBook() navigates away on
-    // success (this composable is disposed) but stays put + emits a uiMessage on
-    // failure, so we re-enable the button whenever a message arrives.
+    // §738 — guard against duplicate booking submissions. This used to reset on EVERY
+    // app-wide uiMessage (so an unrelated toast — e.g. "Default address updated" from
+    // tapping an address radio — re-enabled the button mid-submit, defeating the guard
+    // and allowing a second booking POST). Now confirmAndBook(...) resets it via its own
+    // completion callback, so the guard tracks THIS booking's lifecycle only.
     var bookingBusy by remember { mutableStateOf(false) }
-    LaunchedEffect(Unit) {
-        viewModel.uiMessages.collect { bookingBusy = false }
-    }
 
     val quote = viewModel.quoteBreakdown
 
@@ -5030,7 +5066,7 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
                                 bookingBusy = true
                                 viewModel.bookingNotes = bookingNotes
                                 viewModel.bookingGenderPref = genderPref
-                                viewModel.confirmAndBook(service, partner, chosenAddress)
+                                viewModel.confirmAndBook(service, partner, chosenAddress) { bookingBusy = false }
                             },
                             colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
                             modifier = Modifier.testTag("confirm_booking_final_btn"),
@@ -5171,7 +5207,7 @@ fun BookingStatusStepper(status: String) {
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     label,
-                    color = if (active) VedaDropRose else if (done) Color.White else Color.Gray,
+                    color = if (active) VedaDropRose else if (done) vedaTextPrimary else Color.Gray,
                     fontSize = 9.sp,
                     fontWeight = if (active) FontWeight.Bold else FontWeight.Normal,
                     maxLines = 1,
@@ -5305,7 +5341,7 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
 
     // §734 — per-screen TopAppBar removed; shell header shows "Booking Details" + back.
     Column(modifier = Modifier.fillMaxSize()) {
-        Row(modifier = Modifier.fillMaxWidth().background(DeepPlum)) {
+        Row(modifier = Modifier.fillMaxWidth().background(vedaSurface)) {
             Tab(
                 selected = !showChatTab,
                 onClick = { showChatTab = false },
@@ -6020,7 +6056,7 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                                     title = {
                                         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                                             Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
-                                            Text("Cancel This Appointment?", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = Color.White)
+                                            Text("Cancel This Appointment?", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = vedaTextPrimary)
                                         }
                                     },
                                     text = {
@@ -6051,7 +6087,7 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                                                     onClick = { dropdownExpanded = true },
                                                     modifier = Modifier.fillMaxWidth().testTag("cancel_reason_selector"),
                                                     shape = RoundedCornerShape(8.dp),
-                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = Color.White),
+                                                    colors = ButtonDefaults.outlinedButtonColors(contentColor = vedaTextPrimary),
                                                     border = BorderStroke(1.dp, if (selectedReason.isNotBlank()) VedaDropRose else Color.Gray.copy(alpha = 0.5f))
                                                 ) {
                                                     Row(
@@ -6072,11 +6108,11 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                                                 DropdownMenu(
                                                     expanded = dropdownExpanded,
                                                     onDismissRequest = { dropdownExpanded = false },
-                                                    modifier = Modifier.background(DeepPlum).fillMaxWidth(0.85f)
+                                                    modifier = Modifier.background(vedaSurface).fillMaxWidth(0.85f)
                                                 ) {
                                                     reasons.forEach { reason ->
                                                         DropdownMenuItem(
-                                                            text = { Text(reason, color = Color.White, fontSize = 12.sp) },
+                                                            text = { Text(reason, color = vedaTextPrimary, fontSize = 12.sp) },
                                                             onClick = {
                                                                 selectedReason = reason
                                                                 dropdownExpanded = false
@@ -6123,10 +6159,10 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                                             onClick = { showCancelDialog = false },
                                             modifier = Modifier.testTag("dismiss_cancel_booking_btn")
                                         ) {
-                                            Text("Keep Appointment", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                                            Text("Keep Appointment", color = vedaTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                                         }
                                     },
-                                    containerColor = DeepPlum
+                                    containerColor = vedaSurface
                                 )
                             }
                         }
@@ -6852,7 +6888,7 @@ fun Tab(selected: Boolean, onClick: () -> Unit, text: String, modifier: Modifier
             .padding(vertical = 12.dp),
         contentAlignment = Alignment.Center
     ) {
-        Text(text, color = if (selected) VedaDropRose else Color.White, fontWeight = FontWeight.Bold)
+        Text(text, color = if (selected) VedaDropRose else vedaTextPrimary, fontWeight = FontWeight.Bold)
     }
 }
 
@@ -8040,7 +8076,7 @@ fun PartnerDashboardScreen(viewModel: VedaDropViewModel) {
                     ) {
                         Text(
                             text = if (subIsActive) "Manage Plan" else "Subscribe ₹99/mo",
-                            color = if (subIsActive) Color.White else Color.Black,
+                            color = if (subIsActive) vedaTextPrimary else Color.Black,
                             fontWeight = FontWeight.Bold,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis,
@@ -8082,7 +8118,7 @@ fun PartnerDashboardScreen(viewModel: VedaDropViewModel) {
                                     "Registration & Service Menu",
                                     fontWeight = FontWeight.Bold,
                                     fontSize = 15.sp,
-                                    color = Color.White
+                                    color = vedaTextPrimary
                                 )
                             }
                         }
@@ -8090,7 +8126,7 @@ fun PartnerDashboardScreen(viewModel: VedaDropViewModel) {
                             Icon(
                                 imageVector = if (expandRegistrationForm) Icons.Default.KeyboardArrowUp else Icons.Default.KeyboardArrowDown,
                                 contentDescription = "Expand registration details",
-                                tint = Color.White
+                                tint = vedaTextPrimary
                             )
                         }
                     }
@@ -8270,7 +8306,9 @@ fun PartnerDashboardScreen(viewModel: VedaDropViewModel) {
                                     customSvcPrice = ""
                                     customSvcDesc = ""
                                     customSvcProducts = ""
-                                    viewModel.notify("New service listed successfully!")
+                                    // §738 — the honest "saved as draft, not yet bookable"
+                                    // message is emitted by createCustomPartnerService itself;
+                                    // the old duplicate "listed successfully!" toast was false.
                                 } else {
                                     viewModel.notify("Please fill valid service name and rupee price", isError = true)
                                 }
@@ -8288,7 +8326,7 @@ fun PartnerDashboardScreen(viewModel: VedaDropViewModel) {
                             colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)),
                             modifier = Modifier.fillMaxWidth().testTag("standard_services_btn")
                         ) {
-                            Text("Manage Catalog", color = Color.White, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                            Text("Manage Catalog", color = vedaTextPrimary, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                         }
                     }
                 }
@@ -8457,7 +8495,13 @@ private fun Bitmap.toJpegDataUrl(maxSide: Int = 1024, quality: Int = 60): String
  * drawn with [Image]; a resolved http(s) URL still goes through Coil's [AsyncImage].
  */
 @Composable
-fun SelfieProofImage(url: String, modifier: Modifier = Modifier) {
+fun SelfieProofImage(
+    url: String,
+    modifier: Modifier = Modifier,
+    // §738 — also used by the portfolio / "recent work" galleries, so the label is a
+    // param (was hardcoded "start selfie"). Decorative gallery tiles pass null.
+    contentDescription: String? = "Professional's start selfie",
+) {
     if (url.startsWith("data:")) {
         val bmp = remember(url) {
             runCatching {
@@ -8469,7 +8513,7 @@ fun SelfieProofImage(url: String, modifier: Modifier = Modifier) {
         if (bmp != null) {
             Image(
                 bitmap = bmp.asImageBitmap(),
-                contentDescription = "Professional's start selfie",
+                contentDescription = contentDescription,
                 contentScale = ContentScale.Crop,
                 modifier = modifier,
             )
@@ -8477,7 +8521,7 @@ fun SelfieProofImage(url: String, modifier: Modifier = Modifier) {
     } else {
         AsyncImage(
             model = url,
-            contentDescription = "Professional's start selfie",
+            contentDescription = contentDescription,
             contentScale = ContentScale.Crop,
             modifier = modifier,
         )
@@ -9207,7 +9251,7 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
                                 Text("Create completely custom service", fontWeight = FontWeight.Bold, color = VedaDropRose)
                             }
                             TextButton(onClick = { showAddForm = !showAddForm }) {
-                                Text(if (showAddForm) "Hide Form" else "Open Form", color = Color.White, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                                Text(if (showAddForm) "Hide Form" else "Open Form", color = vedaTextPrimary, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                             }
                         }
                         
@@ -10373,6 +10417,11 @@ fun CustomerProfileScreen(viewModel: VedaDropViewModel) {
         }
 
         Spacer(modifier = Modifier.height(24.dp))
+        // §738 — light/dark/system appearance toggle.
+        Box(modifier = Modifier.padding(horizontal = 16.dp)) {
+            ThemeModeSelector(viewModel)
+        }
+        Spacer(modifier = Modifier.height(16.dp))
         OutlinedButton(
             onClick = { viewModel.logout() },
             modifier = Modifier
@@ -11252,7 +11301,7 @@ fun PreBookingChatScreen(viewModel: VedaDropViewModel, service: Service, partner
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(DeepPlum)
+                .background(vedaSurface)
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -11511,7 +11560,7 @@ fun MonthlyGrowthLineChart(bookings: List<com.example.data.BookingEntity>) {
                         "Monthly Volume & Earnings",
                         fontWeight = FontWeight.Bold,
                         fontSize = 15.sp,
-                        color = Color.White
+                        color = vedaTextPrimary
                     )
                 }
                 
