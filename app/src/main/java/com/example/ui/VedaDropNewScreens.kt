@@ -823,19 +823,8 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
         viewModel.loadPartnerServicePrices(partner.id)   // §710 P0-8 — real per-service prices
     }
 
+    // §734 — per-screen TopAppBar removed; shell header shows the partner name + back.
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text(partner.name, fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.goBack() }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.background
-            )
-        )
-
         LazyColumn(
             modifier = Modifier.weight(1f),
             contentPadding = PaddingValues(bottom = 80.dp)

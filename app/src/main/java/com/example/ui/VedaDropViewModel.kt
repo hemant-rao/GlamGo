@@ -534,6 +534,13 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
     var partnersLoading by mutableStateOf(false)
         private set
 
+    // §734 — booking IDs whose "session starts in <24h" reminder Toast has already
+    // fired this app session. The ViewModel outlives screen navigation, so this
+    // stops the reminder re-firing every single time the user returns to Home (the
+    // visual banner still shows; only the noisy Toast is de-duplicated). add()
+    // returns true only on first insert → exactly one Toast per booking per session.
+    val shownSessionReminderIds: MutableSet<String> = mutableSetOf()
+
     /** Refresh discovery for the service the customer is about to browse.
      *  §687 — sends the device fix (if captured) so the list is distance-sorted. */
     fun loadPartnersForService(serviceId: String) {

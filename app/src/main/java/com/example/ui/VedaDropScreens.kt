@@ -75,6 +75,7 @@ import kotlinx.coroutines.launch
 
 @Composable
 fun VedaDropTopHeader(
+    viewModel: VedaDropViewModel,
     currentScreen: Screen,
     userRole: String,
     onNavigate: (Screen) -> Unit,
@@ -96,13 +97,17 @@ fun VedaDropTopHeader(
         is Screen.CustomerHome -> "Veda Drop"
         is Screen.PartnerDashboard -> "Partner Jobs"
         is Screen.Cart -> "My Cart"
-        is Screen.MyBookings -> "Appointments"
+        // §734 — role-aware so a partner sees their schedule, a customer their appointments.
+        is Screen.MyBookings -> if (userRole == "partner") "My Schedule" else "Appointments"
         is Screen.CustomerProfile -> "My Profile"
         is Screen.PartnerProfile -> "Business Profile"
         is Screen.PartnerOffers -> "Open Pool Jobs"
         is Screen.PartnerEarnings -> "Earnings"
         is Screen.CategoryDetail -> currentScreen.category.name
         is Screen.ServiceDetail -> currentScreen.service.name
+        // §734 — PartnerSelect previously had no entry → header fell back to "Veda Drop";
+        // its dedicated TopAppBar carried this title, now removed, so the shell owns it.
+        is Screen.PartnerSelect -> "Choose a Beauty Expert"
         is Screen.PartnerStore -> currentScreen.partner.name
         is Screen.BookingConfirm -> "Confirm Booking"
         is Screen.BookingDetail -> "Booking Details"
@@ -116,7 +121,8 @@ fun VedaDropTopHeader(
         is Screen.PartnerBusinessLocation -> "Business Location"
         is Screen.PartnerAnalytics -> "Analytics & Growth"
         is Screen.PartnerPortfolio -> "My Portfolio"
-        is Screen.PreBookingChat -> "Chat"
+        // §734 — show who you're chatting with (the per-screen two-line bar is removed).
+        is Screen.PreBookingChat -> currentScreen.partner.name
         is Screen.Notifications -> "Notifications"
         is Screen.ServiceBookingForm -> "Booking Form"
         is Screen.Favourites -> "Favorites"
@@ -188,62 +194,12 @@ fun VedaDropTopHeader(
                 }
             }
 
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.spacedBy(2.dp)
-            ) {
-                val activeHome = if (userRole == "partner") currentScreen is Screen.PartnerDashboard else currentScreen is Screen.CustomerHome
-                val activeBookings = currentScreen is Screen.MyBookings
-                val activeProfile = if (userRole == "partner") currentScreen is Screen.PartnerProfile else currentScreen is Screen.CustomerProfile
-
-                IconButton(
-                    onClick = {
-                        if (userRole == "partner") {
-                            onNavigate(Screen.PartnerDashboard)
-                        } else {
-                            onNavigate(Screen.CustomerHome)
-                        }
-                    },
-                    modifier = Modifier.size(48.dp).testTag("header_home_button")
-                ) {
-                    Icon(
-                        imageVector = if (activeHome) Icons.Filled.Home else Icons.Outlined.Home,
-                        contentDescription = "Home",
-                        tint = if (activeHome) VedaDropRose else Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = { onNavigate(Screen.MyBookings) },
-                    modifier = Modifier.size(48.dp).testTag("header_bookings_button")
-                ) {
-                    Icon(
-                        imageVector = if (activeBookings) Icons.Filled.EventNote else Icons.Outlined.EventNote,
-                        contentDescription = "Appointments",
-                        tint = if (activeBookings) VedaDropRose else Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = {
-                        if (userRole == "partner") {
-                            onNavigate(Screen.PartnerProfile)
-                        } else {
-                            onNavigate(Screen.CustomerProfile)
-                        }
-                    },
-                    modifier = Modifier.size(48.dp).testTag("header_profile_button")
-                ) {
-                    Icon(
-                        imageVector = if (activeProfile) Icons.Filled.Person else Icons.Outlined.Person,
-                        contentDescription = "Profile",
-                        tint = if (activeProfile) VedaDropRose else Color.White.copy(alpha = 0.7f),
-                        modifier = Modifier.size(24.dp)
-                    )
-                }
-            }
+            // §734 — the top-right used to duplicate Home / Bookings / Profile, which
+            // already live in the bottom navigation bar (and Profile is the bottom
+            // "User"/"Business" tab). That made the profile icon appear in two places.
+            // Replaced with the single notification bell so the top bar offers a NEW
+            // action (alerts) instead of repeating the bottom nav.
+            NotificationBell(viewModel)
         }
     }
 }
@@ -458,6 +414,7 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
                 }
                 if (shouldShowTopHeader) {
                     VedaDropTopHeader(
+                        viewModel = viewModel,
                         currentScreen = current,
                         userRole = activeUser?.role ?: "customer",
                         onNavigate = { screen -> viewModel.currentScreen = screen },
@@ -773,6 +730,25 @@ fun VedaDropBottomBar(
 
 // ---------------- CUSTOMER SCREENS ----------------
 
+/**
+ * §734 — map a home "FILTER TREATMENTS" segment chip to whether a category belongs
+ * to it. The chips used to filter ONLY the far-down "Trending" list, so tapping one
+ * looked like it did nothing (the dominant "Choose a service" categories + marketplace
+ * ignored it). Now the chips also narrow the category row directly below them.
+ * "All" matches everything.
+ */
+private fun categoryMatchesSegment(cat: Category, segment: String): Boolean {
+    if (segment == "All") return true
+    val n = cat.name.lowercase()
+    return when (segment) {
+        "Hair" -> n.contains("hair") || n.contains("salon")
+        "Skin" -> n.contains("skin") || n.contains("beauty") || n.contains("facial")
+        "Nails" -> n.contains("nail")
+        "Massage" -> n.contains("massage") || n.contains("spa") || n.contains("therapy")
+        else -> true
+    }
+}
+
 @Composable
 fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
     val activeUser by viewModel.activeUser.collectAsState()
@@ -934,7 +910,10 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = "DELIVERY LOCATION",
+                            // §734 — "delivery" reads like food/parcels; this is an
+                            // at-home beauty service, so the address is where the expert
+                            // arrives. Renamed to "SERVICE LOCATION".
+                            text = "SERVICE LOCATION",
                             color = VedaDropRose,
                             fontSize = 11.sp,
                             fontWeight = FontWeight.Bold,
@@ -959,7 +938,7 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
                             )
                             Spacer(modifier = Modifier.width(6.dp))
                             Text(
-                                text = activeAddress?.labelText?.let { "$it - ${activeAddress.line1}" } ?: "Select Delivery Address",
+                                text = activeAddress?.labelText?.let { "$it - ${activeAddress.line1}" } ?: "Select service location",
                                 color = Color.White,
                                 fontSize = 15.sp,
                                 fontWeight = FontWeight.Bold,
@@ -996,26 +975,15 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
                         }
                     }
                     
+                    // §734 — the cart used to sit here AND in the bottom navigation bar
+                    // (the "Cart" tab with its own live count badge). Removed the
+                    // duplicate so the cart lives in ONE place (bottom nav); the top-right
+                    // now carries only the notification bell.
                     Row(
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         NotificationBell(viewModel)
-                        Box(
-                            modifier = Modifier
-                                .clip(CircleShape)
-                                .background(Color.White.copy(alpha = 0.05f))
-                                .clickable { viewModel.currentScreen = Screen.Cart }
-                                .padding(8.dp)
-                                .testTag("cart_view_btn")
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.ShoppingCart, 
-                                contentDescription = "Cart", 
-                                tint = Color.White,
-                                modifier = Modifier.size(22.dp)
-                            )
-                        }
                     }
                 }
                 
@@ -1285,6 +1253,9 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
         // (active-booking tracker moved to the top of the home — §731)
 
         // CATEGORY SECTION — Clean horizontal layout with large beautiful circular glow cards
+        // §734 — narrow the categories by the active "FILTER TREATMENTS" chip so the
+        // filter has a visible effect right here (not just in the far-down Trending list).
+        val visibleCategories = VedaDropDataSource.categories.filter { categoryMatchesSegment(it, selectedSegment) }
         if (VedaDropDataSource.categories.isNotEmpty()) {
             Column(modifier = Modifier.padding(vertical = 16.dp)) {
                 Text(
@@ -1294,11 +1265,21 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp)
                 )
                 Text(
-                    text = "Browse our beauty services",
+                    text = if (selectedSegment == "All") "Browse our beauty services"
+                           else "Showing ${selectedSegment.lowercase()} services",
                     fontSize = 11.sp,
                     color = Color.Gray,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
                 )
+
+                if (visibleCategories.isEmpty()) {
+                    Text(
+                        text = "No ${selectedSegment.lowercase()} categories — tap \"All\" to see everything.",
+                        fontSize = 12.sp,
+                        color = Color.Gray,
+                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)
+                    )
+                }
 
                 Row(
                     modifier = Modifier
@@ -1307,7 +1288,7 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
                         .padding(horizontal = 12.dp),
                     horizontalArrangement = Arrangement.spacedBy(10.dp)
                 ) {
-                    VedaDropDataSource.categories.forEach { cat ->
+                    visibleCategories.forEach { cat ->
                         val icon = when (cat.iconName) {
                             "content_cut" -> Icons.Default.ContentCut
                             "face" -> Icons.Default.Face
@@ -1420,19 +1401,25 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
 
         // §731 — the partner-grouped marketplace (brand header → services carousel →
         // "View all") is the flagship discovery surface, so it now sits ABOVE Trending.
-        VedaDropMarketplaceFeed(viewModel = viewModel)
+        // §734 — hidden while a treatment filter is active so the chip selection yields
+        // a focused category + trending view instead of the full unfiltered marketplace.
+        if (selectedSegment == "All") {
+            VedaDropMarketplaceFeed(viewModel = viewModel)
+        }
 
         // TRENDING SERVICES SUGGESTIONS — Redesigned into classic clean product view cards
         if (filteredServices.isNotEmpty()) {
             Column(modifier = Modifier.padding(vertical = 12.dp)) {
                 Text(
-                    text = "TRENDING TREATMENTS",
+                    text = if (selectedSegment == "All") "TRENDING TREATMENTS"
+                           else "${selectedSegment.uppercase()} TREATMENTS",
                     style = MaterialTheme.typography.labelMedium.copy(fontWeight = FontWeight.Bold),
                     color = VedaDropRose,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 4.dp)
                 )
                 Text(
-                    text = "Most booked services right now",
+                    text = if (selectedSegment == "All") "Most booked services right now"
+                           else "Filtered by ${selectedSegment.lowercase()}",
                     fontSize = 11.sp,
                     color = Color.Gray,
                     modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 12.dp)
@@ -2551,13 +2538,18 @@ fun UpcomingSessionReminderBanner(viewModel: VedaDropViewModel) {
     }
 
     if (urgentBooking != null) {
-        // Trigger Toast reminder
+        // §734 — fire the reminder Toast only ONCE per booking per app session.
+        // Previously this LaunchedEffect re-ran on every Home re-entry (the screen
+        // leaves + re-enters composition), so the Toast popped on every visit. The
+        // ViewModel-scoped set survives navigation; add() == true only on first show.
         LaunchedEffect(urgentBooking.id) {
-            Toast.makeText(
-                ctx,
-                "🔔 Veda Drop: Your beauty session starts in less than 24 hours!",
-                Toast.LENGTH_LONG
-            ).show()
+            if (viewModel.shownSessionReminderIds.add(urgentBooking.id)) {
+                Toast.makeText(
+                    ctx,
+                    "🔔 Veda Drop: Your beauty session starts in less than 24 hours!",
+                    Toast.LENGTH_LONG
+                ).show()
+            }
         }
 
         var isVisible by remember { mutableStateOf(true) }
@@ -3399,16 +3391,9 @@ fun PartnerBusinessLocationScreen(viewModel: VedaDropViewModel) {
         }
     }
 
+    // §734 — per-screen TopAppBar removed; the shell VedaDropTopHeader is the single
+    // app-wide header (title "Business Location" + back). Was a stacked second bar.
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Business Location", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.PartnerProfile }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            }
-        )
-
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -3524,18 +3509,7 @@ fun CategoryDetailScreen(viewModel: VedaDropViewModel, category: Category) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text(category.name, fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.CustomerHome }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.background
-            )
-        )
-        
+        // §734 — per-screen TopAppBar removed; shell header shows the category name + back.
         LazyColumn(
             modifier = Modifier.fillMaxSize().testTag("category_services_list"),
             contentPadding = PaddingValues(horizontal = 16.dp, vertical = 8.dp),
@@ -4072,15 +4046,7 @@ fun PartnerSelectScreen(viewModel: VedaDropViewModel, service: Service) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Choose a Beauty Expert", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.ServiceDetail(service) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            }
-        )
-
+        // §734 — per-screen TopAppBar removed; shell header shows "Choose a Beauty Expert" + back.
         // Open-marketplace info header
         Card(
             modifier = Modifier
@@ -4120,7 +4086,8 @@ fun PartnerSelectScreen(viewModel: VedaDropViewModel, service: Service) {
         Spacer(modifier = Modifier.height(4.dp))
         
         Text(
-            text = "Sellers Ready to Deliver: ${marketplaceOffers.size}",
+            // §734 — "Sellers ready to deliver" was wrong for an at-home beauty service.
+            text = "Experts available near you: ${marketplaceOffers.size}",
             fontSize = 14.sp,
             color = MaterialTheme.colorScheme.onBackground,
             fontWeight = FontWeight.Bold,
@@ -4158,19 +4125,31 @@ fun PartnerSelectScreen(viewModel: VedaDropViewModel, service: Service) {
                     }
                 }
             } else if (marketplaceOffers.isEmpty()) {
+                // §734 — no expert serves this address for this service. The usual reason
+                // is geofencing (experts nearby may not offer THIS service, or this area
+                // isn't covered yet), so we offer a "Change location" action rather than a
+                // dead-end "check back soon".
                 item {
                     Column(
                         modifier = Modifier.fillMaxWidth().padding(top = 64.dp),
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
-                        Icon(Icons.Default.Search, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
+                        Icon(Icons.Default.LocationOff, contentDescription = null, tint = Color.Gray, modifier = Modifier.size(48.dp))
                         Spacer(modifier = Modifier.height(12.dp))
-                        Text("No professionals offer this service yet", fontWeight = FontWeight.Bold)
+                        Text("No experts cover this service in your area yet", fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
                         Text(
-                            "New experts are joining Veda Drop every day — please check back soon.",
+                            "We match you with professionals who serve your location. Try a different address, or check back soon — new experts join Veda Drop every day.",
                             fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center,
-                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp)
+                            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp)
                         )
+                        Button(
+                            onClick = { showLocationPicker = true },
+                            colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
+                        ) {
+                            Icon(Icons.Default.MyLocation, contentDescription = null, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Change location", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                        }
                     }
                 }
             }
@@ -4490,18 +4469,10 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
     val quote = viewModel.quoteBreakdown
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        TopAppBar(
-            title = { Text("Confirm Booking Details", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.PartnerSelect(service) }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            }
-        )
-        
+        // §734 — per-screen TopAppBar removed; shell header shows "Confirm Booking" + back.
         Column(modifier = Modifier.padding(16.dp)) {
             // STEP 1: Address Card
-            Text("1. DELIVERY ADDRESS", fontWeight = FontWeight.Bold, color = VedaDropRose)
+            Text("1. SERVICE ADDRESS", fontWeight = FontWeight.Bold, color = VedaDropRose)
             Card(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -4510,7 +4481,7 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
             ) {
                 Column(modifier = Modifier.padding(16.dp)) {
                     if (addresses.isEmpty()) {
-                        Text("No delivery addresses saved yet", color = Color.Gray, fontSize = 13.sp)
+                        Text("No service addresses saved yet", color = Color.Gray, fontSize = 13.sp)
                     } else {
                         // §725 — selectable radio list; the current default is pre-selected.
                         addresses.forEach { addr ->
@@ -4963,7 +4934,7 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
     if (showLocationPicker) {
         LocationPickWithMapConfirm(
             viewModel = viewModel,
-            title = "Add delivery location",
+            title = "Add service location",
             onDismiss = { showLocationPicker = false },
             onConfirmed = { picked ->
                 viewModel.setActiveLocation(
@@ -5211,23 +5182,8 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
         return
     }
 
+    // §734 — per-screen TopAppBar removed; shell header shows "Booking Details" + back.
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Booking: ${booking.id}", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { 
-                    if (activeUser?.role == "customer") {
-                        viewModel.currentScreen = Screen.CustomerHome 
-                    } else {
-                        viewModel.currentScreen = Screen.PartnerDashboard
-                    }
-                }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepPlum, titleContentColor = Color.White)
-        )
-        
         Row(modifier = Modifier.fillMaxWidth().background(DeepPlum)) {
             Tab(
                 selected = !showChatTab,
@@ -6846,16 +6802,8 @@ fun ComplaintsListScreen(viewModel: VedaDropViewModel) {
     var ticketDesc by remember { mutableStateOf("") }
     var showForm by remember { mutableStateOf(false) }
 
+    // §734 — per-screen TopAppBar removed; shell header shows "Help & Complaints" + back.
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Help & Support Desk", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.CustomerHome }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            }
-        )
-        
         // §710 — fill remaining space so the header stays fixed and the form/list each
         // scroll within the body (the form's "File Formal Ticket" button could be clipped
         // by the keyboard before; the list now lives in a properly-bounded LazyColumn).
@@ -7159,16 +7107,8 @@ fun PartnerOffersScreen(viewModel: VedaDropViewModel) {
         onDispose { viewModel.onUrgentOffersLeft() }
     }
 
+    // §734 — per-screen TopAppBar removed; shell header shows "Open Pool Jobs".
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Open Jobs", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.PartnerDashboard }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepPlum, titleContentColor = Color.White),
-        )
         Text(
             "Jobs other professionals (or customers) put up for reassignment. First to accept wins — the price is fixed.",
             fontSize = 12.sp, color = Color.Gray, modifier = Modifier.padding(16.dp, 8.dp),
@@ -8530,15 +8470,8 @@ fun PartnerKycScreen(viewModel: VedaDropViewModel) {
     val pending = submittedNow || kycStatus == "submitted" || kycStatus == "under_review"
     val approved = kycStatus == "approved"
 
+    // §734 — per-screen TopAppBar removed; shell header shows "KYC Verification" + back.
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Legal KYC Verification", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.PartnerDashboard }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            }
-        )
         when {
             // §725 — once approved, the editable form is GONE; show the verified card.
             approved -> KycApprovedView(viewModel)
@@ -8964,16 +8897,8 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
 
     val allServices = VedaDropDataSource.services
 
+    // §734 — per-screen TopAppBar removed; shell header shows "Service Management" + back.
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Catalog Pricing Editor", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.PartnerDashboard }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            }
-        )
-        
         Text(
             text = "Specify custom service rates and toggle availability",
             color = Color.Gray,
@@ -11221,54 +11146,50 @@ fun PreBookingChatScreen(viewModel: VedaDropViewModel, service: Service, partner
         "Do you carry your own equipment?"
     )
 
+    // §734 — per-screen TopAppBar removed; the shell header now shows the partner name
+    // as the title. This slim sub-header keeps the "Pre-Booking Direct Line: <service>"
+    // context + the decorative SEAL SECURE trust chip that used to live in the app bar.
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = {
-                Column {
-                    Text(text = partner.name, fontSize = 16.sp, fontWeight = FontWeight.Bold)
-                    Text(text = "Pre-Booking Direct Line: ${service.name}", fontSize = 11.sp, color = VedaDropRose, fontWeight = FontWeight.SemiBold)
-                }
-            },
-            navigationIcon = {
-                IconButton(onClick = { 
-                    if (activeUser?.role == "customer") {
-                        viewModel.currentScreen = Screen.PartnerSelect(service) 
-                    } else {
-                        viewModel.currentScreen = Screen.PartnerDashboard
-                    }
-                }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                }
-            },
-            actions = {
-                // Verified Status Badge in chat header
-                Surface(
-                    color = Color(0xFFE0F2F1),
-                    shape = RoundedCornerShape(4.dp),
-                    modifier = Modifier.padding(end = 12.dp)
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(DeepPlum)
+                .padding(horizontal = 16.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = "Pre-Booking Direct Line: ${service.name}",
+                fontSize = 11.sp,
+                color = VedaDropRose,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+                modifier = Modifier.weight(1f)
+            )
+            Surface(
+                color = Color(0xFFE0F2F1),
+                shape = RoundedCornerShape(4.dp)
+            ) {
+                Row(
+                    modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
-                    Row(
-                        modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp),
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Verified,
-                            contentDescription = "Verified Status",
-                            tint = Color(0xFF00796B),
-                            modifier = Modifier.size(11.dp)
-                        )
-                        Spacer(modifier = Modifier.width(2.dp))
-                        Text(
-                            text = "SEAL SECURE",
-                            color = Color(0xFF00796B),
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
+                    Icon(
+                        imageVector = Icons.Default.Verified,
+                        contentDescription = "Verified Status",
+                        tint = Color(0xFF00796B),
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(modifier = Modifier.width(2.dp))
+                    Text(
+                        text = "SEAL SECURE",
+                        color = Color(0xFF00796B),
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold
+                    )
                 }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepPlum, titleContentColor = Color.White)
-        )
+            }
+        }
 
         // Trust alert header about open pricing and seal packs
         Card(

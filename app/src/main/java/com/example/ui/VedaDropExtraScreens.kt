@@ -184,23 +184,9 @@ fun CartScreen(viewModel: VedaDropViewModel) {
     // §725 Batch-B — shared full-screen "Add new location" picker.
     var showLocationPicker by remember { mutableStateOf(false) }
 
+    // §734 — per-screen TopAppBar removed; shell header shows "My Cart" + back. The
+    // "Clear" action moved into the cart body (see the Clear-cart row below).
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("My Cart", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.CustomerHome }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            },
-            actions = {
-                if (items.isNotEmpty()) {
-                    TextButton(onClick = { viewModel.clearCart() }) {
-                        Text("Clear", color = VedaDropRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
-                    }
-                }
-            }
-        )
-
         if (items.isEmpty()) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -235,6 +221,19 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                 .padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
+            // §734 — relocated "Clear cart" action (was in the removed TopAppBar).
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.End,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                TextButton(onClick = { viewModel.clearCart() }) {
+                    Icon(Icons.Default.Delete, contentDescription = null, tint = VedaDropRose, modifier = Modifier.size(16.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text("Clear cart", color = VedaDropRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                }
+            }
+
             // §722 — a cart spans 2+ partners only when multi_partner is ON (the backend
             // blocks cross-partner adds otherwise), so partnerCount>1 IS multi-partner mode.
             val multiPartner = (cart?.partnerCount ?: 0) > 1
@@ -505,7 +504,7 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                         Text("Select a time slot to send your request.", fontSize = 11.sp, color = VedaDropRose)
                     }
                     if (selectedAddressId == null) {
-                        Text("Add and select a delivery address to send your request.", fontSize = 11.sp, color = VedaDropRose)
+                        Text("Add and select a service address to send your request.", fontSize = 11.sp, color = VedaDropRose)
                     }
                     checkoutError?.let {
                         Text(it, color = MaterialTheme.colorScheme.error, fontSize = 12.sp)
@@ -584,7 +583,7 @@ fun CartScreen(viewModel: VedaDropViewModel) {
         if (showLocationPicker) {
             LocationPickWithMapConfirm(
                 viewModel = viewModel,
-                title = "Add delivery location",
+                title = "Add service location",
                 onDismiss = { showLocationPicker = false },
                 onConfirmed = { picked ->
                     viewModel.setActiveLocation(
@@ -828,19 +827,9 @@ fun MyBookingsScreen(viewModel: VedaDropViewModel) {
             }
         } else filteredBookings.map { null to it }
 
+    // §734 — per-screen TopAppBar removed; shell header shows the role-aware title
+    // ("My Schedule" for partners, "Appointments" for customers) + back.
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = {
-                Text(
-                    text = if (isPartner) "My Work Schedule" else "My Appointments",
-                    fontWeight = FontWeight.Bold
-                )
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.background
-            )
-        )
-        
         // Custom Tab Selector (Upcoming vs History)
         TabRow(
             selectedTabIndex = selectedTab,
@@ -1577,17 +1566,8 @@ fun ComplaintDetailScreen(viewModel: VedaDropViewModel, complaintId: String) {
     // Load the thread (and refresh on reply) whenever the screen opens.
     LaunchedEffect(complaintId) { viewModel.openComplaint(complaintId) }
 
+    // §734 — per-screen TopAppBar removed; shell header shows "Complaint" + back.
     Column(modifier = Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("Support Ticket", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.ComplaintsList }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(containerColor = DeepPlum, titleContentColor = Color.White),
-        )
-
         // Subject + status header
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             Text(detail?.subject ?: "Ticket #$complaintId", fontWeight = FontWeight.Bold, fontSize = 18.sp)
@@ -1675,7 +1655,25 @@ fun NotificationBell(viewModel: VedaDropViewModel) {
         modifier = Modifier.testTag("notifications_bell")
     ) {
         if (unread > 0) {
-            BadgedBox(badge = { Badge { Text(if (unread > 99) "99+" else "$unread") } }) {
+            // §734 — explicit, high-contrast count badge. The default Material3 Badge
+            // rendered low-contrast / looked clipped on the dark header; this draws a
+            // solid rose pill with a white number + a thin ring so the count is always
+            // readable on the DeepPlum gradient.
+            BadgedBox(
+                badge = {
+                    Badge(
+                        containerColor = VedaDropRose,
+                        contentColor = Color.White,
+                        modifier = Modifier.border(1.dp, Color.White.copy(alpha = 0.85f), CircleShape)
+                    ) {
+                        Text(
+                            text = if (unread > 99) "99+" else "$unread",
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                        )
+                    }
+                }
+            ) {
                 Icon(
                     Icons.Default.Notifications,
                     contentDescription = "Notifications ($unread unread)",
@@ -1701,19 +1699,8 @@ fun NotificationsScreen(viewModel: VedaDropViewModel) {
     // Refresh on entry so the list is current even if the user deep-linked here.
     LaunchedEffect(Unit) { viewModel.loadNotifications() }
 
+    // §734 — per-screen TopAppBar removed; shell header shows "Notifications" + back.
     Column(modifier = Modifier.fillMaxSize().background(DarkSlate)) {
-        TopAppBar(
-            title = { Text("Notifications Inbox", fontWeight = FontWeight.Bold) },
-            navigationIcon = {
-                IconButton(onClick = { viewModel.currentScreen = Screen.CustomerHome }) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back")
-                }
-            },
-            colors = TopAppBarDefaults.topAppBarColors(
-                containerColor = MaterialTheme.colorScheme.background
-            )
-        )
-
         if (notifications.isEmpty()) {
             VedaDropEmptyState(
                 icon = Icons.Default.Notifications,
