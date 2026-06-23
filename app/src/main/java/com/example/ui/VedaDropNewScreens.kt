@@ -13,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Verified
 import androidx.compose.material.icons.filled.Place
@@ -185,11 +186,43 @@ fun PartnerReviewsScreen(viewModel: VedaDropViewModel, partner: Partner) {
     LaunchedEffect(partner.id) { viewModel.loadPartnerReviews(partner.id) }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        VedaDropHeader(
-            title = partner.name,
-            subtitle = "Rating ${partner.rating} · ${partner.reviewsCount} reviews",
-            onBack = { viewModel.currentScreen = Screen.Favourites },
-        )
+        // §735 — the rating page leads with the VIEWED partner's PHOTO + NAME + rating
+        // (the app shell already shows a back button, so no redundant inner back arrow).
+        // Makes it unmistakable whose ratings the customer is looking at.
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(DeepPlum, DarkSlate)))
+                .padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            if (partner.avatarUrl.isNotBlank()) {
+                AsyncImage(
+                    model = partner.avatarUrl,
+                    contentDescription = partner.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(64.dp).clip(CircleShape)
+                )
+            } else {
+                Box(
+                    modifier = Modifier.size(64.dp).clip(CircleShape).background(VedaDropRose.copy(alpha = 0.2f)),
+                    contentAlignment = Alignment.Center
+                ) { Text(partner.name.take(1).uppercase(), color = VedaDropRose, fontWeight = FontWeight.Bold, fontSize = 24.sp) }
+            }
+            Spacer(Modifier.width(14.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(partner.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                    Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropGold, modifier = Modifier.size(16.dp))
+                    Spacer(Modifier.width(4.dp))
+                    Text(
+                        "${partner.rating} · ${partner.reviewsCount} reviews",
+                        color = Color.White.copy(alpha = 0.85f),
+                        fontSize = 13.sp
+                    )
+                }
+            }
+        }
         if (reviews.isEmpty()) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -960,107 +993,61 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                 }
             }
 
-            // Real Client Satisfaction & Verified Reviews Subsection
+            // §735 — Ratings now live on their OWN page. This card is the "rating
+            // button": tapping it opens PartnerReviewsScreen (the viewed partner's
+            // name + photo on top, then the full reviews list). The storefront no
+            // longer inlines the review list together with the profile.
             item {
                 Card(
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)
+                        .clickable { viewModel.currentScreen = Screen.PartnerReviews(partner) }
+                        .testTag("open_partner_reviews"),
                     colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.2f)),
                     border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.12f))
                 ) {
-                    Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Row(
-                            modifier = Modifier.fillMaxWidth(),
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column {
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(14.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column {
+                            Text(
+                                text = "CLIENT FEEDBACK & SATISFACTION",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = VedaDropRose,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.sp
+                            )
+                            Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
+                                Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropGold, modifier = Modifier.size(16.dp))
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "CLIENT FEEDBACK & SATISFACTION",
-                                    style = MaterialTheme.typography.labelSmall,
-                                    color = VedaDropRose,
+                                    text = "${partner.rating} Stars",
                                     fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.sp
+                                    fontSize = 14.sp,
+                                    color = Color.White
                                 )
-                                Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
-                                    Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropGold, modifier = Modifier.size(16.dp))
-                                    Spacer(modifier = Modifier.width(4.dp))
-                                    Text(
-                                        text = "${partner.rating} Stars",
-                                        fontWeight = FontWeight.Bold,
-                                        fontSize = 14.sp,
-                                        color = Color.White
-                                    )
-                                    Text(
-                                        text = " (${reviews.size} reviews)",
-                                        fontSize = 11.sp,
-                                        color = Color.Gray
-                                    )
-                                }
-                            }
-                            val ratingKycApproved = partner.kycStatus == "approved"
-                            Box(
-                                modifier = Modifier
-                                    .background(
-                                        (if (ratingKycApproved) VedaDropRose else Color.Gray).copy(alpha = 0.12f),
-                                        RoundedCornerShape(4.dp)
-                                    )
-                                    .padding(horizontal = 6.dp, vertical = 3.dp)
-                            ) {
                                 Text(
-                                    if (ratingKycApproved) "VERIFIED RATING" else "RATING",
-                                    fontSize = 9.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = if (ratingKycApproved) VedaDropRose else Color.Gray
+                                    text = " (${reviews.size} reviews)",
+                                    fontSize = 11.sp,
+                                    color = Color.Gray
                                 )
                             }
                         }
-                        
-                        if (reviews.isEmpty()) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                "No prior treatment reviews verified for this independent professional yet. Hire them and leave the first star rating!",
+                                "VIEW ALL",
                                 fontSize = 11.sp,
-                                color = Color.Gray,
-                                lineHeight = 15.sp
+                                fontWeight = FontWeight.Bold,
+                                color = VedaDropRose
                             )
-                        } else {
-                            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                                reviews.take(5).forEach { r ->
-                                    Card(
-                                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface.copy(alpha = 0.6f)),
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        Column(modifier = Modifier.padding(10.dp)) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Row {
-                                                    repeat(5) { i ->
-                                                        Icon(
-                                                            Icons.Default.Star,
-                                                            contentDescription = null,
-                                                            tint = if (i < r.rating) VedaDropGold else Color.Gray.copy(alpha = 0.3f),
-                                                            modifier = Modifier.size(12.dp)
-                                                        )
-                                                    }
-                                                }
-                                                Spacer(modifier = Modifier.weight(1f))
-                                                Text(
-                                                    text = (r.createdAt ?: "").take(10),
-                                                    fontSize = 10.sp,
-                                                    color = Color.Gray
-                                                )
-                                            }
-                                            if (!r.comment.isNullOrBlank()) {
-                                                Spacer(modifier = Modifier.height(4.dp))
-                                                Text(
-                                                    text = r.comment ?: "",
-                                                    fontSize = 11.sp,
-                                                    color = Color.White,
-                                                    lineHeight = 15.sp
-                                                )
-                                            }
-                                        }
-                                    }
-                                }
-                            }
+                            Spacer(modifier = Modifier.width(2.dp))
+                            Icon(
+                                Icons.AutoMirrored.Filled.ArrowForward,
+                                contentDescription = "View all ratings & reviews",
+                                tint = VedaDropRose,
+                                modifier = Modifier.size(16.dp)
+                            )
                         }
                     }
                 }

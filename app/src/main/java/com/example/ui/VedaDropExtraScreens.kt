@@ -51,7 +51,6 @@ import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
-import android.widget.Toast
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -1379,7 +1378,7 @@ fun PartnerProfileScreen(viewModel: VedaDropViewModel) {
                         }
                         TextButton(onClick = {
                             clipboard.setText(AnnotatedString(publicCode.uppercase()))
-                            Toast.makeText(ctx, "Code copied", Toast.LENGTH_SHORT).show()
+                            viewModel.notify("Code copied")   // §735 — unified toast Card
                         }) { Text("Copy", color = VedaDropRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
                     }
                 }

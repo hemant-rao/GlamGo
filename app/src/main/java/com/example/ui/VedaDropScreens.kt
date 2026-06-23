@@ -32,7 +32,6 @@ import android.content.pm.PackageManager
 import android.graphics.Bitmap
 import android.util.Base64
 import java.io.ByteArrayOutputStream
-import android.widget.Toast
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.Image
 import androidx.compose.ui.Modifier
@@ -359,12 +358,14 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
     }
 
     val currentThemeDark = true
-    val scope = rememberCoroutineScope()
 
-    // §694 — single app-wide Snackbar host. The ViewModel emits friendly API
-    // messages (every error path funnels through friendly()); we surface them
-    // here so the whole app shows user-readable toasts from one place.
-    val snackbarHostState = remember { SnackbarHostState() }
+    // §735 — ONE message surface. The ViewModel emits friendly API messages (every
+    // error path funnels through friendly()); we show each via the custom floating
+    // toast Card below. The old dual path — a Material SnackbarHost AND the Card for
+    // every message — is removed: it rendered every message TWICE (two different
+    // designs), and the snackbar host QUEUED a burst of messages into a vertical
+    // stack on the Home screen. The Card is a single slot (each new message replaces
+    // the previous one), so a burst can no longer pile up.
     var activeToastMessage by remember { mutableStateOf<String?>(null) }
     var activeToastIsError by remember { mutableStateOf(false) }
 
@@ -372,7 +373,6 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
         viewModel.uiMessages.collect { msg ->
             activeToastMessage = msg.text
             activeToastIsError = msg.isError
-            snackbarHostState.showSnackbar(message = msg.text, withDismissAction = true)
         }
     }
 
@@ -396,14 +396,13 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
                     (context as? android.app.Activity)?.finish()
                 } else {
                     lastBackMs = now
-                    Toast.makeText(context, "Press back again to exit", Toast.LENGTH_SHORT).show()
+                    viewModel.notify("Press back again to exit")
                 }
             }
         }
     }
 
     Scaffold(
-        snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             if (!showLogin) {
                 val current = viewModel.currentScreen
@@ -2544,11 +2543,9 @@ fun UpcomingSessionReminderBanner(viewModel: VedaDropViewModel) {
         // ViewModel-scoped set survives navigation; add() == true only on first show.
         LaunchedEffect(urgentBooking.id) {
             if (viewModel.shownSessionReminderIds.add(urgentBooking.id)) {
-                Toast.makeText(
-                    ctx,
-                    "🔔 Veda Drop: Your beauty session starts in less than 24 hours!",
-                    Toast.LENGTH_LONG
-                ).show()
+                // §735 — route through the unified toast Card (was a plain Android
+                // Toast that visually clashed with every other in-app message).
+                viewModel.notify("🔔 Veda Drop: Your beauty session starts in less than 24 hours!")
             }
         }
 
@@ -5705,7 +5702,7 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                                             enabled = !viewModel.reassignmentBusy,
                                             onClick = {
                                                 viewModel.changePartner(booking.id) { err ->
-                                                    Toast.makeText(ctx, err ?: "Finding a new professional…", Toast.LENGTH_SHORT).show()
+                                                    viewModel.notify(err ?: "Finding a new professional…", isError = err != null)
                                                     if (err == null) showChange = false
                                                 }
                                             },
@@ -6015,20 +6012,26 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                     // half of the dual-rating loop). Hidden once submitted (server flag).
                     if (isPartnerView && booking.status == "completed") {
                         Spacer(modifier = Modifier.height(24.dp))
-                        if (booking.customerRated) {
+                        var custRating by remember(booking.id) { mutableStateOf(5) }
+                        var custComment by remember(booking.id) { mutableStateOf("") }
+                        // §735 — hide the form the INSTANT we submit (optimistic), not only
+                        // after the server `customerRated` flag round-trips back via a
+                        // booking refresh, and clear the typed note so the same feedback
+                        // can't be re-submitted. Falls back to the live server flag.
+                        var custSubmitted by remember(booking.id) { mutableStateOf(false) }
+                        if (booking.customerRated || custSubmitted) {
+                            val shownStars = if (booking.customerRated) booking.customerRating else custRating
                             Card {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text("You rated this customer", fontWeight = FontWeight.Bold, color = VedaDropRose)
                                     Row(verticalAlignment = Alignment.CenterVertically) {
                                         Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropGold)
                                         Spacer(modifier = Modifier.width(4.dp))
-                                        Text("${booking.customerRating}/5 Stars", fontWeight = FontWeight.Bold)
+                                        Text("$shownStars/5 Stars", fontWeight = FontWeight.Bold)
                                     }
                                 }
                             }
                         } else {
-                            var custRating by remember(booking.id) { mutableStateOf(5) }
-                            var custComment by remember(booking.id) { mutableStateOf("") }
                             Card(
                                 modifier = Modifier.fillMaxWidth(),
                                 colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.08f)),
@@ -6053,7 +6056,11 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                                         modifier = Modifier.fillMaxWidth().testTag("rate_customer_comment"),
                                     )
                                     Button(
-                                        onClick = { viewModel.rateCustomerForBooking(booking.id, custRating, custComment.trim()) },
+                                        onClick = {
+                                            viewModel.rateCustomerForBooking(booking.id, custRating, custComment.trim())
+                                            custComment = ""          // §735 — clear the note
+                                            custSubmitted = true      // §735 — hide the form now
+                                        },
                                         colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
                                         modifier = Modifier.align(Alignment.End).testTag("submit_rate_customer_btn"),
                                     ) {
@@ -6988,7 +6995,7 @@ fun RescheduleDialog(
                     placing = true
                     viewModel.rescheduleBooking(booking.id, sid) { err ->
                         placing = false
-                        Toast.makeText(ctx, err ?: "Appointment rescheduled", Toast.LENGTH_SHORT).show()
+                        viewModel.notify(err ?: "Appointment rescheduled", isError = err != null)
                         if (err == null) onDismiss()
                     }
                 },
@@ -7074,7 +7081,7 @@ fun TransferBookingDialog(viewModel: VedaDropViewModel, bookingId: String, onDis
                         mode = if (targeted) "targeted" else "broadcast",
                         targetPublicCode = if (targeted) code else null,
                     ) { err ->
-                        Toast.makeText(context, err ?: "Booking offered to other professionals.", Toast.LENGTH_SHORT).show()
+                        viewModel.notify(err ?: "Booking offered to other professionals.", isError = err != null)
                         if (err == null) onDismiss()
                     }
                 },
@@ -7196,7 +7203,7 @@ fun PartnerOffersScreen(viewModel: VedaDropViewModel) {
                                 Button(
                                     onClick = {
                                         viewModel.acceptOffer(offer.offerId) { err ->
-                                            Toast.makeText(context, err ?: "Job claimed — it's yours.", Toast.LENGTH_SHORT).show()
+                                            viewModel.notify(err ?: "Job claimed — it's yours.", isError = err != null)
                                         }
                                     },
                                     modifier = Modifier.weight(1f),
@@ -8382,7 +8389,7 @@ fun StartJobWithSelfie(
     // Ask for camera permission, then open the capture overlay.
     val camPermLauncher = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) showCapture = true
-        else Toast.makeText(context, "Camera permission is required to start the job", Toast.LENGTH_SHORT).show()
+        else viewModel.notify("Camera permission is required to start the job", isError = true)
     }
     fun launchCapture() {
         val has = ContextCompat.checkSelfPermission(context, android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
@@ -9485,27 +9492,10 @@ fun CustomerProfileScreen(viewModel: VedaDropViewModel) {
                 .padding(horizontal = 16.dp, vertical = 24.dp)
         ) {
             Column {
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    IconButton(
-                        onClick = { viewModel.currentScreen = Screen.CustomerHome },
-                        modifier = Modifier.background(Color.White.copy(alpha = 0.15f), CircleShape)
-                    ) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                    }
-                    Text(
-                        text = "CUSTOMER PROFILE",
-                        style = MaterialTheme.typography.labelMedium,
-                        color = VedaDropRose
-                    )
-                    Spacer(modifier = Modifier.width(48.dp)) // Equalizer
-                }
-                
-                Spacer(modifier = Modifier.height(16.dp))
-
+                // §735 — removed the redundant inner header (a back arrow + the
+                // "CUSTOMER PROFILE" label). Profile is a bottom-nav ROOT tab: the app
+                // shell already shows a clean "My Profile" header with no back button,
+                // so an extra back arrow here was wrong and the label was noise.
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     InitialsAvatar(activeUser?.name, size = 64)
                     Spacer(modifier = Modifier.width(14.dp))
