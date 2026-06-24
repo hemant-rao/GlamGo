@@ -9098,11 +9098,15 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
                 var pkgDesc by remember { mutableStateOf("") }
                 var pkgFeatured by remember { mutableStateOf(false) }
                 var pkgHeadline by remember { mutableStateOf("") }
-                var pickedIds by remember { mutableStateOf<Set<Int>>(emptySet()) }
+                // §739 — pickedIds holds PartnerServiceEntity.serviceId, which is a
+                // String (Entities.kt:117). It was wrongly typed Set<Int>, so
+                // `ps.serviceId in pickedIds` (String in Set<Int>) failed type
+                // inference and broke the ENTIRE build (no APK → "app won't open").
+                // The entity already carries its own display name, so the old
+                // DTO-typed nameFor() helper — which ALSO mismatched (Entity passed
+                // where PartnerServiceDto was expected) — is removed; we bind ps.name.
+                var pickedIds by remember { mutableStateOf<Set<String>>(emptySet()) }
                 val offered = activeServices.filter { it.active }
-                fun nameFor(ps: com.example.data.remote.PartnerServiceDto): String =
-                    ps.name ?: allServices.firstOrNull { it.id == ps.serviceId.toString() }?.name
-                        ?: "Service #${ps.serviceId}"
 
                 Card(
                     modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
@@ -9200,7 +9204,7 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
                                         pickedIds = if (c) pickedIds + ps.serviceId else pickedIds - ps.serviceId
                                     })
                                     Column(modifier = Modifier.weight(1f)) {
-                                        Text(nameFor(ps), fontSize = 13.sp)
+                                        Text(ps.name, fontSize = 13.sp)
                                         Text("₹${ps.pricePaise / 100}", fontSize = 11.sp, color = Color.Gray)
                                     }
                                 }
@@ -9208,7 +9212,10 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
                             Spacer(modifier = Modifier.height(10.dp))
                             Button(
                                 onClick = {
-                                    val items = pickedIds.map { it to 1 }
+                                    // §739 — serviceId strings → the Int IDs createMyPackage
+                                    // needs (List<Pair<Int,Int>>, qty 1 each). toIntOrNull so a
+                                    // non-numeric/custom serviceId is skipped, never crashes.
+                                    val items = pickedIds.mapNotNull { it.toIntOrNull()?.let { id -> id to 1 } }
                                     viewModel.createMyPackage(pkgName, pkgDesc.ifBlank { null }, pkgFeatured,
                                         pkgHeadline.ifBlank { null }, items) { err ->
                                         if (err == null) {
