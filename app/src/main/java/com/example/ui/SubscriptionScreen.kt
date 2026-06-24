@@ -23,6 +23,10 @@ import com.example.ui.theme.DarkSlate
 import com.example.ui.theme.DeepPlum
 import com.example.ui.theme.VedaDropGold
 import com.example.ui.theme.VedaDropRose
+import com.example.ui.theme.vedaTextSecondary
+import com.example.ui.theme.LightSage
+import com.example.ui.theme.SoftCream
+import com.example.ui.theme.LocalVedaDropPalette
 
 /**
  * Partner ₹99/month listing subscription — the connector model's only revenue.
@@ -41,26 +45,24 @@ fun PartnerSubscriptionScreen(viewModel: VedaDropViewModel) {
     val priceRupees = (sub?.pricePaise ?: 9900L) / 100
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        // Header
+        // §740 — the app shell already shows "Premium Membership" + a back arrow, so the
+        // inner back arrow + "Subscription" title were removed (no more double header).
+        // This is now a compact price banner that follows the light/dark theme.
         Box(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(DeepPlum, DarkSlate)))
-                .windowInsetsPadding(WindowInsets.statusBars)
+                .background(
+                    if (LocalVedaDropPalette.current.isDark)
+                        Brush.verticalGradient(listOf(DeepPlum, DarkSlate))
+                    else Brush.verticalGradient(listOf(LightSage, SoftCream))
+                )
                 .padding(16.dp)
         ) {
             Column {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    IconButton(onClick = { viewModel.currentScreen = Screen.PartnerDashboard }) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                    }
-                    Text("Subscription", color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                }
-                Spacer(Modifier.height(8.dp))
                 Text("₹$priceRupees / month", color = VedaDropRose, fontSize = 28.sp, fontWeight = FontWeight.Bold)
                 Text(
                     "Stay discoverable and accept booking requests. You collect payment directly from customers — the platform never takes a cut.",
-                    color = Color.White.copy(alpha = 0.8f), fontSize = 13.sp,
+                    color = vedaTextSecondary, fontSize = 13.sp,
                     modifier = Modifier.padding(top = 4.dp)
                 )
             }
@@ -82,11 +84,11 @@ fun PartnerSubscriptionScreen(viewModel: VedaDropViewModel) {
                     }
                     if ((sub?.daysLeft ?: 0) > 0) {
                         Spacer(Modifier.height(8.dp))
-                        Text("${sub?.daysLeft} day(s) remaining in the current period.", fontSize = 13.sp, color = Color.Gray)
+                        Text("${sub?.daysLeft} day(s) remaining in the current period.", fontSize = 13.sp, color = vedaTextSecondary)
                     }
                     sub?.currentPeriodEnd?.let {
                         Spacer(Modifier.height(4.dp))
-                        Text("Renews / ends: ${it.take(10)}", fontSize = 12.sp, color = Color.Gray)
+                        Text("Renews / ends: ${it.take(10)}", fontSize = 12.sp, color = vedaTextSecondary)
                     }
                     if (status == "trial") {
                         Spacer(Modifier.height(4.dp))
@@ -127,7 +129,7 @@ fun PartnerSubscriptionScreen(viewModel: VedaDropViewModel) {
                             Spacer(Modifier.width(12.dp))
                             Column(modifier = Modifier.weight(1f)) {
                                 Text("₹${p.amountPaise / 100}", fontWeight = FontWeight.SemiBold)
-                                Text((p.at ?: p.periodStart ?: "").take(10), fontSize = 12.sp, color = Color.Gray)
+                                Text((p.at ?: p.periodStart ?: "").take(10), fontSize = 12.sp, color = vedaTextSecondary)
                             }
                             Text(p.status.replaceFirstChar { it.uppercase() }, fontSize = 12.sp, color = VedaDropRose)
                         }

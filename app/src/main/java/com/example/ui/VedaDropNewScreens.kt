@@ -48,6 +48,10 @@ import com.example.ui.theme.VedaDropRose
 import com.example.ui.theme.SuccessGreen
 import com.example.ui.theme.OrderOrange
 import com.example.ui.theme.vedaTextPrimary
+import com.example.ui.theme.vedaTextSecondary
+import com.example.ui.theme.LightSage
+import com.example.ui.theme.SoftCream
+import com.example.ui.theme.LocalVedaDropPalette
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.ui.platform.testTag
 import androidx.compose.animation.*
@@ -58,35 +62,10 @@ import androidx.compose.ui.text.input.ImeAction
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 
-// ───────────────────────────── small shared header ──────────────────────────
-@Composable
-private fun VedaDropHeader(
-    title: String,
-    subtitle: String? = null,
-    onBack: () -> Unit,
-    trailing: @Composable (() -> Unit)? = null,
-) {
-    Box(
-        modifier = Modifier
-            .fillMaxWidth()
-            .background(Brush.verticalGradient(listOf(DeepPlum, DarkSlate)))
-            .windowInsetsPadding(WindowInsets.statusBars)
-            .padding(16.dp)
-    ) {
-        Column {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onBack) {
-                    Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "Back", tint = Color.White)
-                }
-                Text(title, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp, modifier = Modifier.weight(1f))
-                trailing?.invoke()
-            }
-            subtitle?.let {
-                Text(it, color = Color.White.copy(alpha = 0.75f), fontSize = 12.sp, modifier = Modifier.padding(start = 12.dp, top = 2.dp))
-            }
-        }
-    }
-}
+// §740 — the private VedaDropHeader composable was removed. Every screen that used it
+// (Favourites, My Dashboard, Availability, Earnings, Analytics, Portfolio) now relies on
+// the single app-shell header, so there is no longer a second back arrow / duplicate
+// title stacked underneath it.
 
 private fun rupees(paise: Long): String = "₹${paise / 100}"
 
@@ -100,11 +79,8 @@ fun FavouritesScreen(viewModel: VedaDropViewModel) {
     }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        VedaDropHeader(
-            title = "Favourites",
-            subtitle = "Professionals you saved",
-            onBack = { viewModel.currentScreen = Screen.CustomerProfile },
-        )
+        // §740 — removed the duplicate inline header; the app shell already shows
+        // "Favourites" + a single back arrow (this was the second back button).
         // Guard on the ACTUALLY-RENDERED list: `favorites` can be non-empty while none
         // of them resolve against the volatile partners catalog, which would otherwise
         // leave just the header over a blank body. Guarding on `favPartners` ensures the
@@ -197,7 +173,12 @@ fun PartnerReviewsScreen(viewModel: VedaDropViewModel, partner: Partner) {
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .background(Brush.verticalGradient(listOf(DeepPlum, DarkSlate)))
+                .background(
+                    // §740 — reviews name banner flips with the theme (was always dark).
+                    if (LocalVedaDropPalette.current.isDark)
+                        Brush.verticalGradient(listOf(DeepPlum, DarkSlate))
+                    else Brush.verticalGradient(listOf(LightSage, SoftCream))
+                )
                 .padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -216,13 +197,13 @@ fun PartnerReviewsScreen(viewModel: VedaDropViewModel, partner: Partner) {
             }
             Spacer(Modifier.width(14.dp))
             Column(modifier = Modifier.weight(1f)) {
-                Text(partner.name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                Text(partner.name, color = vedaTextPrimary, fontWeight = FontWeight.Bold, fontSize = 20.sp)
                 Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(top = 2.dp)) {
                     Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropGold, modifier = Modifier.size(16.dp))
                     Spacer(Modifier.width(4.dp))
                     Text(
                         "${partner.rating} · ${partner.reviewsCount} reviews",
-                        color = Color.White.copy(alpha = 0.85f),
+                        color = vedaTextSecondary,
                         fontSize = 13.sp
                     )
                 }
@@ -280,11 +261,8 @@ fun CustomerDashboardScreen(viewModel: VedaDropViewModel) {
     val recent = bookings.take(5)
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        VedaDropHeader(
-            title = "My Dashboard",
-            subtitle = "Your activity at a glance",
-            onBack = { viewModel.currentScreen = Screen.CustomerProfile },
-        )
+        // §740 — removed the duplicate inline header; the app shell already shows
+        // "My Dashboard" + a single back arrow (this was the second back button).
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
                 StatTile("Bookings", total.toString(), Modifier.weight(1f))
@@ -451,11 +429,8 @@ fun PartnerAvailabilityScreen(viewModel: VedaDropViewModel) {
     }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        VedaDropHeader(
-            title = "Availability",
-            subtitle = "Set your hours for the next 7 days",
-            onBack = { viewModel.currentScreen = Screen.PartnerProfile },
-        )
+        // §740 — removed the duplicate inline header; the app shell already shows
+        // "Availability Settings" + a back arrow.
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             // §725 Batch-B — explain the bookable window as RANGES + that changes save
             // themselves (no Save button). The status line below mirrors save state.
@@ -567,11 +542,8 @@ fun PartnerEarningsScreen(viewModel: VedaDropViewModel) {
     LaunchedEffect(Unit) { viewModel.loadEarnings() }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        VedaDropHeader(
-            title = "Earnings",
-            subtitle = "You collect payment directly from customers",
-            onBack = { viewModel.currentScreen = Screen.PartnerDashboard },
-        )
+        // §740 — removed the duplicate inline header (this caused the double title +
+        // back button on Earnings); the app shell already shows "Earnings".
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             val e = earnings
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -627,11 +599,8 @@ fun PartnerAnalyticsScreen(viewModel: VedaDropViewModel) {
     LaunchedEffect(Unit) { viewModel.loadAnalytics() }
 
     Column(modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
-        VedaDropHeader(
-            title = "Analytics",
-            subtitle = "Performance insights",
-            onBack = { viewModel.currentScreen = Screen.PartnerDashboard },
-        )
+        // §740 — removed the duplicate inline header; the app shell already shows
+        // "Analytics & Growth" + a back arrow.
         Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             val a = analytics
             Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -755,16 +724,24 @@ fun PartnerPortfolioScreen(viewModel: VedaDropViewModel) {
     var caption by remember { mutableStateOf("") }
 
     Column(modifier = Modifier.fillMaxSize()) {
-        VedaDropHeader(
-            title = "Portfolio",
-            subtitle = "Showcase your work",
-            onBack = { viewModel.currentScreen = Screen.PartnerProfile },
-            trailing = {
-                IconButton(onClick = { showAdd = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "Add", tint = Color.White)
-                }
+        // §740 — removed the duplicate inline header (shell shows "My Portfolio" + back);
+        // the header's "+" add action is re-homed as a button at the top of the body.
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 12.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Text("Showcase your work", fontWeight = FontWeight.Bold, color = vedaTextPrimary)
+            Button(
+                onClick = { showAdd = true },
+                colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
+                contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+            ) {
+                Icon(Icons.Default.Add, contentDescription = null, tint = Color.White, modifier = Modifier.size(18.dp))
+                Spacer(modifier = Modifier.width(6.dp))
+                Text("Add work", color = Color.White, fontWeight = FontWeight.Bold)
             }
-        )
+        }
         if (items.isEmpty()) {
             Column(
                 modifier = Modifier.fillMaxSize().padding(32.dp),
@@ -772,7 +749,7 @@ fun PartnerPortfolioScreen(viewModel: VedaDropViewModel) {
                 verticalArrangement = Arrangement.Center
             ) {
                 Text("No portfolio items yet", fontWeight = FontWeight.Bold)
-                Text("Tap + to add a photo of your work.", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center)
+                Text("Tap \"Add work\" to add a photo of your work.", fontSize = 13.sp, color = Color.Gray, textAlign = TextAlign.Center)
             }
         } else {
             LazyColumn(
@@ -874,7 +851,12 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                 Box(
                     modifier = Modifier
                         .fillMaxWidth()
-                        .background(Brush.verticalGradient(listOf(DeepPlum, DarkSlate)))
+                        .background(
+                            // §740 — content hero flips with the theme (was always dark).
+                            if (LocalVedaDropPalette.current.isDark)
+                                Brush.verticalGradient(listOf(DeepPlum, DarkSlate))
+                            else Brush.verticalGradient(listOf(LightSage, SoftCream))
+                        )
                         .padding(16.dp)
                 ) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -894,14 +876,16 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                                     text = partner.name,
                                     fontSize = 18.sp,
                                     fontWeight = FontWeight.Bold,
-                                    color = Color.White
+                                    color = vedaTextPrimary
                                 )
                                 if (partner.kycStatus == "approved") {
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Icon(
                                         imageVector = Icons.Default.Verified,
                                         contentDescription = "Verified",
-                                        tint = VedaDropGold,
+                                        // §740 — green (AA on the now-light hero) instead of amber,
+                                        // which was near-invisible on the light-mode surface.
+                                        tint = SuccessGreen,
                                         modifier = Modifier.size(16.dp)
                                     )
                                 }
@@ -909,20 +893,20 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = if (partner.kycStatus == "approved") "Verified ✓" else "Not yet verified",
-                                color = if (partner.kycStatus == "approved") VedaDropGold else Color.White.copy(alpha = 0.6f),
+                                color = if (partner.kycStatus == "approved") SuccessGreen else vedaTextSecondary,
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold
                             )
                             Spacer(modifier = Modifier.height(2.dp))
                             Text(
                                 text = "⭐ ${partner.rating} (${partner.reviewsCount} jobs completed)",
-                                color = Color.White.copy(alpha = 0.9f),
+                                color = vedaTextSecondary,
                                 fontSize = 12.sp,
                                 fontWeight = FontWeight.SemiBold
                             )
                             Text(
                                 text = "${partner.experienceYears} Years Experience • Independent Expert",
-                                color = Color.White.copy(alpha = 0.7f),
+                                color = vedaTextSecondary,
                                 fontSize = 11.sp
                             )
                             // §701 — certifications & languages (skip silently if empty).
@@ -930,7 +914,7 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = "Certifications: ${partner.certifications.joinToString(", ")}",
-                                    color = Color.White.copy(alpha = 0.75f),
+                                    color = vedaTextSecondary,
                                     fontSize = 11.sp,
                                     lineHeight = 15.sp
                                 )
@@ -939,7 +923,7 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                                 Spacer(modifier = Modifier.height(2.dp))
                                 Text(
                                     text = "Languages: ${partner.languages.joinToString(", ")}",
-                                    color = Color.White.copy(alpha = 0.75f),
+                                    color = vedaTextSecondary,
                                     fontSize = 11.sp,
                                     lineHeight = 15.sp
                                 )
@@ -963,7 +947,7 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                     Text(
                         text = partner.description.ifBlank { "No description added yet" },
                         fontSize = 13.sp,
-                        color = Color.LightGray,
+                        color = vedaTextSecondary,
                         lineHeight = 18.sp
                     )
                     Spacer(modifier = Modifier.height(12.dp))

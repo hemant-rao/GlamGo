@@ -54,6 +54,7 @@ import com.example.ui.map.GeoPoint
 import com.example.ui.map.VedaDropMaps
 import com.example.ui.map.VedaDropMapView
 import com.example.ui.theme.VedaDropRose
+import com.example.ui.theme.vedaTextSecondary
 import kotlinx.coroutines.launch
 
 /**
@@ -165,7 +166,7 @@ private fun MapPinConfirmPanel(
                 if (picked.city.isNotBlank() || picked.pincode.isNotBlank()) {
                     Text(
                         listOf(picked.city, picked.pincode).filter { it.isNotBlank() }.joinToString(" • "),
-                        fontSize = 12.sp, color = Color.Gray,
+                        fontSize = 12.sp, color = vedaTextSecondary,
                     )
                 }
 

@@ -57,6 +57,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.data.remote.CartItemDto
+import com.example.data.remote.Mappers
+import coil.compose.AsyncImage
+import androidx.compose.ui.layout.ContentScale
 import com.example.ui.theme.DarkSlate
 import com.example.ui.theme.DeepPlum
 import com.example.ui.theme.SuccessGreen
@@ -168,6 +171,116 @@ fun GuestCartView(onTriggerLogin: () -> Unit) {
     }
 }
 
+// §740 — a cart service line, redesigned into a clean, responsive card: a leading
+// service thumbnail, a flexible info column (name / provider / unit price) and a
+// trailing column with the line total above a compact quantity stepper. Replaces the
+// old single cramped Row whose controls clipped on long names / large amounts.
+@Composable
+private fun CartLineCard(
+    item: CartItemDto,
+    multiPartner: Boolean,
+    onDec: () -> Unit,
+    onInc: () -> Unit,
+) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        border = BorderStroke(1.dp, VedaDropRose.copy(alpha = 0.12f)),
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth().padding(12.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            // Leading thumbnail; falls back to the service initial when no image.
+            val img = Mappers.absUrl(item.imageUrl)
+            if (img.isNotBlank()) {
+                AsyncImage(
+                    model = img,
+                    contentDescription = item.name,
+                    contentScale = ContentScale.Crop,
+                    modifier = Modifier.size(60.dp).clip(RoundedCornerShape(12.dp)),
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(60.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(VedaDropRose.copy(alpha = 0.12f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        (item.name ?: "S").take(1).uppercase(),
+                        color = VedaDropRose, fontWeight = FontWeight.Bold, fontSize = 22.sp,
+                    )
+                }
+            }
+
+            // Middle: name + (provider when multi-partner) + unit price.
+            Column(
+                modifier = Modifier.weight(1f),
+                verticalArrangement = Arrangement.spacedBy(2.dp),
+            ) {
+                Text(
+                    item.name ?: "Service",
+                    fontWeight = FontWeight.Bold, fontSize = 14.sp, color = vedaTextPrimary,
+                    maxLines = 2, overflow = TextOverflow.Ellipsis,
+                )
+                if (multiPartner && !item.partnerName.isNullOrBlank()) {
+                    Text(
+                        "by ${item.partnerName}",
+                        fontSize = 11.sp, color = VedaDropRose, fontWeight = FontWeight.Medium,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
+                }
+                Text(
+                    "₹${"%,.0f".format(item.unitPricePaise / 100.0)} each",
+                    fontSize = 12.sp, color = vedaTextSecondary,
+                )
+            }
+
+            // Trailing: line total above a compact - qty + stepper.
+            Column(
+                horizontalAlignment = Alignment.End,
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+            ) {
+                Text(
+                    "₹${"%,.0f".format(item.lineTotalPaise / 100.0)}",
+                    fontWeight = FontWeight.Bold, color = VedaDropRose, fontSize = 15.sp,
+                    maxLines = 1, softWrap = false,
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(20.dp))
+                        .background(VedaDropRose.copy(alpha = 0.08f)),
+                ) {
+                    IconButton(onClick = onDec, modifier = Modifier.size(34.dp)) {
+                        Icon(
+                            if (item.qty <= 1) Icons.Default.Delete else Icons.Default.Remove,
+                            contentDescription = if (item.qty <= 1) "Remove" else "Less",
+                            tint = VedaDropRose, modifier = Modifier.size(18.dp),
+                        )
+                    }
+                    Text(
+                        "${item.qty}",
+                        fontWeight = FontWeight.Bold, color = vedaTextPrimary,
+                        textAlign = TextAlign.Center,
+                        modifier = Modifier.padding(horizontal = 6.dp),
+                    )
+                    IconButton(onClick = onInc, modifier = Modifier.size(34.dp)) {
+                        Icon(
+                            Icons.Default.Add, contentDescription = "More",
+                            tint = VedaDropRose, modifier = Modifier.size(18.dp),
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
 @Composable
 fun CartScreen(viewModel: VedaDropViewModel) {
     if (!viewModel.isLoggedIn) {
@@ -180,7 +293,7 @@ fun CartScreen(viewModel: VedaDropViewModel) {
     var placing by remember { mutableStateOf(false) }
     val items: List<CartItemDto> = cart?.items ?: emptyList()
 
-    // Chosen delivery address — default to the user's default, but let them switch.
+    // Chosen service location — default to the user's default, but let them switch.
     var selectedAddressId by remember(addresses) {
         mutableStateOf(
             (addresses.firstOrNull { it.isDefault } ?: addresses.firstOrNull())?.id
@@ -188,6 +301,9 @@ fun CartScreen(viewModel: VedaDropViewModel) {
     }
     // §725 Batch-B — shared full-screen "Add new location" picker.
     var showLocationPicker by remember { mutableStateOf(false) }
+    // §740 — pending saved-location delete (confirm dialog).
+    var delAddrId by remember { mutableStateOf<Long?>(null) }
+    var delAddrLabel by remember { mutableStateOf("") }
 
     // §734 — per-screen TopAppBar removed; shell header shows "My Cart" + back. The
     // "Clear" action moved into the cart body (see the Clear-cart row below).
@@ -266,38 +382,15 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                 verticalArrangement = Arrangement.spacedBy(10.dp)
             ) {
                 items(items, key = { it.id }) { item ->
-                    Card(
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                    ) {
-                        Row(
-                            modifier = Modifier.padding(12.dp),
-                            verticalAlignment = Alignment.CenterVertically
-                        ) {
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(item.name ?: "Service", fontWeight = FontWeight.Bold)
-                                // §722 — show WHO serves this line when the cart is multi-partner.
-                                if (multiPartner && !item.partnerName.isNullOrBlank()) {
-                                    Text("by ${item.partnerName}", fontSize = 11.sp, color = VedaDropRose, fontWeight = FontWeight.Medium)
-                                }
-                                Text("Rs ${"%.2f".format(item.unitPricePaise / 100.0)} each", fontSize = 12.sp, color = Color.Gray)
-                            }
-                            IconButton(onClick = {
-                                if (item.qty <= 1) viewModel.removeCartItem(item.id)
-                                else viewModel.updateCartQty(item.id, item.qty - 1)
-                            }) { Icon(Icons.Default.Remove, contentDescription = "Less") }
-                            Text("${item.qty}", fontWeight = FontWeight.Bold)
-                            IconButton(onClick = { viewModel.updateCartQty(item.id, item.qty + 1) }) {
-                                Icon(Icons.Default.Add, contentDescription = "More")
-                            }
-                            // §738 — keep the line total on one line so a large amount can't
-                            // wrap and shove the delete button off the right edge.
-                            Text("Rs ${"%.2f".format(item.lineTotalPaise / 100.0)}", fontWeight = FontWeight.Bold, color = VedaDropRose, maxLines = 1, softWrap = false)
-                            IconButton(onClick = { viewModel.removeCartItem(item.id) }) {
-                                Icon(Icons.Default.Delete, contentDescription = "Remove", tint = Color.Gray)
-                            }
-                        }
-                    }
+                    CartLineCard(
+                        item = item,
+                        multiPartner = multiPartner,
+                        onDec = {
+                            if (item.qty <= 1) viewModel.removeCartItem(item.id)
+                            else viewModel.updateCartQty(item.id, item.qty - 1)
+                        },
+                        onInc = { viewModel.updateCartQty(item.id, item.qty + 1) },
+                    )
                 }
             }
 
@@ -447,10 +540,10 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                 }
             }
 
-            // ── Choose delivery address ──
+            // ── Choose service location ──
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text("DELIVERY ADDRESS", fontWeight = FontWeight.Bold, color = VedaDropRose, fontSize = 13.sp)
+                    Text("SERVICE LOCATION", fontWeight = FontWeight.Bold, color = VedaDropRose, fontSize = 13.sp)
                     if (addresses.isEmpty()) {
                         Text("No saved address - add one below.", fontSize = 12.sp, color = Color.Gray)
                     } else {
@@ -476,9 +569,14 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                                     },
                                     colors = RadioButtonDefaults.colors(selectedColor = VedaDropRose)
                                 )
-                                Column {
+                                Column(modifier = Modifier.weight(1f)) {
                                     Text(addr.labelText, fontWeight = FontWeight.Bold, fontSize = 13.sp)
-                                    Text("${addr.line1} ${addr.line2}, ${addr.city} - ${addr.pincode}", fontSize = 11.sp, color = Color.Gray)
+                                    Text("${addr.line1} ${addr.line2}, ${addr.city} - ${addr.pincode}", fontSize = 11.sp, color = vedaTextSecondary)
+                                }
+                                // §740 — delete a saved location (founder: delete option
+                                // for saved locations on the cart + every address list).
+                                IconButton(onClick = { delAddrId = addr.id; delAddrLabel = addr.labelText }) {
+                                    Icon(Icons.Default.Delete, contentDescription = "Delete location", tint = Color.Gray)
                                 }
                             }
                         }
@@ -495,6 +593,27 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                         Text("Add new location", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
+            }
+
+            // §740 — confirm before removing a saved location.
+            if (delAddrId != null) {
+                AlertDialog(
+                    onDismissRequest = { delAddrId = null },
+                    title = { Text("Delete saved location?") },
+                    text = { Text("Remove \"$delAddrLabel\" from your saved locations? This can't be undone.") },
+                    confirmButton = {
+                        TextButton(onClick = {
+                            delAddrId?.let { id ->
+                                if (selectedAddressId == id) selectedAddressId = null
+                                viewModel.deleteAddress(id)
+                            }
+                            delAddrId = null
+                        }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { delAddrId = null }) { Text("Cancel") }
+                    },
+                )
             }
 
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {

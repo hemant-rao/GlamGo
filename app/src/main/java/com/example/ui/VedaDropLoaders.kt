@@ -53,6 +53,9 @@ import com.example.ui.theme.DarkSlate
 import com.example.ui.theme.DeepPlum
 import com.example.ui.theme.VedaDropGold
 import com.example.ui.theme.VedaDropRose
+import com.example.ui.theme.vedaSurface
+import com.example.ui.theme.vedaSurfaceAlt
+import com.example.ui.theme.vedaDivider
 
 /**
  * §709 — shared, theme-aware loading primitives. One home for every "something is
@@ -269,7 +272,7 @@ fun ServiceCardSkeleton() {
             .pulseLoading(),
         shape = RoundedCornerShape(18.dp),
         border = BorderStroke(1.dp, VedaDropRose.copy(alpha = 0.15f)),
-        colors = CardDefaults.cardColors(containerColor = DeepPlum)
+        colors = CardDefaults.cardColors(containerColor = vedaSurface)
     ) {
         Row(
             modifier = Modifier
@@ -282,7 +285,7 @@ fun ServiceCardSkeleton() {
                 modifier = Modifier
                     .size(96.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(Color.White.copy(alpha = 0.1f))
+                    .background(vedaSurfaceAlt)
             )
 
             Spacer(modifier = Modifier.width(16.dp))
@@ -299,14 +302,14 @@ fun ServiceCardSkeleton() {
                             .fillMaxWidth(0.6f)
                             .height(18.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
+                            .background(vedaSurfaceAlt)
                     )
                     // Rating Placeholder
                     Box(
                         modifier = Modifier
                             .size(32.dp, 16.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(Color.White.copy(alpha = 0.12f))
+                            .background(vedaSurfaceAlt)
                     )
                 }
                 
@@ -318,7 +321,7 @@ fun ServiceCardSkeleton() {
                         .fillMaxWidth(0.9f)
                         .height(12.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(Color.White.copy(alpha = 0.1f))
+                        .background(vedaSurfaceAlt)
                 )
                 
                 Spacer(modifier = Modifier.height(6.dp))
@@ -329,7 +332,7 @@ fun ServiceCardSkeleton() {
                         .fillMaxWidth(0.7f)
                         .height(12.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(Color.White.copy(alpha = 0.1f))
+                        .background(vedaSurfaceAlt)
                 )
 
                 Spacer(modifier = Modifier.height(14.dp))
@@ -345,7 +348,7 @@ fun ServiceCardSkeleton() {
                             .width(64.dp)
                             .height(18.dp)
                             .clip(RoundedCornerShape(4.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
+                            .background(vedaSurfaceAlt)
                     )
                     // "View Info" Button Placeholder
                     Box(
@@ -353,7 +356,7 @@ fun ServiceCardSkeleton() {
                             .width(88.dp)
                             .height(36.dp)
                             .clip(RoundedCornerShape(12.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
+                            .background(vedaSurfaceAlt)
                     )
                 }
             }
@@ -387,8 +390,8 @@ fun AppointmentCardSkeleton() {
         modifier = Modifier
             .fillMaxWidth()
             .pulseLoading(),
-        colors = CardDefaults.cardColors(containerColor = DeepPlum.copy(alpha = 0.8f)),
-        border = BorderStroke(1.dp, Color.White.copy(alpha = 0.08f)),
+        colors = CardDefaults.cardColors(containerColor = vedaSurface),
+        border = BorderStroke(1.dp, vedaDivider),
         shape = RoundedCornerShape(16.dp)
     ) {
         Column(modifier = Modifier.padding(14.dp)) {
@@ -403,7 +406,7 @@ fun AppointmentCardSkeleton() {
                         .fillMaxWidth(0.5f)
                         .height(16.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(Color.White.copy(alpha = 0.15f))
+                        .background(vedaSurfaceAlt)
                 )
                 // Price Placeholder
                 Box(
@@ -411,7 +414,7 @@ fun AppointmentCardSkeleton() {
                         .width(55.dp)
                         .height(16.dp)
                         .clip(RoundedCornerShape(4.dp))
-                        .background(Color.White.copy(alpha = 0.15f))
+                        .background(vedaSurfaceAlt)
                 )
             }
             
@@ -423,7 +426,7 @@ fun AppointmentCardSkeleton() {
                     .fillMaxWidth(0.4f)
                     .height(12.dp)
                     .clip(RoundedCornerShape(4.dp))
-                    .background(Color.White.copy(alpha = 0.12f))
+                    .background(vedaSurfaceAlt)
             )
 
             Spacer(modifier = Modifier.height(10.dp))
@@ -434,7 +437,7 @@ fun AppointmentCardSkeleton() {
                     modifier = Modifier
                         .size(13.dp)
                         .clip(CircleShape)
-                        .background(Color.White.copy(alpha = 0.1f))
+                        .background(vedaSurfaceAlt)
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Box(
@@ -442,7 +445,7 @@ fun AppointmentCardSkeleton() {
                         .width(110.dp)
                         .height(10.dp)
                         .clip(RoundedCornerShape(3.dp))
-                        .background(Color.White.copy(alpha = 0.12f))
+                        .background(vedaSurfaceAlt)
                 )
             }
 
@@ -460,7 +463,7 @@ fun AppointmentCardSkeleton() {
                         .width(72.dp)
                         .height(24.dp)
                         .clip(RoundedCornerShape(6.dp))
-                        .background(Color.White.copy(alpha = 0.12f))
+                        .background(vedaSurfaceAlt)
                 )
                 
                 // Action Button Placeholder
@@ -470,7 +473,7 @@ fun AppointmentCardSkeleton() {
                             .width(64.dp)
                             .height(28.dp)
                             .clip(RoundedCornerShape(6.dp))
-                            .background(Color.White.copy(alpha = 0.15f))
+                            .background(vedaSurfaceAlt)
                     )
                 }
             }
