@@ -714,7 +714,11 @@ class VedaDropRepository(context: Context) {
                 // §714 pda-products-used-1 — read the server value first; fall back to
                 // the optimistic local cache only when the server hasn't sent one.
                 productsUsed = it.productsUsed
-                    ?: customProductsUsed[it.serviceId.toString()] ?: ""
+                    ?: customProductsUsed[it.serviceId.toString()] ?: "",
+                // §742 — carry the partner's gallery + approval state into the cache so
+                // the service editor can show thumbnails + a "Pending approval" badge.
+                imagesNl = (it.images ?: emptyList()).joinToString("\n"),
+                approvalStatus = it.approvalStatus ?: "approved",
             )
         } ?: return
         _partnerServices.value = remoteList + localCustomPartnerServices
@@ -1173,7 +1177,8 @@ class VedaDropRepository(context: Context) {
         refreshProfile("partner")
     }
 
-    suspend fun setServicePrice(serviceId: String, pricePaise: Long, active: Boolean, productsUsed: String) {
+    suspend fun setServicePrice(serviceId: String, pricePaise: Long, active: Boolean, productsUsed: String,
+                                images: List<String>? = null) {
         // §714 pda-products-used-1 — persist products_used to the backend (was kept only
         // in the in-memory customProductsUsed map → silently lost on logout/restart and
         // invisible to customers/admin). Keep the local cache as an optimistic fallback.
@@ -1186,13 +1191,21 @@ class VedaDropRepository(context: Context) {
         // and (because the VM swallowed it) the partner saw nothing save. Guard it.
         val existingServerId = existing?.id?.toIntOrNull()
         if (existing != null && existingServerId != null) {
-            api.patchPartnerService(existingServerId,
-                mapOf("price_paise" to pricePaise, "active" to active, "products_used" to productsUsed))
+            // §742 — only send "images" when the caller provided a list, so a plain
+            // price/active edit doesn't blank an existing gallery. A non-null list
+            // (incl. empty) re-enters admin approval on the backend.
+            val patch = buildMap<String, Any?> {
+                put("price_paise", pricePaise)
+                put("active", active)
+                put("products_used", productsUsed)
+                if (images != null) put("images", images)
+            }
+            api.patchPartnerService(existingServerId, patch)
         } else {
             val numericServiceId = serviceId.toIntOrNull()
                 ?: throw IllegalArgumentException(
                     "This is a custom service that hasn't been published to the catalog yet.")
-            api.addPartnerService(PartnerServiceReq(numericServiceId, pricePaise, active, productsUsed))
+            api.addPartnerService(PartnerServiceReq(numericServiceId, pricePaise, active, productsUsed, images))
         }
         refreshPartnerServices()
     }

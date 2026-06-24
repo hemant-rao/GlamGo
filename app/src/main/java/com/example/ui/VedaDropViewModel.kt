@@ -1987,13 +1987,20 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun setPartnerServicePrice(serviceId: String, name: String, category: String, pricePaise: Long, active: Boolean, productsUsed: String) {
+    fun setPartnerServicePrice(serviceId: String, name: String, category: String, pricePaise: Long, active: Boolean, productsUsed: String,
+                               images: List<String>? = null) {
         viewModelScope.launch {
             // §726 — surface failures. Previously only .onSuccess was wired, so a
             // bad service id / network error silently dropped the save and the
             // partner saw nothing happen ("added a service but it didn't save").
-            runCatching { repository.setServicePrice(serviceId, pricePaise, active, productsUsed) }
-                .onSuccess { notify("Service updated") }
+            // §742 — pass the partner's images; sending them re-enters admin approval,
+            // so the success copy tells the partner it's pending review.
+            runCatching { repository.setServicePrice(serviceId, pricePaise, active, productsUsed, images) }
+                .onSuccess {
+                    notify(if (images != null)
+                        "Service saved — sent to admin for approval."
+                    else "Service updated")
+                }
                 .onFailure { notify("Could not save service: ${com.example.data.remote.ApiErrors.friendlyMessage(it)}", isError = true) }
         }
     }

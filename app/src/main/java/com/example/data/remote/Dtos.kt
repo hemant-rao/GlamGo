@@ -896,6 +896,12 @@ data class PartnerServiceDto(
     val name: String? = null,
     // §714 pda-products-used-1 — round-trip the partner's "products used / seal notes".
     @Json(name = "products_used") val productsUsed: String? = null,
+    // §742 — the catalog image plus the partner's OWN gallery (http(s) or base64
+    // data: URLs), and the admin-approval state so the app can badge the listing.
+    @Json(name = "image_url") val imageUrl: String? = null,
+    val images: List<String>? = null,
+    @Json(name = "approval_status") val approvalStatus: String? = null,
+    @Json(name = "approval_reason") val approvalReason: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -908,6 +914,9 @@ data class PartnerServiceReq(
     val active: Boolean = true,
     // §714 pda-products-used-1 — send the products/seal notes so they persist.
     @Json(name = "products_used") val productsUsed: String? = null,
+    // §742 — the partner's service images (http(s) or base64 data: URLs). Sending a
+    // non-null list re-enters admin approval on the backend.
+    val images: List<String>? = null,
 )
 
 @JsonClass(generateAdapter = true)

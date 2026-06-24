@@ -4006,22 +4006,10 @@ fun ServiceDetailScreen(viewModel: VedaDropViewModel, service: Service) {
             if (detailGallery.isNotEmpty()) {
                 Text("RECENT WORK", fontWeight = FontWeight.Bold, color = VedaDropRose, letterSpacing = 1.sp)
                 Spacer(modifier = Modifier.height(8.dp))
-                Row(
-                    modifier = Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    detailGallery.forEach { url ->
-                        // §738 — data:-aware so base64 portfolio images render (Coil 2.x has
-                        // no data: fetcher); plain http(s) urls still load via Coil.
-                        SelfieProofImage(
-                            url = url,
-                            contentDescription = "Recent work",
-                            modifier = Modifier.size(120.dp)
-                                .clip(RoundedCornerShape(10.dp))
-                                .background(VedaDropRose.copy(alpha = 0.08f))
-                        )
-                    }
-                }
+                // §742 — tap any photo to view it FULL-SCREEN (pinch to zoom). The row
+                // merges the partner-uploaded service images + portfolio work, and is
+                // data:-aware (base64 images render; Coil 2.x has no data: fetcher).
+                ServiceImageThumbRow(images = detailGallery, thumbSize = 120)
                 Spacer(modifier = Modifier.height(24.dp))
             }
 
@@ -9408,6 +9396,16 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
                 var rateOverride by remember(activeSetting) { mutableStateOf(((activeSetting?.pricePaise ?: service.pricePaise) / 100).toString()) }
                 var productsOverride by remember(activeSetting) { mutableStateOf(activeSetting?.productsUsed ?: "Premium salon kit (L'Oreal/O3+), 100% seal-packed & verified prior to use.") }
                 var activatedState by remember(activeSetting) { mutableStateOf(activeSetting?.active ?: (activeSetting != null)) }
+                // §742 — the partner's own photos for this service (newline-stored in the
+                // cache entity → list here). Saving sends them to admin for approval.
+                var serviceImages by remember(activeSetting) {
+                    mutableStateOf(
+                        activeSetting?.imagesNl
+                            ?.split("\n")?.map { it.trim() }?.filter { it.isNotEmpty() }
+                            ?: emptyList()
+                    )
+                }
+                val approvalStatus = activeSetting?.approvalStatus
                 // Save once via an explicit action: PATCH if listed, else create once.
                 val saveService = saveService@{
                     val finalPrice = (rateOverride.trim().toLongOrNull() ?: 0L) * 100L
@@ -9415,7 +9413,9 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
                         viewModel.notify("Please enter a rate greater than ₹0.", isError = true)
                         return@saveService
                     }
-                    viewModel.setPartnerServicePrice(service.id, service.name, service.categoryId, finalPrice, activatedState, productsOverride)
+                    // §742 — always send the (possibly empty) image list; the backend
+                    // then re-enters admin approval for this offering.
+                    viewModel.setPartnerServicePrice(service.id, service.name, service.categoryId, finalPrice, activatedState, productsOverride, serviceImages)
                 }
 
                 Card(
@@ -9431,6 +9431,15 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
                             Column(modifier = Modifier.weight(1f)) {
                                 Text(service.name, fontWeight = FontWeight.Bold)
                                 Text("Open Pricing — you set your rate", fontSize = 11.sp, color = VedaDropRose, fontWeight = FontWeight.Bold)
+                                // §742 — admin approval state for a listed offering.
+                                when (approvalStatus) {
+                                    "pending" -> Text("⏳ Pending admin approval", fontSize = 11.sp,
+                                        color = Color(0xFFB26A00), fontWeight = FontWeight.SemiBold)
+                                    "rejected" -> Text("⚠ Needs changes — see notifications, then resubmit",
+                                        fontSize = 11.sp, color = Color(0xFFD32F2F), fontWeight = FontWeight.SemiBold)
+                                    "approved" -> Text("✓ Approved — live for customers", fontSize = 11.sp,
+                                        color = SuccessGreen, fontWeight = FontWeight.SemiBold)
+                                }
                             }
                             // §703 — delete affordance: only when this service is one the
                             // partner has actually listed (has a server row to remove).
@@ -9492,6 +9501,15 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
                                 color = VedaDropRose
                             )
                         }
+
+                        // §742 — multi-image editor: paste URLs or upload from device
+                        // (tap a thumb to view full-screen). Saved photos go to admin
+                        // for approval before customers see them.
+                        ServiceImagesEditor(
+                            images = serviceImages,
+                            onChange = { serviceImages = it },
+                            accent = VedaDropRose,
+                        )
 
                         // §704 — single explicit Save: price (₹→paise) + products + active
                         // in ONE call. No save-on-keystroke (no ₹/paise bug, no duplicate-create).

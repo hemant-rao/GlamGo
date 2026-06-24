@@ -120,8 +120,18 @@ data class PartnerServiceEntity(
     val pricePaise: Long,
     val durationMin: Int,
     val active: Boolean = true,
-    val productsUsed: String = "Premium sealed pack products, mutually verified upon arrival."
+    val productsUsed: String = "Premium sealed pack products, mutually verified upon arrival.",
+    // §742 — the partner's own service images, newline-joined (Room stores no List;
+    // newline is a safe delimiter — base64 data: URLs and http urls never contain it,
+    // and data: URLs DO contain commas so CSV would be unsafe). Plus the admin-approval
+    // state so the partner UI can badge "Pending approval" / "Needs changes".
+    val imagesNl: String = "",
+    val approvalStatus: String = "approved",
 )
+
+/** §742 — the partner-service images as a clean list (empty entries dropped). */
+fun PartnerServiceEntity.imageList(): List<String> =
+    imagesNl.split("\n").map { it.trim() }.filter { it.isNotEmpty() }
 
 @Entity(tableName = "wallet_transactions")
 data class WalletTransactionEntity(
