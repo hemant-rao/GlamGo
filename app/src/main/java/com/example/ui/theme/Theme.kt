@@ -40,26 +40,26 @@ data class VedaDropPalette(
 
 val VedaDropDarkPalette = VedaDropPalette(
   isDark = true,
-  screenBg = DarkSlate,                 // #06211E
-  surface = DeepPlum,                   // #0B2E2A
-  surfaceAlt = Color(0xFF16332F),
-  textPrimary = Color.White,            // preserves the existing dark look exactly
-  textSecondary = Color(0xFFB7CCC8),
-  divider = Color(0xFF3A544F),
-  inputBg = Color(0xFF16332F),
+  screenBg = DarkSlate,                 // #081218
+  surface = DeepPlum,                   // #11212B
+  surfaceAlt = Color(0xFF1D3542),
+  textPrimary = Color(0xFFF0F5F4),
+  textSecondary = Color(0xFF94A9B3),
+  divider = Color(0xFF284657),
+  inputBg = Color(0xFF1D3542),
   headerGradient = listOf(DeepPlum, DarkSlate),
 )
 
 val VedaDropLightPalette = VedaDropPalette(
   isDark = false,
-  screenBg = SoftCream,                 // #F2FBFA teal-tinted near-white
+  screenBg = SoftCream,                 // #F6FAF9
   surface = Color.White,
-  surfaceAlt = LightSage,               // #E0F2F1 Teal 50
-  textPrimary = Color(0xFF1A1C1F),
-  textSecondary = Color(0xFF4A615C),
-  divider = Color(0xFFCDE0DC),
+  surfaceAlt = LightSage,               // #E8F4F1
+  textPrimary = Color(0xFF081218),
+  textSecondary = Color(0xFF536A75),
+  divider = Color(0xFFCFDFDB),
   inputBg = Color.White,
-  headerGradient = listOf(DeepPlum, DarkSlate), // header stays dark teal in light mode
+  headerGradient = listOf(Color(0xFF008B8E), Color(0xFF00AAAD)), // Brand Teal gradient header in light mode
 )
 
 val LocalVedaDropPalette = staticCompositionLocalOf { VedaDropDarkPalette }
@@ -84,46 +84,45 @@ val vedaDivider: Color
 val vedaInputBg: Color
   @Composable get() = LocalVedaDropPalette.current.inputBg
 
-// Veda Drop "Teal" (§715): a Teal-500 primary (white text) over deep teal darks
-// / teal-tinted white light surfaces. In dark mode the primary lifts to a soft
-// teal (AccentBronze #4DB6AC) so onPrimary dark text stays AA. Matches the web
-// admin's teal brand. All on-colour pairings WCAG-AA verified.
+// Veda Drop "Ocean Teal": designed around the #00AAAD brand color
+// with modern deep teal darks and crisp minty white light surfaces.
+// All on-colour pairings WCAG-AA verified.
 private val DarkColorScheme =
   darkColorScheme(
-    primary = AccentBronze,            // #4DB6AC — lifts for AA on dark (Teal 300)
-    onPrimary = Color(0xFF00251F),     // dark teal — AA on teal-300
-    primaryContainer = Color(0xFF00504A),
-    onPrimaryContainer = Color(0xFFB2DFDB),
-    secondary = Color(0xFF80CBC4),     // teal tint on dark (Teal 200)
-    onSecondary = Color(0xFF00251F),
-    tertiary = VedaDropGold,             // amber accent (stars)
+    primary = AccentBronze,            // Lighter Teal for AA on dark
+    onPrimary = Color(0xFF003839),     // dark teal — AA on light teal
+    primaryContainer = Color(0xFF005254),
+    onPrimaryContainer = Color(0xFF99E6E7),
+    secondary = Color(0xFF94A9B3),     // slate/teal 400
+    onSecondary = Color(0xFF081218),
+    tertiary = VedaDropGold,             // gold accent
     background = DarkSlate,
-    onBackground = Color(0xFFEAF6F4),
+    onBackground = Color(0xFFF0F5F4),
     surface = DeepPlum,
-    onSurface = Color(0xFFEAF6F4),
-    surfaceVariant = Color(0xFF16332F),
-    onSurfaceVariant = Color(0xFFB7CCC8),
-    outline = Color(0xFF3A544F),
-    error = Color(0xFFF2B8B5),
+    onSurface = Color(0xFFF0F5F4),
+    surfaceVariant = Color(0xFF1D3542),
+    onSurfaceVariant = Color(0xFF94A9B3),
+    outline = Color(0xFF284657),
+    error = Color(0xFFFFB4AB),
   )
 
 private val LightColorScheme =
   lightColorScheme(
-    primary = VedaDropRose,              // #009688 Teal 500 — white text
+    primary = VedaDropRose,              // #00AAAD — white text
     onPrimary = Color.White,
-    primaryContainer = RoseSoft,       // #B2DFDB (Teal 100)
-    onPrimaryContainer = Color(0xFF004D40),
-    secondary = PlumDeepInk,           // #00695C deep teal
+    primaryContainer = RoseSoft,       // Soft teal blush
+    onPrimaryContainer = Color(0xFF003839),
+    secondary = PlumDeepInk,           // Dark teal text
     onSecondary = Color.White,
     tertiary = AccentBronze,
-    background = SoftCream,            // #F2FBFA
-    onBackground = Color(0xFF1A1C1F),
+    background = SoftCream,            // Minty white
+    onBackground = Color(0xFF081218),
     surface = Color.White,
-    onSurface = Color(0xFF1A1C1F),
-    surfaceVariant = Color(0xFFE0F2F1),
-    onSurfaceVariant = Color(0xFF4A615C),
-    outline = Color(0xFFCDE0DC),
-    error = Color(0xFFB3261E),
+    onSurface = Color(0xFF081218),
+    surfaceVariant = LightSage,        // Very light teal
+    onSurfaceVariant = Color(0xFF536A75),
+    outline = Color(0xFFCFDFDB),
+    error = Color(0xFFBA1A1A),
   )
 
 @Composable

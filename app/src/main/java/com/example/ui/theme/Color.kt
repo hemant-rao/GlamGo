@@ -25,19 +25,19 @@ val Pink40 = Color(0xFF7D5260)
 // (AA-large / bold button labels — the standard Material teal-button look).
 // ─────────────────────────────────────────────────────────────────────────────
 
-val VedaDropRose = Color(0xFF0DA19C)     // DOMINANT brand teal — primary (Teal 500); white text
-val VedaDropGold = Color(0xFFF9AB00)     // amber accent (rating stars / premium badge only)
-val DeepPlum = Color(0xFF0B2E2A)     // deep teal surface (dark)
-val DarkSlate = Color(0xFF06211E)    // near-black teal background (dark)
-val SoftCream = Color(0xFFF2FBFA)    // teal-tinted near-white app background (light)
-val AccentBronze = Color(0xFF4DB6AC) // soft teal tertiary / dark-mode primary (Teal 300)
-val LightSage = Color(0xFFE0F2F1)    // muted teal surface variant (Teal 50)
-val SuccessGreen = Color(0xFF1E8E3E) // AA-safe success on white (kept non-brand)
-val OrderOrange = Color(0xFFE37400)  // AA-safe warning/order amber (kept non-brand)
+val VedaDropRose = Color(0xFF00AAAD)     // Brand Teal (Primary)
+val VedaDropGold = Color(0xFFFFC107)     // Amber / Gold
+val DeepPlum = Color(0xFF11212B)         // Deep Slate/Teal (Dark Surface)
+val DarkSlate = Color(0xFF081218)        // Very Dark Teal (Dark Background)
+val SoftCream = Color(0xFFF6FAF9)        // Crisp minty white (Light Background)
+val AccentBronze = Color(0xFF33BBBE)     // Lighter Teal for dark mode primary
+val LightSage = Color(0xFFE8F4F1)        // Very light teal (Light Surface Alt)
+val SuccessGreen = Color(0xFF10B981)     // Emerald green
+val OrderOrange = Color(0xFFF59E0B)      // Amber orange
 
 // Light-scheme brand anchors.
-val PlumDeepInk = Color(0xFF00695C)  // deep teal for light-mode secondary/brand text (Teal 800)
-val RoseSoft = Color(0xFFB2DFDB)     // teal tint for chips / tonal containers (Teal 100)
+val PlumDeepInk = Color(0xFF081218)      // Deep Teal/Charcoal for text
+val RoseSoft = Color(0xFFCCEEEE)         // Soft teal blush for containers
 
 // Bold Typography Theme Colors (M3 SPEC) — retained for any references.
 val BoldBg = Color(0xFFFEF7FF)
