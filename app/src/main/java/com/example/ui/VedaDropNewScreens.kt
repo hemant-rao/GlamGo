@@ -1368,16 +1368,37 @@ fun PartnerStoreScreen(viewModel: VedaDropViewModel, partner: Partner) {
                                     color = vedaTextPrimary
                                 )
                                 Spacer(modifier = Modifier.height(2.dp))
+                                // §745 — show the §743 discount clearly: actual price
+                                // struck-through + the discounted price + "X% off".
+                                val rich = viewModel.partnerPricedRich[service.id]
+                                val hasDiscount = rich != null && rich.discountPercent > 0 && rich.actualPricePaise != null
                                 Row(verticalAlignment = Alignment.CenterVertically) {
+                                    if (hasDiscount) {
+                                        Text(
+                                            text = "₹${(rich!!.actualPricePaise ?: 0L) / 100}",
+                                            fontSize = 12.sp,
+                                            color = Color.Gray,
+                                            textDecoration = androidx.compose.ui.text.style.TextDecoration.LineThrough
+                                        )
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                    }
                                     Text(
                                         text = "₹${resolvedPrice / 100}",
                                         fontSize = 14.sp,
                                         fontWeight = FontWeight.Bold,
                                         color = SuccessGreen
                                     )
+                                    if (hasDiscount) {
+                                        Spacer(modifier = Modifier.width(4.dp))
+                                        Surface(color = SuccessGreen.copy(alpha = 0.12f), shape = RoundedCornerShape(4.dp)) {
+                                            Text("${rich!!.discountPercent}% off", color = SuccessGreen,
+                                                fontSize = 9.sp, fontWeight = FontWeight.Bold,
+                                                modifier = Modifier.padding(horizontal = 4.dp, vertical = 1.dp))
+                                        }
+                                    }
                                     Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "⏱️ ${service.durationMin} mins",
+                                        text = "⏱️ ${(rich?.durationMin ?: service.durationMin)} mins",
                                         fontSize = 11.sp,
                                         color = Color.Gray
                                     )

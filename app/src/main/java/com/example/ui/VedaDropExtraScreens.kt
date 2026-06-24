@@ -290,6 +290,9 @@ fun CartScreen(viewModel: VedaDropViewModel) {
     val cart by viewModel.cart.collectAsState()
     val addresses by viewModel.addresses.collectAsState()
     var checkoutError by remember { mutableStateOf<String?>(null) }
+    // §745 — the cart has no expert chooser; clear any stale BookingConfirm selection so
+    // a previously-picked expert can't leak onto a cart checkout.
+    LaunchedEffect(Unit) { viewModel.selectedExpertId = null }
     var placing by remember { mutableStateOf(false) }
     val items: List<CartItemDto> = cart?.items ?: emptyList()
 
