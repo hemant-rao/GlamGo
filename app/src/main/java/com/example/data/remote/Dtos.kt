@@ -110,6 +110,11 @@ data class ServiceDto(
     // backend filled these long-stubbed `[]` fields). Nullable for older backends.
     val faqs: List<FaqDto>? = null,
     val gallery: List<String>? = null,
+    // §743/§747 — a PARTNER store's offering carries the products it uses (each tagged
+    // sealed/sanitized/bulk) + a free-text hygiene note. Null/empty for generic catalog
+    // services (which aren't tied to one partner). Surfaced on the service detail.
+    val products: List<ProductDto>? = null,
+    @Json(name = "hygiene_note") val hygieneNote: String? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -781,6 +786,11 @@ data class ReviewReq(
     val rating: Int,
     val comment: String? = null,
     @Json(name = "image_upload_ids") val imageUploadIds: List<String>? = null,
+    // §747 — structured per-axis ratings (each 1..5). Sent alongside the overall
+    // `rating`; backend persists them in dedicated columns instead of a text prefix.
+    @Json(name = "rating_skill") val ratingSkill: Int? = null,
+    @Json(name = "rating_hygiene") val ratingHygiene: Int? = null,
+    @Json(name = "rating_products") val ratingProducts: Int? = null,
 )
 
 // §723 — the partner's rating OF the customer (POST partner/bookings/{id}/rate-customer).
@@ -789,12 +799,25 @@ data class RateCustomerReq(
     val comment: String? = null,
 )
 
+// §747 — per-axis breakdown (skill / hygiene / products), each 1..5 or null.
+@JsonClass(generateAdapter = true)
+data class ReviewAxesDto(
+    val skill: Int? = null,
+    val hygiene: Int? = null,
+    val products: Int? = null,
+)
+
 @JsonClass(generateAdapter = true)
 data class ReviewDto(
     val id: Int,
     val rating: Int = 0,
     val comment: String? = null,
     @Json(name = "created_at") val createdAt: String? = null,
+    // §747 — backend now returns a clean comment (axis prefix stripped), the
+    // structured axes object, and a privacy-abbreviated reviewer name ("Priya S.").
+    val axes: ReviewAxesDto? = null,
+    @Json(name = "reviewer_name") val reviewerName: String? = null,
+    @Json(name = "image_urls") val imageUrls: List<String>? = null,
 )
 
 @JsonClass(generateAdapter = true)
@@ -997,6 +1020,19 @@ data class PartnerServiceDto(
 
 @JsonClass(generateAdapter = true)
 data class PartnerServicesResp(val items: List<PartnerServiceDto> = emptyList())
+
+// §747 — a partner-authored custom service (not in the catalog dictionary). The
+// backend creates the catalog row + the partner's offering in one call; the offering
+// enters admin approval (active=false) until reviewed, exactly like an edited listing.
+@JsonClass(generateAdapter = true)
+data class CustomServiceReq(
+    val name: String,
+    @Json(name = "category_id") val categoryId: Int,
+    @Json(name = "price_paise") val pricePaise: Long,
+    @Json(name = "duration_min") val durationMin: Int? = null,
+    val description: String? = null,
+    @Json(name = "products_used") val productsUsed: String? = null,
+)
 
 @JsonClass(generateAdapter = true)
 data class PartnerServiceReq(

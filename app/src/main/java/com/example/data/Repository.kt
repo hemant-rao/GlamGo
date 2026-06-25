@@ -9,6 +9,7 @@ import com.example.data.remote.CartAddReq
 import com.example.data.remote.CartItemPatchReq
 import com.example.data.remote.CartQuoteReq
 import com.example.data.remote.ComboReq
+import com.example.data.remote.CustomServiceReq
 import com.example.data.remote.ComboResp
 import com.example.data.remote.CartResp
 import com.example.data.remote.CanChatResp
@@ -738,9 +739,31 @@ class VedaDropRepository(context: Context) {
                 // §743 — discount % + the partner's own time override (0 = catalog).
                 discountPercent = it.discountPercent,
                 durationOverrideMin = it.durationMin ?: 0,
+                // §747 — hygiene note + the offering's product-handling standard (the
+                // first product's tag) so the editor pre-fills what the partner saved.
+                hygieneNote = it.hygieneNote ?: "",
+                productHygiene = it.products?.firstOrNull()?.hygiene ?: "",
             )
         } ?: return
         _partnerServices.value = remoteList + localCustomPartnerServices
+    }
+
+    /** §747 — create a partner-authored custom service on the backend. It persists as a
+     *  real catalog row + the partner's offering (pending admin approval), then we refresh
+     *  the partner's service list so the new (pending) entry shows immediately. */
+    suspend fun createCustomService(
+        name: String, categoryId: Int, pricePaise: Long,
+        durationMin: Int, description: String, productsUsed: String,
+    ) {
+        api.createCustomService(CustomServiceReq(
+            name = name,
+            categoryId = categoryId,
+            pricePaise = pricePaise,
+            durationMin = durationMin,
+            description = description.ifBlank { null },
+            productsUsed = productsUsed.ifBlank { null },
+        ))
+        refreshPartnerServices()
     }
 
     // ── Customer actions ───────────────────────────────────────────────────────
@@ -794,6 +817,23 @@ class VedaDropRepository(context: Context) {
 
     suspend fun setDefaultAddress(id: Long) {
         api.updateAddress(id.toInt(), mapOf("is_default" to true))
+        refreshAddresses()
+    }
+
+    /** §747 — edit a saved address's text fields. Only these fields are sent, so the
+     *  backend (PATCH, exclude_unset) preserves the address's default flag + map pin
+     *  coordinates — a text edit must not silently move the location or clear the
+     *  "deliver here" selection. */
+    suspend fun updateAddress(
+        id: Long, label: String, line1: String, line2: String, city: String, pincode: String,
+    ) {
+        api.updateAddress(id.toInt(), buildMap<String, Any?> {
+            put("label", label.ifBlank { null })
+            put("line1", line1)
+            put("line2", line2.ifBlank { null })
+            put("city", city.ifBlank { null })
+            put("pincode", pincode.ifBlank { null })
+        })
         refreshAddresses()
     }
 
@@ -1036,8 +1076,14 @@ class VedaDropRepository(context: Context) {
         _offers.value = _offers.value.filterNot { it.offerId == offerId }
     }
 
-    suspend fun addReview(id: String, rating: Int, comment: String) {
-        api.review(id.toInt(), ReviewReq(rating, comment.ifBlank { null }))
+    suspend fun addReview(
+        id: String, rating: Int, comment: String,
+        skill: Int? = null, hygiene: Int? = null, products: Int? = null,
+    ) {
+        api.review(id.toInt(), ReviewReq(
+            rating, comment.ifBlank { null },
+            ratingSkill = skill, ratingHygiene = hygiene, ratingProducts = products,
+        ))
         refreshBookings("customer")
     }
 

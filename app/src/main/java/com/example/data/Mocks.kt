@@ -33,6 +33,11 @@ data class Service(
     // §737 — real "see the work" gallery (portfolio images of partners who offer
     // this service). Trailing optional → no positional call-site breakage.
     val gallery: List<String> = emptyList(),
+    // §743/§747 — when this Service is a partner-store offering, the products used
+    // (each tagged sealed/sanitized/bulk) + a free-text hygiene note. Empty for the
+    // generic catalog. Trailing optional → no positional call-site breakage.
+    val products: List<com.example.data.remote.ProductDto> = emptyList(),
+    val hygieneNote: String? = null,
 )
 
 /**

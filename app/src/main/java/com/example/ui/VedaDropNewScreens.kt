@@ -229,6 +229,14 @@ fun PartnerReviewsScreen(viewModel: VedaDropViewModel, partner: Partner) {
             items(reviews, key = { it.id }) { r ->
                 Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                     Column(modifier = Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        // §747 — privacy-abbreviated reviewer name ("Priya S.") from the backend.
+                        Text(
+                            r.reviewerName ?: "Customer",
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 13.sp,
+                            maxLines = 1,
+                            overflow = TextOverflow.Ellipsis,
+                        )
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             repeat(5) { i ->
                                 Icon(
@@ -240,6 +248,22 @@ fun PartnerReviewsScreen(viewModel: VedaDropViewModel, partner: Partner) {
                             }
                             Spacer(Modifier.weight(1f))
                             Text((r.createdAt ?: "").take(10), fontSize = 11.sp, color = Color.Gray)
+                        }
+                        // §747 — per-axis breakdown when the review carries structured ratings.
+                        r.axes?.let { ax ->
+                            val parts = buildList {
+                                ax.skill?.let { add("Skill $it/5") }
+                                ax.hygiene?.let { add("Hygiene $it/5") }
+                                ax.products?.let { add("Products $it/5") }
+                            }
+                            if (parts.isNotEmpty()) {
+                                Text(
+                                    parts.joinToString("  ·  "),
+                                    fontSize = 11.sp,
+                                    color = VedaDropRose,
+                                    fontWeight = FontWeight.Medium,
+                                )
+                            }
                         }
                         if (!r.comment.isNullOrBlank()) {
                             Text(r.comment ?: "", fontSize = 13.sp)

@@ -140,6 +140,11 @@ data class PartnerServiceEntity(
     // 0 = use the catalog duration). Cache only (destructive-migrated).
     val discountPercent: Int = 0,
     val durationOverrideMin: Int = 0,
+    // §747 — the offering's hygiene note + its product-handling standard
+    // (sealed|sanitized|bulk, "" = unset) so the editor round-trips what was saved.
+    // Cache only (destructive-migrated).
+    val hygieneNote: String = "",
+    val productHygiene: String = "",
 )
 
 /** §742 — the partner-service images as a clean list (empty entries dropped). */

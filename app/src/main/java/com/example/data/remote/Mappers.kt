@@ -87,6 +87,9 @@ object Mappers {
         priceMaxPaise = d.priceMaxPaise,
         partnerCount = d.partnerCount,
         gallery = (d.gallery ?: emptyList()).map { absUrl(it, PLACEHOLDER_IMG) }.ifEmpty { listOf(absUrl(PLACEHOLDER_IMG)) },   // §737/§746 — gallery (self-hosted fallback)
+        // §743/§747 — partner-offering hygiene info (empty for the generic catalog).
+        products = d.products ?: emptyList(),
+        hygieneNote = d.hygieneNote,
     )
 
     fun partner(d: PartnerDto): Partner = Partner(

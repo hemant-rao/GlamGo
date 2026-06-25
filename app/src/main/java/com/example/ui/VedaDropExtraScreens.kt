@@ -307,6 +307,8 @@ fun CartScreen(viewModel: VedaDropViewModel) {
     // §740 — pending saved-location delete (confirm dialog).
     var delAddrId by remember { mutableStateOf<Long?>(null) }
     var delAddrLabel by remember { mutableStateOf("") }
+    // §747 — the saved address currently being edited (null = no edit dialog).
+    var editAddr by remember { mutableStateOf<com.example.data.AddressEntity?>(null) }
 
     // §734 — per-screen TopAppBar removed; shell header shows "My Cart" + back. The
     // "Clear" action moved into the cart body (see the Clear-cart row below).
@@ -576,6 +578,10 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                                     Text(addr.labelText, fontWeight = FontWeight.Bold, fontSize = 13.sp)
                                     Text("${addr.line1} ${addr.line2}, ${addr.city} - ${addr.pincode}", fontSize = 11.sp, color = vedaTextSecondary)
                                 }
+                                // §747 — edit a saved location's text.
+                                IconButton(onClick = { editAddr = addr }) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit location", tint = Color.Gray)
+                                }
                                 // §740 — delete a saved location (founder: delete option
                                 // for saved locations on the cart + every address list).
                                 IconButton(onClick = { delAddrId = addr.id; delAddrLabel = addr.labelText }) {
@@ -618,6 +624,9 @@ fun CartScreen(viewModel: VedaDropViewModel) {
                     },
                 )
             }
+
+            // §747 — edit a saved location's text fields.
+            editAddr?.let { AddressEditDialog(it, viewModel) { editAddr = null } }
 
             Card(colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
                 Column(modifier = Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {

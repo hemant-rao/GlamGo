@@ -694,6 +694,33 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
                     }
                 }
             }
+
+            // §747 — single-partner cart conflict → "Replace cart?" dialog (Swiggy/Zomato
+            // pattern). The add that hit 409 CART_PARTNER_CONFLICT is held in the VM; the
+            // user either replaces the existing cart or keeps it.
+            viewModel.pendingCartConflict?.let { pending ->
+                AlertDialog(
+                    onDismissRequest = { viewModel.dismissCartConflict() },
+                    title = { Text("Replace cart?", fontWeight = FontWeight.Bold) },
+                    text = {
+                        Text(
+                            pending.message.ifBlank {
+                                "Your cart already has items from another professional. Veda Drop carts hold one professional at a time. Replace your cart with this item?"
+                            }
+                        )
+                    },
+                    confirmButton = {
+                        TextButton(onClick = { viewModel.confirmReplaceCart() }) {
+                            Text("Replace", color = VedaDropRose, fontWeight = FontWeight.Bold)
+                        }
+                    },
+                    dismissButton = {
+                        TextButton(onClick = { viewModel.dismissCartConflict() }) {
+                            Text("Keep current")
+                        }
+                    },
+                )
+            }
         }
     }
 }
@@ -2648,19 +2675,6 @@ fun PartnerComparisonModal(
     )
 }
 
-data class ShowcaseItem(
-    val title: String,
-    val description: String,
-    val expertName: String,
-    val rating: Double,
-    val imageUrl: String,
-    val category: String,
-    val reviewer: String,
-    val review: String,
-    val productsUsed: List<String>,
-    val duration: String
-)
-
 @Composable
 fun UpcomingSessionReminderBanner(viewModel: VedaDropViewModel) {
     val bookings by viewModel.bookings.collectAsState()
@@ -2773,401 +2787,6 @@ fun UpcomingSessionReminderBanner(viewModel: VedaDropViewModel) {
                             tint = Color.Gray,
                             modifier = Modifier.size(16.dp)
                         )
-                    }
-                }
-            }
-        }
-    }
-}
-
-@Composable
-fun BeautyShowcaseSection(viewModel: VedaDropViewModel) {
-    val items = remember {
-        listOf(
-            ShowcaseItem(
-                title = "Glass Skin Hydra Facial",
-                description = "Intense professional hydration and deep pore cleansing for an ultimate dewy finish.",
-                expertName = "Anya Varma",
-                rating = 5.0,
-                category = "Facials",
-                imageUrl = "https://images.unsplash.com/photo-1556228578-0d85b1a4d571?w=500&q=80",
-                reviewer = "Meera Kapoor",
-                review = "My skin looked absolutely like glass. Extremely hydrating, no post-treatment redness! Truly a premium glow session.",
-                productsUsed = listOf("Dior Forever Glow Star Filter", "Estée Lauder Advanced Night Repair", "Clinique Moisture Surge"),
-                duration = "60 mins"
-            ),
-            ShowcaseItem(
-                title = "Royal Hair Creame Spa",
-                description = "Deep nourishing scalp massage and intense hot oil hydration followed by a gorgeous blowout.",
-                expertName = "Nisha Sen",
-                rating = 4.9,
-                category = "Hair Spa",
-                imageUrl = "https://images.unsplash.com/photo-1562322140-8baeececf3df?w=500&q=80",
-                reviewer = "Surbhi Gupta",
-                review = "Unbelievable shine, my hair feels ten times healthier. Highly recommend Nisha!",
-                productsUsed = listOf("Kérastase Chronologiste Caviar", "L'Oréal Expert Absolute Repair Oil"),
-                duration = "75 mins"
-            ),
-            ShowcaseItem(
-                title = "Flawless HD Bridal Makeup",
-                description = "Custom traditional bridal make-up with dewy high-end cosmetic styling and heavy details.",
-                expertName = "Priya Sharma",
-                rating = 5.0,
-                category = "Makeup Artistry",
-                imageUrl = "https://images.unsplash.com/photo-1516975080661-46bdf36f52cb?w=500&q=80",
-                reviewer = "Aparna Roy",
-                review = "Priya did my makeup for my wedding and it was flawless from morning till midnight. Not cakey at all, loved it!",
-                productsUsed = listOf("Chanel Les Beiges Foundation", "Dior Backstage Highlight Palette", "Charlotte Tilbury Setting Spray"),
-                duration = "120 mins"
-            ),
-            ShowcaseItem(
-                title = "Therapeutic Lavender Massage",
-                description = "Premium aromatherapy hot stones deep-tissue massage designed to completely dissolve body fatigue.",
-                expertName = "Kiran Goel",
-                rating = 4.8,
-                category = "Body Wellness",
-                imageUrl = "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=500&q=80",
-                reviewer = "Nalini Joshi",
-                review = "Absolute heaven. The hot stone technique relaxed my back pain completely. A five-star wellness specialist.",
-                productsUsed = listOf("Therapeutic Grade Lavender Essential Oil", "Organic Cold-Pressed Almond Oil"),
-                duration = "90 mins"
-            )
-        )
-    }
-
-    var selectedItem by remember { mutableStateOf<ShowcaseItem?>(null) }
-
-    Column(
-        modifier = Modifier
-            .fillMaxWidth()
-            .padding(horizontal = 16.dp, vertical = 24.dp)
-            .testTag("beauty_showcase_section")
-    ) {
-        Row(
-            verticalAlignment = Alignment.CenterVertically,
-            modifier = Modifier.padding(bottom = 6.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.AutoAwesome,
-                contentDescription = null,
-                tint = VedaDropGold,
-                modifier = Modifier.size(22.dp)
-            )
-            Spacer(modifier = Modifier.width(8.dp))
-            Text(
-                text = "BEAUTY SHOWCASE",
-                style = MaterialTheme.typography.titleMedium.copy(
-                    fontWeight = FontWeight.Black,
-                    letterSpacing = 1.2.sp
-                ),
-                color = MaterialTheme.colorScheme.primary
-            )
-        }
-        Text(
-            text = "Explore actual glowing transformations and premium treatment outcomes designed by elite specialists.",
-            fontSize = 12.sp,
-            color = Color.Gray,
-            modifier = Modifier.padding(bottom = 16.dp)
-        )
-
-        // Grid layout for 4 items
-        Column(
-            verticalArrangement = Arrangement.spacedBy(16.dp)
-        ) {
-            items.chunked(2).forEach { rowItems ->
-                Row(
-                    modifier = Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    rowItems.forEach { item ->
-                        Card(
-                            modifier = Modifier
-                                .weight(1f)
-                                .clickable { selectedItem = item }
-                                .testTag("showcase_item_${item.title.replace(" ", "_")}"),
-                            shape = RoundedCornerShape(18.dp),
-                            border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.15f)),
-                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
-                        ) {
-                            Column {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .height(130.dp)
-                                ) {
-                                    AsyncImage(
-                                        model = item.imageUrl,
-                                        contentDescription = item.title,
-                                        contentScale = ContentScale.Crop,
-                                        modifier = Modifier.fillMaxSize()
-                                    )
-                                    Surface(
-                                        color = VedaDropRose.copy(alpha = 0.9f),
-                                        modifier = Modifier
-                                            .padding(8.dp)
-                                            .align(Alignment.TopStart),
-                                        shape = RoundedCornerShape(8.dp)
-                                    ) {
-                                        Text(
-                                            text = item.category.uppercase(),
-                                            fontSize = 9.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = Color.Black,
-                                            modifier = Modifier.padding(horizontal = 6.dp, vertical = 2.dp)
-                                        )
-                                    }
-                                    
-                                    Row(
-                                        modifier = Modifier
-                                            .padding(8.dp)
-                                            .background(Color.Black.copy(alpha = 0.7f), RoundedCornerShape(8.dp))
-                                            .padding(horizontal = 5.dp, vertical = 2.dp)
-                                            .align(Alignment.BottomEnd),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
-                                        Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropGold, modifier = Modifier.size(10.dp))
-                                        Spacer(modifier = Modifier.width(2.dp))
-                                        Text("${item.rating}", color = Color.White, fontSize = 10.sp, fontWeight = FontWeight.Bold)
-                                    }
-                                }
-                                
-                                Column(modifier = Modifier.padding(12.dp)) {
-                                    Text(
-                                        text = item.title,
-                                        fontSize = 13.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = MaterialTheme.colorScheme.onSurface,
-                                        maxLines = 1,
-                                        overflow = TextOverflow.Ellipsis
-                                    )
-                                    Spacer(modifier = Modifier.height(2.dp))
-                                    Text(
-                                        text = "By ${item.expertName}",
-                                        fontSize = 11.sp,
-                                        color = MaterialTheme.colorScheme.primary,
-                                        fontWeight = FontWeight.Medium
-                                    )
-                                    Spacer(modifier = Modifier.height(4.dp))
-                                    Text(
-                                        text = item.description,
-                                        fontSize = 11.sp,
-                                        color = Color.Gray,
-                                        maxLines = 2,
-                                        overflow = TextOverflow.Ellipsis,
-                                        lineHeight = 14.sp
-                                    )
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    // Detail Expand Zoom dialog
-    selectedItem?.let { item ->
-        Dialog(
-            onDismissRequest = { selectedItem = null },
-            properties = DialogProperties(usePlatformDefaultWidth = false)
-        ) {
-            Card(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(24.dp)
-                    .testTag("showcase_detail_dialog"),
-                shape = RoundedCornerShape(24.dp),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-                border = BorderStroke(1.dp, VedaDropRose.copy(alpha = 0.2f))
-            ) {
-                Column(
-                    modifier = Modifier
-                        .verticalScroll(rememberScrollState())
-                        .padding(18.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(200.dp)
-                    ) {
-                        AsyncImage(
-                            model = item.imageUrl,
-                            contentDescription = item.title,
-                            contentScale = ContentScale.Crop,
-                            modifier = Modifier
-                                .fillMaxSize()
-                                .clip(RoundedCornerShape(16.dp))
-                        )
-                        IconButton(
-                            onClick = { selectedItem = null },
-                            modifier = Modifier
-                                .align(Alignment.TopEnd)
-                                .padding(8.dp)
-                                .background(Color.Black.copy(alpha = 0.5f), CircleShape)
-                        ) {
-                            Icon(Icons.Default.Close, contentDescription = "Close", tint = Color.White)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceBetween,
-                        verticalAlignment = Alignment.CenterVertically
-                    ) {
-                        Surface(
-                            color = VedaDropRose.copy(alpha = 0.15f),
-                            shape = RoundedCornerShape(8.dp)
-                        ) {
-                            Text(
-                                text = item.category.uppercase(),
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Black,
-                                color = VedaDropRose,
-                                modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
-
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropGold, modifier = Modifier.size(16.dp))
-                            Spacer(modifier = Modifier.width(4.dp))
-                            Text("${item.rating} Rating", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = item.title,
-                        style = MaterialTheme.typography.titleLarge,
-                        fontWeight = FontWeight.Bold,
-                        color = MaterialTheme.colorScheme.onSurface
-                    )
-
-                    Spacer(modifier = Modifier.height(6.dp))
-
-                    Text(
-                        text = "Expert Designer: ${item.expertName} • Duration: ${item.duration}",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.SemiBold,
-                        color = MaterialTheme.colorScheme.primary
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = "TREATMENT DESCRIPTION",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Gray,
-                        letterSpacing = 0.5.sp
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = item.description,
-                        fontSize = 13.sp,
-                        lineHeight = 18.sp,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
-                    )
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = "PRODUCTS FEATURED & USED",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Gray,
-                        letterSpacing = 0.5.sp
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Row(
-                        horizontalArrangement = Arrangement.spacedBy(8.dp),
-                        modifier = Modifier.horizontalScroll(rememberScrollState())
-                    ) {
-                        item.productsUsed.forEach { product ->
-                            Surface(
-                                color = MaterialTheme.colorScheme.secondaryContainer.copy(alpha = 0.3f),
-                                shape = RoundedCornerShape(8.dp),
-                                border = BorderStroke(1.dp, MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
-                            ) {
-                                Text(
-                                    text = product,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Medium,
-                                    modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp),
-                                    color = MaterialTheme.colorScheme.onSecondaryContainer
-                                )
-                            }
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(16.dp))
-
-                    Divider(color = MaterialTheme.colorScheme.outline.copy(alpha = 0.1f))
-
-                    Spacer(modifier = Modifier.height(12.dp))
-
-                    Text(
-                        text = "CLIENT REVIEW",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = Color.Gray,
-                        letterSpacing = 0.5.sp
-                    )
-                    Spacer(modifier = Modifier.height(6.dp))
-                    Card(
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.04f)),
-                        shape = RoundedCornerShape(12.dp),
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Column(modifier = Modifier.padding(12.dp)) {
-                            Row(
-                                modifier = Modifier.fillMaxWidth(),
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Text(item.reviewer, fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                                Row {
-                                    repeat(5) {
-                                        Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropGold, modifier = Modifier.size(10.dp))
-                                    }
-                                }
-                            }
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                text = "\"${item.review}\"",
-                                fontSize = 12.sp,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                                style = androidx.compose.ui.text.TextStyle(fontStyle = androidx.compose.ui.text.font.FontStyle.Italic),
-                                lineHeight = 16.sp
-                            )
-                        }
-                    }
-
-                    Spacer(modifier = Modifier.height(20.dp))
-
-                    Button(
-                        onClick = {
-                            selectedItem = null
-                            val matched = VedaDropDataSource.services.firstOrNull {
-                                it.name.contains(item.category, ignoreCase = true) ||
-                                item.title.contains(it.name, ignoreCase = true) ||
-                                it.name.contains("Glow", ignoreCase = true)
-                            } ?: VedaDropDataSource.services.firstOrNull()
-                            
-                            matched?.let {
-                                viewModel.currentScreen = Screen.ServiceDetail(it)
-                            }
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
-                        modifier = Modifier
-                            .fillMaxWidth()
-                            .height(48.dp)
-                            .testTag("showcase_book_button"),
-                        shape = RoundedCornerShape(12.dp)
-                    ) {
-                        Text("Book Again", color = Color.Black, fontWeight = FontWeight.Bold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
             }
@@ -3986,9 +3605,42 @@ fun ServiceDetailScreen(viewModel: VedaDropViewModel, service: Service) {
 
             Text("SERVICE DESCRIPTION", fontWeight = FontWeight.Bold, color = VedaDropRose, letterSpacing = 1.sp)
             Text(service.description, fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f))
-            
+
             Spacer(modifier = Modifier.height(24.dp))
-            
+
+            // §747 — the partner's hygiene promise for THIS offering (product-handling
+            // standard + a free-text note). Shown only when she provided it; the generic
+            // catalog carries neither, so this section simply doesn't appear there.
+            run {
+                val hygieneStd = service.products.firstOrNull()?.hygiene
+                val hygieneNote = service.hygieneNote
+                if (!hygieneStd.isNullOrBlank() || !hygieneNote.isNullOrBlank()) {
+                    Text("HYGIENE & SAFETY", fontWeight = FontWeight.Bold, color = VedaDropRose, letterSpacing = 1.sp)
+                    Spacer(modifier = Modifier.height(6.dp))
+                    if (!hygieneStd.isNullOrBlank()) {
+                        val (label, desc) = when (hygieneStd.lowercase()) {
+                            "sealed" -> "Sealed products" to "Single-use, opened in front of you"
+                            "sanitized" -> "Sanitized tools" to "Reusable, sterilised before use"
+                            "bulk" -> "Sealed bulk stock" to "Dispensed from sealed bulk supplies"
+                            else -> hygieneStd.replaceFirstChar { it.uppercase() } to ""
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Check, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(18.dp))
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Column {
+                                Text(label, fontSize = 14.sp, fontWeight = FontWeight.Bold)
+                                if (desc.isNotEmpty()) Text(desc, fontSize = 12.sp, color = Color.Gray)
+                            }
+                        }
+                    }
+                    if (!hygieneNote.isNullOrBlank()) {
+                        Spacer(modifier = Modifier.height(6.dp))
+                        Text(hygieneNote, fontSize = 13.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f))
+                    }
+                    Spacer(modifier = Modifier.height(24.dp))
+                }
+            }
+
             if (detailInclusions.isNotEmpty()) {
                 Text("WHAT'S INCLUDED", fontWeight = FontWeight.Bold, color = VedaDropRose, letterSpacing = 1.sp)
                 detailInclusions.forEach { incl ->
@@ -4642,6 +4294,68 @@ fun PartnerSelectScreen(viewModel: VedaDropViewModel, service: Service) {
     }
 }
 
+// §747 — shared "edit a saved address" dialog (text fields only; the map pin + the
+// default-delivery flag are preserved by the backend). Used by the booking + cart
+// address lists so a customer can fix a typo without deleting + re-adding.
+@Composable
+fun AddressEditDialog(
+    address: com.example.data.AddressEntity,
+    viewModel: VedaDropViewModel,
+    onDismiss: () -> Unit,
+) {
+    var label by remember { mutableStateOf(address.labelText) }
+    var line1 by remember { mutableStateOf(address.line1) }
+    var line2 by remember { mutableStateOf(address.line2) }
+    var city by remember { mutableStateOf(address.city) }
+    var pincode by remember { mutableStateOf(address.pincode) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Edit address", fontWeight = FontWeight.Bold) },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedTextField(
+                    value = label, onValueChange = { label = it },
+                    label = { Text("Label (Home, Work…)") }, singleLine = true,
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = line1, onValueChange = { line1 = it },
+                    label = { Text("House / Flat / Building") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                OutlinedTextField(
+                    value = line2, onValueChange = { line2 = it },
+                    label = { Text("Landmark / Area (optional)") },
+                    modifier = Modifier.fillMaxWidth(),
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = city, onValueChange = { city = it },
+                        label = { Text("City") }, singleLine = true,
+                        modifier = Modifier.weight(1f),
+                    )
+                    OutlinedTextField(
+                        value = pincode, onValueChange = { pincode = it },
+                        label = { Text("PIN") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                enabled = line1.isNotBlank(),
+                onClick = {
+                    viewModel.editAddress(address.id, label, line1, line2, city, pincode)
+                    onDismiss()
+                },
+            ) { Text("Save", color = VedaDropRose, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
+}
+
 @Composable
 fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner: Partner) {
     val addresses by viewModel.addresses.collectAsState()
@@ -4659,6 +4373,8 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
     // §740 — pending saved-location delete (confirm dialog).
     var delAddrId by remember { mutableStateOf<Long?>(null) }
     var delAddrLabel by remember { mutableStateOf("") }
+    // §747 — the saved address currently being edited (null = no edit dialog).
+    var editAddr by remember { mutableStateOf<com.example.data.AddressEntity?>(null) }
 
     // §694 — booking-time data capture for this flow.
     var bookingNotes by remember { mutableStateOf("") }
@@ -4723,6 +4439,10 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
                                     Text("${addr.line1} ${addr.line2}".trim(), fontSize = 12.sp, color = Color.Gray)
                                     Text("${addr.city} - ${addr.pincode}", fontSize = 12.sp, color = Color.Gray)
                                 }
+                                // §747 — edit a saved location's text.
+                                IconButton(onClick = { editAddr = addr }) {
+                                    Icon(Icons.Default.Edit, contentDescription = "Edit location", tint = Color.Gray)
+                                }
                                 // §740 — delete a saved location.
                                 IconButton(onClick = { delAddrId = addr.id; delAddrLabel = addr.labelText }) {
                                     Icon(Icons.Default.Delete, contentDescription = "Delete location", tint = Color.Gray)
@@ -4764,6 +4484,9 @@ fun BookingConfirmScreen(viewModel: VedaDropViewModel, service: Service, partner
                     },
                 )
             }
+
+            // §747 — edit a saved location's text fields.
+            editAddr?.let { AddressEditDialog(it, viewModel) { editAddr = null } }
 
             // STEP 2: §702 — real availability slot picker (date stepper + slot chips).
             Spacer(modifier = Modifier.height(16.dp))
@@ -6487,8 +6210,12 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                                             return@onClick
                                         }
                                         val roundedAverage = kotlin.math.round((skillRating + hygieneRating + authenticityRating) / 3.0).toInt()
-                                        val structuredComment = "[Skill: $skillRating/5, Hygiene: $hygieneRating/5, Products: $authenticityRating/5] ${reviewCommentText.trim()}"
-                                        viewModel.submitBookingReview(booking.id, roundedAverage, structuredComment)
+                                        // §747 — send the clean comment + structured per-axis ratings
+                                        // (backend persists them in columns, no more text-prefix hack).
+                                        viewModel.submitBookingReview(
+                                            booking.id, roundedAverage, reviewCommentText.trim(),
+                                            skill = skillRating, hygiene = hygieneRating, products = authenticityRating,
+                                        )
                                     },
                                     enabled = reviewCommentText.trim().isNotEmpty(),
                                     colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
@@ -9837,6 +9564,10 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
                 // §743 — discount % (0-90) + the partner's own time (mins; blank = catalog).
                 var discountOverride by remember(activeSetting) { mutableStateOf((activeSetting?.discountPercent ?: 0).takeIf { it > 0 }?.toString() ?: "") }
                 var durationOverride by remember(activeSetting) { mutableStateOf((activeSetting?.durationOverrideMin ?: 0).takeIf { it > 0 }?.toString() ?: "") }
+                // §747 — hygiene note + the offering's product-handling standard
+                // (sealed/sanitized/bulk; "" = unset). Both round-trip from the cache.
+                var hygieneNoteOverride by remember(activeSetting) { mutableStateOf(activeSetting?.hygieneNote ?: "") }
+                var productHygieneStd by remember(activeSetting) { mutableStateOf(activeSetting?.productHygiene ?: "") }
                 // §742 — the partner's own photos for this service (newline-stored in the
                 // cache entity → list here). Saving sends them to admin for approval.
                 var serviceImages by remember(activeSetting) {
@@ -9858,11 +9589,22 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
                     // then re-enters admin approval for this offering.
                     // §743 — also send the discount % + time override (always sent so a
                     // cleared field resets to 0 = no discount / catalog time).
+                    // §747 — represent the chosen hygiene standard as one tagged product
+                    // (named from the free-text products line) + send the hygiene note.
+                    // Sent every save so the round-tripped values persist and a cleared
+                    // note actually clears (the backend treats "" as cleared).
+                    val hygieneProducts = productHygieneStd.takeIf { it.isNotBlank() }?.let { std ->
+                        listOf(com.example.data.remote.ProductDto(
+                            name = productsOverride.trim().take(80).ifBlank { "Products & tools" },
+                            hygiene = std, note = null))
+                    }
                     viewModel.setPartnerServicePrice(
                         service.id, service.name, service.categoryId, finalPrice, activatedState,
                         productsOverride, serviceImages,
                         discountPercent = discountOverride.trim().toIntOrNull()?.coerceIn(0, 90) ?: 0,
                         durationMin = durationOverride.trim().toIntOrNull()?.takeIf { it > 0 } ?: 0,
+                        products = hygieneProducts,
+                        hygieneNote = hygieneNoteOverride.trim(),
                     )
                 }
 
@@ -9981,6 +9723,37 @@ fun PartnerServicesScreen(viewModel: VedaDropViewModel) {
                                 text = "🔒 Customers will see your pricing & specific product promises in the marketplace comparison list.",
                                 fontSize = 10.sp,
                                 color = VedaDropRose
+                            )
+                        }
+
+                        // §747 — product hygiene standard (one tap; tap again to clear) +
+                        // a free-text hygiene note. Both show on the customer's service detail.
+                        Column {
+                            Text("Product hygiene standard:", fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.SemiBold)
+                            Spacer(modifier = Modifier.height(4.dp))
+                            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                listOf("sealed" to "Sealed", "sanitized" to "Sanitized", "bulk" to "Bulk").forEach { (value, label) ->
+                                    val selected = productHygieneStd == value
+                                    FilterChip(
+                                        selected = selected,
+                                        onClick = { productHygieneStd = if (selected) "" else value },
+                                        label = { Text(label, fontSize = 12.sp) },
+                                        colors = FilterChipDefaults.filterChipColors(
+                                            selectedContainerColor = VedaDropRose.copy(alpha = 0.2f),
+                                            selectedLabelColor = VedaDropRose
+                                        )
+                                    )
+                                }
+                            }
+                            Spacer(modifier = Modifier.height(8.dp))
+                            OutlinedTextField(
+                                value = hygieneNoteOverride,
+                                onValueChange = { hygieneNoteOverride = it },
+                                label = { Text("Hygiene & safety note (optional)") },
+                                placeholder = { Text("e.g. Fresh disposable kit per client; tools sterilised in UV box.") },
+                                modifier = Modifier.fillMaxWidth(),
+                                maxLines = 2,
+                                singleLine = false
                             )
                         }
 

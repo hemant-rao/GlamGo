@@ -1603,14 +1603,58 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         viewModelScope, SharingStarted.WhileSubscribed(5000), null
     )
 
+    // §747 — the cart is single-partner. When an add targets a different partner the
+    // backend returns 409 CART_PARTNER_CONFLICT; instead of a dead-end toast we hold the
+    // pending add and show a "Replace cart?" dialog (Swiggy/Zomato pattern).
+    data class PendingCartAdd(
+        val partnerId: String? = null,
+        val serviceId: String? = null,
+        val packageId: Int? = null,
+        val message: String = "",
+    )
+    var pendingCartConflict by mutableStateOf<PendingCartAdd?>(null)
+        private set
+
     fun addToCart(partnerId: String, serviceId: String, onResult: (String?) -> Unit = {}) {
         if (!isLoggedIn) { triggerLoginPrompt(); return }
         viewModelScope.launch {
             runCatching { repository.addToCart(partnerId, serviceId) }
                 .onSuccess { notify("Added to cart"); onResult(null) }
-                .onFailure { onResult(friendly(it)) }
+                .onFailure { t ->
+                    val err = com.example.data.remote.ApiErrors.parse(t)
+                    if (err.code == "CART_PARTNER_CONFLICT") {
+                        // Stash the add + show the dialog; pass the (non-null) message back so
+                        // callers reset busy state but DON'T treat it as success/navigate.
+                        pendingCartConflict = PendingCartAdd(
+                            partnerId = partnerId, serviceId = serviceId, message = err.message)
+                        onResult(err.message)
+                    } else {
+                        onResult(friendly(t))
+                    }
+                }
         }
     }
+
+    /** Replace the existing cart with the pending add (clears, then re-adds). */
+    fun confirmReplaceCart() {
+        val pending = pendingCartConflict ?: return
+        pendingCartConflict = null
+        viewModelScope.launch {
+            runCatching {
+                repository.clearCart()
+                when {
+                    pending.packageId != null -> repository.addPackageToCart(pending.packageId, replace = true)
+                    pending.serviceId != null && pending.partnerId != null ->
+                        repository.addToCart(pending.partnerId, pending.serviceId)
+                }
+            }.onSuccess {
+                notify(if (pending.packageId != null) "Package added to cart" else "Added to cart")
+                currentScreen = Screen.Cart
+            }.onFailure { friendly(it) }
+        }
+    }
+
+    fun dismissCartConflict() { pendingCartConflict = null }
 
     fun updateCartQty(itemId: Int, qty: Int) {
         viewModelScope.launch { runCatching { repository.updateCartQty(itemId, qty) } }
@@ -1653,7 +1697,16 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             runCatching { repository.addPackageToCart(packageId, replace) }
                 .onSuccess { notify("Package added to cart"); onResult(null) }
-                .onFailure { onResult(friendly(it)) }
+                .onFailure { t ->
+                    val err = com.example.data.remote.ApiErrors.parse(t)
+                    if (err.code == "CART_PARTNER_CONFLICT") {
+                        // §747 — route to the same "Replace cart?" dialog as single-service adds.
+                        pendingCartConflict = PendingCartAdd(packageId = packageId, message = err.message)
+                        onResult(err.message)
+                    } else {
+                        onResult(friendly(t))
+                    }
+                }
         }
     }
 
@@ -1987,6 +2040,16 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** §747 — edit a saved address's label/lines/city/pincode (the map pin + default
+     *  flag are preserved by the backend). Surfaces failures instead of silently no-op'ing. */
+    fun editAddress(id: Long, label: String, line1: String, line2: String, city: String, pincode: String) {
+        viewModelScope.launch {
+            runCatching { repository.updateAddress(id, label, line1, line2, city, pincode) }
+                .onSuccess { notify("Address updated") }
+                .onFailure { notify("Could not update address: ${com.example.data.remote.ApiErrors.friendlyMessage(it)}", isError = true) }
+        }
+    }
+
     fun updateBookingQuote(service: Service, partner: Partner, customPricePaise: Long? = null) {
         viewModelScope.launch {
             val defaultAddr = addresses.value.firstOrNull { it.isDefault } ?: addresses.value.firstOrNull()
@@ -2211,58 +2274,48 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun createCustomPartnerService(name: String, categoryName: String, pricePaise: Long, durationMin: Int, description: String, productsUsed: String) {
-        val nextId = "srv_custom_${System.currentTimeMillis()}"
-        
-        // Find or create category if it doesn't exist, else assign to "Salon"
-        val categoryId = when (categoryName.lowercase()) {
-            "salon" -> "cat_salon"
-            "makeup" -> "cat_makeup"
-            "beauty" -> "cat_beauty"
-            "massage" -> "cat_massage"
-            else -> "cat_salon"
+    // §747 — map the partner's coarse category tag (Salon/Beauty/Makeup/Massage) onto a
+    // real catalog category id. The catalog is loaded for the PartnerServices screen, so
+    // VedaDropDataSource.categories holds the live names + slugs. Falls back to the first
+    // category (a guaranteed-valid id) so creation never fails on a tag mismatch — the
+    // admin approval step + the editable listing let the partner re-categorise anyway.
+    private fun resolveCategoryId(categoryName: String): Int? {
+        val cats = VedaDropDataSource.categories
+        if (cats.isEmpty()) return null
+        val tag = categoryName.trim().lowercase()
+        val keywords = when (tag) {
+            "salon" -> listOf("salon", "hair")
+            "beauty" -> listOf("beauty", "skin", "facial")
+            "makeup" -> listOf("makeup", "bridal")
+            "massage" -> listOf("spa", "massage")
+            else -> listOf(tag)
         }
-        
-        val newSrv = Service(
-            id = nextId,
-            categoryId = categoryId,
-            name = name,
-            description = description,
-            pricePaise = pricePaise,
-            durationMin = durationMin,
-            rating = 5.0f,
-            reviewsCount = 1,
-            inclusions = listOf("Expert consult", "Custom service delivery", "Premium seal checked products"),
-            faqs = listOf("Is this verified?" to "Yes, 100% verified by Veda Drop quality team."),
-            // §726 — use a default image for custom services
-            imageUrl = "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=500&q=80",
-            priceMinPaise = pricePaise,
-            priceMaxPaise = pricePaise,
-            partnerCount = 1
-        )
-        
-        // Update global datasource services list
-        VedaDropDataSource.services = VedaDropDataSource.services + newSrv
-        
-        // Also add to active settings for this partner
+        val match = cats.firstOrNull { c ->
+            val hay = (c.name + " " + c.description).lowercase()
+            keywords.any { hay.contains(it) }
+        }
+        return (match ?: cats.first()).id.toIntOrNull()
+    }
+
+    fun createCustomPartnerService(name: String, categoryName: String, pricePaise: Long, durationMin: Int, description: String, productsUsed: String) {
+        // §747 — custom services now PERSIST on the backend (real catalog row + a pending
+        // offering) instead of a device-only draft. The offering enters admin approval, so
+        // it only becomes bookable once a moderator approves it — but it's a true listing.
+        val categoryId = resolveCategoryId(categoryName)
+        if (categoryId == null) {
+            notify("Couldn't load your service categories yet — open Manage Catalog once, then try again.", isError = true)
+            return
+        }
         viewModelScope.launch {
-            val customEntity = PartnerServiceEntity(
-                id = "me_$nextId",
-                serviceId = nextId,
-                name = name,
-                categoryName = categoryName,
-                pricePaise = pricePaise,
-                durationMin = durationMin,
-                active = true,
-                productsUsed = productsUsed
-            )
-            repository.insertLocalPartnerService(customEntity)
-            // §738 — be HONEST: a free-form custom service is saved only on this device.
-            // The backend only accepts catalog (dictionary) services, so customers can
-            // NEVER see or book a custom one. The old "successfully added to your menu!"
-            // toast falsely implied it was live. Guide the partner to the catalog flow,
-            // which DOES persist + reach customers.
-            notify("'$name' saved to your drafts on this device. Customers can only book listed services — use Manage Catalog to add and price your services so they go live.")
+            runCatching {
+                repository.createCustomService(name, categoryId, pricePaise, durationMin, description, productsUsed)
+            }
+                .onSuccess {
+                    notify("'$name' submitted for admin approval. It goes live to customers once approved.")
+                }
+                .onFailure {
+                    notify("Could not add service: ${com.example.data.remote.ApiErrors.friendlyMessage(it)}", isError = true)
+                }
         }
     }
 
@@ -2345,9 +2398,12 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    fun submitBookingReview(bookingId: String, rating: Int, comment: String) {
+    fun submitBookingReview(
+        bookingId: String, rating: Int, comment: String,
+        skill: Int? = null, hygiene: Int? = null, products: Int? = null,
+    ) {
         viewModelScope.launch {
-            runCatching { repository.addReview(bookingId, rating, comment) }
+            runCatching { repository.addReview(bookingId, rating, comment, skill, hygiene, products) }
                 .onSuccess { notify("Thanks for your review"); refreshActiveBookings() }
                 // §710 #9 — surface failures (was silent: dialog closed, booking stayed
                 // 'unreviewed'). friendly() already toasts (isError), so don't double-notify.

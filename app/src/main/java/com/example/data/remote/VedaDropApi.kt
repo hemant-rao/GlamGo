@@ -313,6 +313,10 @@ interface VedaDropApi {
     @POST("partner/services")
     suspend fun addPartnerService(@Body body: PartnerServiceReq): PartnerServiceDto
 
+    // §747 — partner-authored custom service (creates a catalog row + a pending offering).
+    @POST("partner/services/custom")
+    suspend fun createCustomService(@Body body: CustomServiceReq): PartnerServiceDto
+
     @PATCH("partner/services/{id}")
     suspend fun patchPartnerService(@Path("id") id: Int, @Body body: Map<String, @JvmSuppressWildcards Any?>): PartnerServiceDto
 
