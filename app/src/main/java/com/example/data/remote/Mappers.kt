@@ -17,6 +17,11 @@ import com.example.data.WalletTransactionEntity
  */
 object Mappers {
 
+    // §746 — the SINGLE self-hosted fallback image (never a third-party URL). Served by
+    // the backend StaticFiles mount and guaranteed to exist (seed._ensure_placeholder
+    // runs at boot). absUrl() prefixes it with the API origin so Coil can load it.
+    private const val PLACEHOLDER_IMG = "/media/vedadrop/catalog/_placeholder.jpg"
+
     /**
      * §726 — resolve a (possibly relative) image url against the API origin.
      *
@@ -29,8 +34,11 @@ object Mappers {
      * call site gets an already-absolute url without per-site changes.
      */
     fun absUrl(raw: String?, defaultUrl: String = ""): String {
-        val u = (raw ?: "").trim()
-        if (u.isEmpty() || u == "null") return defaultUrl
+        // §746 — fall back to defaultUrl when raw is missing, then resolve EITHER through
+        // the same origin logic, so a relative self-hosted default (e.g. PLACEHOLDER_IMG)
+        // also becomes an absolute, Coil-loadable url instead of being returned path-only.
+        val u = (raw ?: "").trim().let { if (it.isEmpty() || it == "null") defaultUrl.trim() else it }
+        if (u.isEmpty()) return u
         if (u.startsWith("http://", true) || u.startsWith("https://", true) ||
             u.startsWith("data:", true)) return u
         if (u.startsWith("/media/") || u.startsWith("/uploads/") || u.startsWith("/static/")) {
@@ -74,17 +82,17 @@ object Mappers {
         reviewsCount = d.ratingCount,
         inclusions = d.inclusions ?: emptyList(),
         faqs = d.faqs?.map { it.q to it.a } ?: emptyList(),   // §737 — real FAQ rows (was [])
-        imageUrl = absUrl(d.imageUrl, "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=500&q=80"),   // §726 — resolve self-hosted relative urls
+        imageUrl = absUrl(d.imageUrl, PLACEHOLDER_IMG),   // §726/§746 — self-hosted fallback only
         priceMinPaise = d.priceMinPaise,
         priceMaxPaise = d.priceMaxPaise,
         partnerCount = d.partnerCount,
-        gallery = (d.gallery ?: emptyList()).map { absUrl(it, "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=500&q=80") }.ifEmpty { listOf("https://images.unsplash.com/photo-1560066984-138dadb4c035?w=500&q=80", "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=500&q=80") },   // §737 — portfolio gallery
+        gallery = (d.gallery ?: emptyList()).map { absUrl(it, PLACEHOLDER_IMG) }.ifEmpty { listOf(absUrl(PLACEHOLDER_IMG)) },   // §737/§746 — gallery (self-hosted fallback)
     )
 
     fun partner(d: PartnerDto): Partner = Partner(
         id = d.id.toString(),
         name = d.name ?: "Veda Drop Partner",
-        avatarUrl = absUrl(d.avatarUrl, "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&q=80"),   // §726 — resolve self-hosted relative urls
+        avatarUrl = absUrl(d.avatarUrl, PLACEHOLDER_IMG),   // §726/§746 — self-hosted fallback only
         rating = d.ratingAvg,
         reviewsCount = d.ratingCount,
         completedJobs = d.completedJobs ?: 0,
@@ -96,7 +104,7 @@ object Mappers {
         description = d.bio ?: "",
         categories = d.categories ?: emptyList(),
         servicesOffered = (d.servicesOffered ?: emptyList()).map { it.toString() },
-        portfolioUrls = (d.portfolio ?: emptyList()).map { absUrl(it, "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=500&q=80") }.ifEmpty { listOf("https://images.unsplash.com/photo-1560066984-138dadb4c035?w=500&q=80", "https://images.unsplash.com/photo-1544161515-4ab6ce6db874?w=500&q=80") },   // §726
+        portfolioUrls = (d.portfolio ?: emptyList()).map { absUrl(it, PLACEHOLDER_IMG) }.ifEmpty { listOf(absUrl(PLACEHOLDER_IMG)) },   // §726/§746
         recentReviews = emptyList(),
         fromPricePaise = d.fromPricePaise ?: 0,
         kycStatus = d.kycStatus ?: "not_started",
@@ -168,11 +176,11 @@ object Mappers {
         // sentinel so downstream code/UI can detect and reject the invalid value.
         serviceId = (d.serviceId ?: -1).toString(),
         serviceName = d.serviceName ?: "Service",
-        serviceImageUrl = absUrl(d.serviceImageUrl, "https://images.unsplash.com/photo-1560066984-138dadb4c035?w=500&q=80"),
+        serviceImageUrl = absUrl(d.serviceImageUrl, PLACEHOLDER_IMG),
         categoryName = d.categoryName ?: "",
         partnerId = (d.partnerId ?: -1).toString(),
         partnerName = d.partnerName ?: "Assigning…",
-        partnerAvatar = absUrl(d.partnerAvatar, "https://images.unsplash.com/photo-1573496359142-b8d87734a5a2?w=500&q=80"),
+        partnerAvatar = absUrl(d.partnerAvatar, PLACEHOLDER_IMG),
         dateTimeSlot = prettySlot(d.slotStart),
         slotStartIso = d.slotStart ?: "",
         addressText = addressText(d.address),

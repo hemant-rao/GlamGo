@@ -379,6 +379,16 @@ class VedaDropRepository(context: Context) {
         _subscription.value = api.cancelSubscription()
     }
 
+    // §746 — Razorpay: create an order for the ₹99 listing, then verify the Checkout
+    // signature server-side (which activates the subscription idempotently).
+    suspend fun subscriptionCheckout(): com.example.data.remote.SubscriptionCheckoutResp =
+        api.subscriptionCheckout()
+
+    suspend fun subscriptionVerify(req: com.example.data.remote.SubscriptionVerifyReq) {
+        _subscription.value = api.subscriptionVerify(req)
+        loadSubscriptionPayments()
+    }
+
     // ── Partner earnings / analytics / portfolio / availability ────────────────
     suspend fun loadEarnings() {
         _earnings.value = runCatching { api.partnerEarnings() }.getOrNull()

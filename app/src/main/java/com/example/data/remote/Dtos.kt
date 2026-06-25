@@ -1253,8 +1253,31 @@ data class SosReq(
 data class SosResp(
     val ok: Boolean = true,
     @Json(name = "sos_id") val sosId: Int? = null,
-    @Json(name = "emergency_number") val emergencyNumber: String = "112",
+    // §746 — backend returns the FULL list ("emergency_numbers") + women_helpline,
+    // not a single "emergency_number". The old singular field silently never parsed
+    // (name mismatch) and dropped both, so the SOS toast had no real dial number.
+    @Json(name = "emergency_numbers") val emergencyNumbers: List<String> = listOf("112", "1091"),
+    @Json(name = "women_helpline") val womenHelpline: String? = null,
     val message: String? = null,
+)
+
+// ── §746 Razorpay subscription checkout/verify ───────────────────────────────
+@JsonClass(generateAdapter = true)
+data class SubscriptionCheckoutResp(
+    @Json(name = "order_id") val orderId: String,
+    @Json(name = "amount_paise") val amountPaise: Long = 9900,
+    val currency: String = "INR",
+    @Json(name = "key_id") val keyId: String,
+    val name: String = "Veda Drop",
+    val description: String = "",
+    val prefill: Map<String, String>? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class SubscriptionVerifyReq(
+    @Json(name = "razorpay_order_id") val razorpayOrderId: String,
+    @Json(name = "razorpay_payment_id") val razorpayPaymentId: String,
+    @Json(name = "razorpay_signature") val razorpaySignature: String,
 )
 
 // ── §703 app config (feature flags / role visibility / params / policies) ────

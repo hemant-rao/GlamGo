@@ -5916,15 +5916,8 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                                 )
                             }
                             "started" -> {
-                                Button(
-                                    onClick = { viewModel.completePartnerJob(booking.id) },
-                                    modifier = Modifier.fillMaxWidth().testTag("detail_complete_btn"),
-                                    colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
-                                ) {
-                                    Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                    Text("Mark completed", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
-                                }
+                                // §746 — capture an optional completion-proof photo before marking done.
+                                CompleteJobButton(viewModel = viewModel, bookingId = booking.id)
                             }
                         }
 
@@ -8475,6 +8468,8 @@ fun PartnerDashboardScreen(viewModel: VedaDropViewModel) {
                                 }
                                 resubmitTarget = null
                             }
+                            // §746 — in-place expert editor target (rename / role), set per-row below.
+                            var editingExpert by remember { mutableStateOf<com.example.data.remote.ExpertDto?>(null) }
                             viewModel.myExperts.forEach { e ->
                                 Row(
                                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
@@ -8508,11 +8503,58 @@ fun PartnerDashboardScreen(viewModel: VedaDropViewModel) {
                                                     fontWeight = FontWeight.SemiBold)
                                             }
                                         }
+                                        // §746 — online/offline toggle. Only meaningful once KYC-approved
+                                        // (the backend ignores `active` until then). Offline = temporarily
+                                        // hidden from customers / not auto-assigned, without deleting her.
+                                        if (e.kycStatus == "approved") {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Text(if (e.active) "Online" else "Offline", fontSize = 11.sp,
+                                                    color = if (e.active) SuccessGreen else Color.Gray)
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Switch(
+                                                    checked = e.active,
+                                                    onCheckedChange = { viewModel.setExpertActive(e.id, it) },
+                                                    enabled = !viewModel.expertBusy,
+                                                )
+                                            }
+                                        }
+                                    }
+                                    // §746 — edit name / role in place (no delete + re-add).
+                                    IconButton(onClick = { editingExpert = e }) {
+                                        Icon(Icons.Default.Edit, contentDescription = "Edit expert", tint = VedaDropRose)
                                     }
                                     IconButton(onClick = { viewModel.deleteExpert(e.id) }) {
                                         Icon(Icons.Default.Delete, contentDescription = "Remove expert", tint = Color(0xFFD32F2F))
                                     }
                                 }
+                            }
+                            // §746 — expert edit dialog (rename / role). Identity edits don't reset KYC.
+                            editingExpert?.let { ex ->
+                                var edName by remember(ex.id) { mutableStateOf(ex.name) }
+                                var edTitle by remember(ex.id) { mutableStateOf(ex.title ?: "") }
+                                AlertDialog(
+                                    onDismissRequest = { editingExpert = null },
+                                    title = { Text("Edit expert") },
+                                    text = {
+                                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                                            OutlinedTextField(value = edName, onValueChange = { edName = it },
+                                                label = { Text("Full name") }, singleLine = true,
+                                                modifier = Modifier.fillMaxWidth())
+                                            OutlinedTextField(value = edTitle, onValueChange = { edTitle = it },
+                                                label = { Text("Role (e.g. Senior Stylist)") }, singleLine = true,
+                                                modifier = Modifier.fillMaxWidth())
+                                        }
+                                    },
+                                    confirmButton = {
+                                        TextButton(
+                                            enabled = edName.isNotBlank() && !viewModel.expertBusy,
+                                            onClick = { viewModel.updateExpert(ex.id, edName, edTitle) { editingExpert = null } },
+                                        ) { Text("Save", color = VedaDropRose) }
+                                    },
+                                    dismissButton = {
+                                        TextButton(onClick = { editingExpert = null }) { Text("Cancel") }
+                                    },
+                                )
                             }
                             // Add-expert mini form (name + title + photo + ID → submitted for KYC).
                             var expName by remember { mutableStateOf("") }
@@ -8829,6 +8871,59 @@ fun PartnerDashboardScreen(viewModel: VedaDropViewModel) {
                 }
             }
             Spacer(modifier = Modifier.height(24.dp))
+        }
+    }
+}
+
+/**
+ * §746 — partner "Mark completed" with an OPTIONAL completion-proof photo.
+ *
+ * The backend has always accepted a completion proof (vedadrop_bookings.completion_proof),
+ * but the app only ever sent an empty list. This reuses the existing lightweight camera
+ * contract + [toJpegDataUrl] to let the partner attach a quick "finished look" photo — a
+ * record for the partner and reassurance for the customer. It is NOT mandatory: tapping
+ * "Mark completed" with no photo still completes (proof stays empty), so the flow is never
+ * blocked if the camera is denied/unavailable.
+ */
+@Composable
+private fun CompleteJobButton(viewModel: VedaDropViewModel, bookingId: String) {
+    val context = LocalContext.current
+    var proofBmp by remember(bookingId) { mutableStateOf<Bitmap?>(null) }
+    val proofLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.TakePicturePreview()
+    ) { bmp: Bitmap? -> if (bmp != null) proofBmp = bmp }
+    val proofPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestPermission()
+    ) { granted -> if (granted) proofLauncher.launch(null) }
+    fun capture() {
+        val has = ContextCompat.checkSelfPermission(
+            context, android.Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+        if (has) proofLauncher.launch(null)
+        else proofPermLauncher.launch(android.Manifest.permission.CAMERA)
+    }
+    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+        OutlinedButton(onClick = { capture() }, modifier = Modifier.fillMaxWidth()) {
+            Icon(Icons.Default.PhotoCamera, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text(if (proofBmp == null) "Add completion photo (optional)" else "Photo added ✓",
+                maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+        }
+        proofBmp?.let { bmp ->
+            Image(
+                bitmap = bmp.asImageBitmap(),
+                contentDescription = "Completion proof",
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxWidth().height(140.dp),
+            )
+        }
+        Button(
+            onClick = { viewModel.completePartnerJob(bookingId, proofBmp?.toJpegDataUrl()) },
+            modifier = Modifier.fillMaxWidth().testTag("detail_complete_btn"),
+            colors = ButtonDefaults.buttonColors(containerColor = SuccessGreen),
+        ) {
+            Icon(Icons.Default.CheckCircle, contentDescription = null, modifier = Modifier.size(18.dp))
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Mark completed", maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
         }
     }
 }

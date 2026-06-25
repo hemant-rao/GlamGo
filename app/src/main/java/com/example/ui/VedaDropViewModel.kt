@@ -151,13 +151,27 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** §703 — raise an SOS (either party). Surfaces the 112 prompt. */
+    /** §703/§746 — raise an SOS (either party). ATTACHES the device's GPS fix: an
+     *  at-home panic button with no location is the difference between the safety
+     *  team finding her and not. We send the last known fix INSTANTLY when we have
+     *  one (populated by discovery / live-tracking), else acquire one now, before
+     *  alerting. Then surface the emergency-dial prompt. */
     fun raiseSos(bookingId: String? = null, lat: Double? = null, lon: Double? = null) {
         viewModelScope.launch {
-            runCatching { repository.raiseSos(bookingId, lat, lon) }
-                .onSuccess {
-                    notify(it.message ?: "Help is being notified. Call 112 now if you are in danger.",
-                           isError = true)
+            val fix: Pair<Double, Double>? =
+                if (lat != null && lon != null) lat to lon
+                else _deviceLocation.value
+                    ?: com.example.data.LocationHelper.current(getApplication())
+            fix?.let { _deviceLocation.value = it }
+            runCatching { repository.raiseSos(bookingId, fix?.first, fix?.second) }
+                .onSuccess { resp ->
+                    val dial = resp.emergencyNumbers.firstOrNull() ?: "112"
+                    val base = resp.message
+                        ?: "Help is being notified. Call $dial now if you are in danger."
+                    val msg = if (fix == null)
+                        "$base (Turn on GPS so the safety team can see your location.)"
+                    else base
+                    notify(msg, isError = true)
                 }
                 .onFailure { friendly(it) }
         }
@@ -259,17 +273,52 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
     var subscriptionBusy by mutableStateOf(false); private set
     var subscriptionError by mutableStateOf<String?>(null); private set
 
+    // §746 — one-shot trigger: when set, the Subscription screen opens the Razorpay
+    // Checkout sheet (Checkout.open needs an Activity, which the ViewModel doesn't
+    // hold). The screen clears it via consumeRazorpayOpen() once it has handed off.
+    private val _razorpayOpen = MutableStateFlow<com.example.data.remote.SubscriptionCheckoutResp?>(null)
+    val razorpayOpen: StateFlow<com.example.data.remote.SubscriptionCheckoutResp?> = _razorpayOpen.asStateFlow()
+    fun consumeRazorpayOpen() { _razorpayOpen.value = null }
+
     fun loadSubscription() {
         viewModelScope.launch {
             runCatching { repository.refreshSubscription(); repository.loadSubscriptionPayments() }
         }
     }
 
+    /** §746 — start the ₹99 listing payment. Creates a Razorpay order server-side
+     *  (reusing OdioBook's merchant account), then signals the screen to open the
+     *  Checkout sheet. The dev-only instant /subscribe path is retired here — prod
+     *  always goes through Razorpay verify. A 501 (keys not yet configured) surfaces
+     *  as a clear error instead of a silent no-op. */
     fun subscribeNow() {
         subscriptionBusy = true; subscriptionError = null
         viewModelScope.launch {
-            runCatching { repository.subscribe() }
-                .onSuccess { notify("Subscription active") }
+            runCatching { repository.subscriptionCheckout() }
+                .onSuccess { _razorpayOpen.value = it }   // → screen opens the Razorpay sheet
+                .onFailure {
+                    subscriptionError = friendly(it)
+                    subscriptionBusy = false
+                }
+        }
+    }
+
+    /** §746 — Razorpay Checkout result, routed from MainActivity's PaymentResult
+     *  callbacks. On success we verify the signature server-side (instant unlock; the
+     *  webhook also confirms). A missing field / user-cancel ends the spinner with a
+     *  friendly message. */
+    fun onRazorpayResult(orderId: String?, paymentId: String?, signature: String?, error: String?) {
+        if (error != null || orderId.isNullOrBlank() || paymentId.isNullOrBlank() || signature.isNullOrBlank()) {
+            subscriptionBusy = false
+            subscriptionError = error ?: "Payment was not completed."
+            return
+        }
+        viewModelScope.launch {
+            runCatching {
+                repository.subscriptionVerify(
+                    com.example.data.remote.SubscriptionVerifyReq(orderId, paymentId, signature))
+            }
+                .onSuccess { notify("Listing active — you're discoverable to customers again.") }
                 .onFailure { subscriptionError = friendly(it) }
             subscriptionBusy = false
         }
@@ -599,6 +648,39 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
             try {
                 repository.deleteExpert(id)
                 myExperts = repository.myExperts()
+            } catch (e: Exception) {
+                expertError = com.example.data.remote.ApiErrors.friendlyMessage(e)
+            } finally { expertBusy = false }
+        }
+    }
+
+    /** §746 — toggle an expert ONLINE/OFFLINE. The backend honours the `active` flag
+     *  only once she is KYC-approved; offline = temporarily hidden from customers and
+     *  not auto-assigned, without deleting her (history preserved). */
+    fun setExpertActive(id: Int, active: Boolean) {
+        viewModelScope.launch {
+            expertBusy = true; expertError = null
+            try {
+                repository.patchExpert(id, mapOf("active" to active))
+                myExperts = repository.myExperts()
+            } catch (e: Exception) {
+                expertError = com.example.data.remote.ApiErrors.friendlyMessage(e)
+            } finally { expertBusy = false }
+        }
+    }
+
+    /** §746 — edit an expert's display name / role in place (no more delete + re-add).
+     *  Identity edits do NOT reset her KYC (only changing the KYC photos does). */
+    fun updateExpert(id: Int, name: String, title: String?, onDone: () -> Unit = {}) {
+        viewModelScope.launch {
+            expertBusy = true; expertError = null
+            try {
+                repository.patchExpert(id, buildMap {
+                    put("name", name.trim())
+                    put("title", title?.trim()?.ifBlank { null })
+                })
+                myExperts = repository.myExperts()
+                onDone()
             } catch (e: Exception) {
                 expertError = com.example.data.remote.ApiErrors.friendlyMessage(e)
             } finally { expertBusy = false }
@@ -2027,7 +2109,8 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
     fun rejectJob(id: String) = runPartnerAction("Appointment declined") { repository.rejectBooking(id) }
     fun startTravelToJob(id: String) = runPartnerAction("On the way") { repository.startTravel(id) }
     fun arriveAtJob(id: String) = runPartnerAction("Marked arrived") { repository.arriveLocation(id) }
-    fun completePartnerJob(id: String) = runPartnerAction("Job completed") { repository.completeJob(id) }
+    fun completePartnerJob(id: String, proofUrl: String? = null) =
+        runPartnerAction("Job completed") { repository.completeJob(id, proofUrl ?: "") }
 
     /** Partner types the customer's start-OTP at the door; send it to the backend.
      *  §728 (parity C1) — [selfieDataUrl] is the partner's live start-selfie proof

@@ -27,6 +27,7 @@ import com.example.ui.theme.vedaTextSecondary
 import com.example.ui.theme.LightSage
 import com.example.ui.theme.SoftCream
 import com.example.ui.theme.LocalVedaDropPalette
+import androidx.compose.ui.platform.LocalContext
 
 /**
  * Partner ₹99/month listing subscription — the connector model's only revenue.
@@ -39,6 +40,41 @@ fun PartnerSubscriptionScreen(viewModel: VedaDropViewModel) {
     val payments by viewModel.subscriptionPayments.collectAsState()
 
     LaunchedEffect(Unit) { viewModel.loadSubscription() }
+
+    // §746 — when the VM has created a Razorpay order, open the Checkout sheet. It
+    // needs the host Activity (MainActivity implements the PaymentResult callbacks
+    // that route the outcome back to the VM for server-side verification).
+    val context = LocalContext.current
+    val pendingCheckout by viewModel.razorpayOpen.collectAsState()
+    LaunchedEffect(pendingCheckout) {
+        val c = pendingCheckout ?: return@LaunchedEffect
+        val activity = context.findActivity()
+        if (activity == null) {
+            viewModel.onRazorpayResult(null, null, null, "Couldn't open the payment screen.")
+            viewModel.consumeRazorpayOpen()
+            return@LaunchedEffect
+        }
+        try {
+            val checkout = com.razorpay.Checkout()
+            checkout.setKeyID(c.keyId)
+            val options = org.json.JSONObject().apply {
+                put("name", c.name)
+                put("description", c.description)
+                put("currency", c.currency)
+                put("order_id", c.orderId)
+                put("amount", c.amountPaise)
+                c.prefill?.let { pf ->
+                    put("prefill", org.json.JSONObject().apply { pf.forEach { (k, v) -> put(k, v) } })
+                }
+                put("theme", org.json.JSONObject().apply { put("color", "#C2185B") })
+            }
+            checkout.open(activity, options)
+        } catch (e: Exception) {
+            viewModel.onRazorpayResult(null, null, null, "Couldn't open payment: ${e.message}")
+        } finally {
+            viewModel.consumeRazorpayOpen()
+        }
+    }
 
     val status = sub?.status ?: "none"
     val isActive = sub?.isActive == true
@@ -139,4 +175,12 @@ fun PartnerSubscriptionScreen(viewModel: VedaDropViewModel) {
             Spacer(Modifier.height(32.dp))
         }
     }
+}
+
+/** §746 — unwrap the host Activity from a Compose Context so Razorpay Checkout can
+ *  launch (and route its result back to MainActivity's PaymentResult callbacks). */
+private tailrec fun android.content.Context.findActivity(): android.app.Activity? = when (this) {
+    is android.app.Activity -> this
+    is android.content.ContextWrapper -> baseContext.findActivity()
+    else -> null
 }

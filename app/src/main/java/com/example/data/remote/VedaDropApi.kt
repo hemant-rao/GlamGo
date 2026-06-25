@@ -425,6 +425,13 @@ interface VedaDropApi {
     @GET("partner/subscription/payments")
     suspend fun subscriptionPayments(): SubscriptionPaymentsResp
 
+    // §746 — Razorpay flow: create an order, then verify the Checkout signature.
+    @POST("partner/subscription/checkout")
+    suspend fun subscriptionCheckout(@Body body: Map<String, @JvmSuppressWildcards Any?> = emptyMap()): SubscriptionCheckoutResp
+
+    @POST("partner/subscription/verify")
+    suspend fun subscriptionVerify(@Body body: SubscriptionVerifyReq): SubscriptionDto
+
     // ── Partner earnings + analytics ───────────────────────────────────────────
     @GET("partner/earnings")
     suspend fun partnerEarnings(): EarningsDto

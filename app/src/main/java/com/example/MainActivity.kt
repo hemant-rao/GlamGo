@@ -23,7 +23,7 @@ import com.example.ui.VedaDropViewModel
 import com.example.ui.VedaDropMainShell
 import com.example.ui.theme.MyApplicationTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : ComponentActivity(), com.razorpay.PaymentResultWithDataListener {
   companion object {
     /** FCM notification channel id. Any code posting a push notification (e.g. a
      *  FirebaseMessagingService.onMessageReceived) MUST target this same id, and
@@ -49,8 +49,29 @@ class MainActivity : ComponentActivity() {
     newIntent.getStringExtra("notif_booking_id")?.let { activeViewModel?.openBookingFromPush(it) }
   }
 
+  // §746 — Razorpay Checkout result callbacks. Checkout.open(activity, …) routes the
+  // payment outcome back to the Activity that launched it; we forward to the live VM,
+  // which verifies the signature server-side and unlocks the ₹99 listing subscription.
+  override fun onPaymentSuccess(razorpayPaymentId: String?, paymentData: com.razorpay.PaymentData?) {
+    activeViewModel?.onRazorpayResult(
+      orderId = paymentData?.orderId,
+      paymentId = razorpayPaymentId ?: paymentData?.paymentId,
+      signature = paymentData?.signature,
+      error = null,
+    )
+  }
+
+  override fun onPaymentError(code: Int, response: String?, paymentData: com.razorpay.PaymentData?) {
+    activeViewModel?.onRazorpayResult(
+      orderId = null, paymentId = null, signature = null,
+      error = response ?: "Payment was cancelled or could not be completed.",
+    )
+  }
+
   override fun onCreate(savedInstanceState: Bundle?) {
     super.onCreate(savedInstanceState)
+    // §746 — warm up Razorpay Checkout so the first open is snappy (no-op-safe).
+    try { com.razorpay.Checkout.preload(applicationContext) } catch (_: Exception) {}
     // Create the default notification channel up-front. On Android 8+ (the app's
     // minSdk is 26) a channel must exist before any notification can be shown,
     // otherwise FCM-delivered notifications are silently dropped.
