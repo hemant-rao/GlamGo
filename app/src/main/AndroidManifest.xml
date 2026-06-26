@@ -36,6 +36,14 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.MyApplication">
+        <!-- §756 — Google AdMob app id. This is Google's PUBLIC SAMPLE app id (safe to
+             ship; serves only test ads). The founder replaces it with the real AdMob
+             App ID from the Veda Drop admin (Settings → Ads & Apps → Veda Drop → AdMob
+             App ID) before the production build. Real ads only show once a real id is
+             set AND the admin master switch is on. -->
+        <meta-data
+            android:name="com.google.android.gms.ads.APPLICATION_ID"
+            android:value="ca-app-pub-3940256099942544~3347511713" />
         <activity
             android:name=".MainActivity"
             android:exported="true"

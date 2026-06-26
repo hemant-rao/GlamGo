@@ -1340,6 +1340,35 @@ data class AppConfigResp(
     // wildcard lets Moshi resolve its built-in Object adapter.
     val params: Map<String, @JvmSuppressWildcards Any> = emptyMap(),
     val policies: Map<String, String> = emptyMap(),
+    // §756 — AdMob ads config (role-trimmed by the server). When ads are off or this
+    // role isn't allowed, the server sends `{"enabled": false}`, so this defaults to a
+    // disabled config and the app shows nothing.
+    val ads: AdsConfig = AdsConfig(),
+)
+
+// §756 — the role-trimmed, single-app ads slice the backend serves at /config.ads.
+@JsonClass(generateAdapter = true)
+data class AdsConfig(
+    val enabled: Boolean = false,
+    val provider: String = "admob",
+    @Json(name = "test_mode") val testMode: Boolean = true,
+    @Json(name = "app_id") val appId: String = "",
+    @Json(name = "ad_units") val adUnits: Map<String, String> = emptyMap(),
+    val placements: Map<String, AdsPlacement> = emptyMap(),
+    val frequency: AdsFrequency = AdsFrequency(),
+)
+
+@JsonClass(generateAdapter = true)
+data class AdsPlacement(
+    val enabled: Boolean = false,
+    val format: String = "banner",
+)
+
+@JsonClass(generateAdapter = true)
+data class AdsFrequency(
+    @Json(name = "interstitial_every_n_actions") val interstitialEveryNActions: Int = 3,
+    @Json(name = "min_interval_sec") val minIntervalSec: Int = 60,
+    @Json(name = "max_per_session") val maxPerSession: Int = 5,
 )
 
 // §710 P0-8 — a partner's own menu with their ACTUAL per-service price, so the

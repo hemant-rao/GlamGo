@@ -1149,8 +1149,12 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
                     color = vedaTextSecondary
                 )
 
+                // §756 — config-driven banner ad (shows only when the admin enabled
+                // ads for this role + the "home" placement; otherwise renders nothing).
+                com.example.ui.ads.VedaDropBannerAd("home", viewModel)
+
                 Spacer(modifier = Modifier.height(14.dp))
-                
+
                 // Horizontal Filter Row (Discovery Brands & Ratings)
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -3614,6 +3618,9 @@ fun ServiceDetailScreen(viewModel: VedaDropViewModel, service: Service) {
 
             Text("SERVICE DESCRIPTION", fontWeight = FontWeight.Bold, color = VedaDropRose, letterSpacing = 1.sp)
             Text(service.description, fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f))
+
+            // §756 — config-driven banner ad (only when admin enabled the "service_detail" placement).
+            com.example.ui.ads.VedaDropBannerAd("service_detail", viewModel)
 
             Spacer(modifier = Modifier.height(24.dp))
 
