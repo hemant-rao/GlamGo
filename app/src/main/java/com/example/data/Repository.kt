@@ -86,6 +86,11 @@ class VedaDropRepository(context: Context) {
     private val _appConfig = MutableStateFlow<com.example.data.remote.AppConfigResp?>(null)
     val appConfigFlow: StateFlow<com.example.data.remote.AppConfigResp?> = _appConfig.asStateFlow()
 
+    // §759 — the Verification Center snapshot (role-aware steps/capabilities/next_action).
+    // Hydrated from profile.verification on every me()/login and refreshable on demand.
+    private val _verification = MutableStateFlow<com.example.data.remote.VerificationDto?>(null)
+    val verificationFlow: StateFlow<com.example.data.remote.VerificationDto?> = _verification.asStateFlow()
+
     private val _partnerServices = MutableStateFlow<List<PartnerServiceEntity>>(emptyList())
     val partnerServicesFlow: StateFlow<List<PartnerServiceEntity>> = _partnerServices.asStateFlow()
 
@@ -296,6 +301,8 @@ class VedaDropRepository(context: Context) {
         // role visibility / policies) so the next account can't see the previous
         // user's config before refreshAppConfig() repopulates it.
         _appConfig.value = null
+        // §759 — drop the verification snapshot for the same account-bleed reason.
+        _verification.value = null
     }
 
     // ── Notifications (in-app inbox + FCM device registration) ─────────────────
@@ -525,6 +532,19 @@ class VedaDropRepository(context: Context) {
         if (role == "customer") {
             _serverBeauty.value = Triple(profile.skinType, profile.beautyConcerns, profile.preferredTime)
         }
+        // §759 — the verification snapshot rides along on auth/me; keep the cache fresh
+        // so the Verification Center + booking gate reflect KYC/subscription changes
+        // without a re-login. (A null means the backend omitted it — leave the prior.)
+        profile.verification?.let { _verification.value = it }
+    }
+
+    // §759 — explicit re-fetch of the Verification Center snapshot (GET auth/verification).
+    // Best-effort: a transient failure keeps the prior cache. No-op if not signed in.
+    suspend fun fetchVerification(): com.example.data.remote.VerificationDto? {
+        if (activeRole() == null) return null
+        val v = runCatching { api.getVerification() }.getOrNull()
+        if (v != null) _verification.value = v
+        return v
     }
 
     /** Public, null-safe re-fetch of the signed-in identity (refreshes kyc_status,

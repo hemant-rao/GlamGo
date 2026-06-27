@@ -46,6 +46,10 @@ interface VedaDropApi {
     @GET("auth/me")
     suspend fun me(): MeResp
 
+    // §759 — the Verification Center snapshot (role-aware steps/capabilities/next_action).
+    @GET("auth/verification")
+    suspend fun getVerification(): VerificationResp
+
     @PATCH("auth/me")
     suspend fun updateMe(@Body body: Map<String, String?>): MeResp
 

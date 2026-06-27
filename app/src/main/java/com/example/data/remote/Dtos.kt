@@ -74,7 +74,61 @@ data class ProfileDto(
     @Json(name = "email_verified") val emailVerified: Boolean? = null,
     @Json(name = "phone_verified") val phoneVerified: Boolean? = null,
     @Json(name = "has_password") val hasPassword: Boolean? = null,
+    // §759 — the Verification Center snapshot is embedded on every auth/me +
+    // login/register token bundle so the app can gate booking without an extra call.
+    val verification: VerificationDto? = null,
 )
+
+// ── §759 Verification Center ──────────────────────────────────────────────────
+// A role-aware "what's verified / what's blocked / what to do next" snapshot.
+// Returned standalone by GET auth/verification AND embedded at profile.verification.
+@JsonClass(generateAdapter = true)
+data class VerificationStepDto(
+    // "phone" | "email" | "kyc" | "subscription" | "location"
+    val key: String = "",
+    val label: String = "",
+    // phone/email/location: verified|required|optional ; kyc: verified|pending|rejected|required ;
+    // subscription: active|expired
+    val status: String = "",
+    val critical: Boolean = false,
+    // phone only — which waterfall rung verified it (sim|truecaller|sms|…), when present.
+    val method: String? = null,
+    @Json(name = "verified_at") val verifiedAt: String? = null,
+    val help: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class VerificationCapabilityDto(
+    // customer: "browse" | "book" ; partner: "get_listed" | "accept_jobs"
+    val key: String = "",
+    val label: String = "",
+    val allowed: Boolean = false,
+    // the step keys that currently block this capability (empty when allowed).
+    @Json(name = "blocked_by") val blockedBy: List<String> = emptyList(),
+    val hint: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class VerificationNextActionDto(
+    // the step key to act on (kyc|subscription|location|phone|email) — drives the CTA route.
+    val key: String = "",
+    val title: String = "",
+    val subtitle: String? = null,
+    val cta: String? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class VerificationDto(
+    val steps: List<VerificationStepDto> = emptyList(),
+    val capabilities: List<VerificationCapabilityDto> = emptyList(),
+    @Json(name = "next_action") val nextAction: VerificationNextActionDto? = null,
+    @Json(name = "can_book") val canBook: Boolean? = null,        // customer only
+    @Json(name = "can_accept_jobs") val canAcceptJobs: Boolean? = null,  // partner only
+)
+
+// GET auth/verification returns the verification object directly (not wrapped); the
+// alias keeps the API signature self-documenting alongside the other *Resp types.
+typealias VerificationResp = VerificationDto
 
 @JsonClass(generateAdapter = true)
 data class MeResp(val profile: ProfileDto? = null)

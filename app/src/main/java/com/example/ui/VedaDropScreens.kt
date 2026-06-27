@@ -125,6 +125,7 @@ fun VedaDropTopHeader(
         // §734 — show who you're chatting with (the per-screen two-line bar is removed).
         is Screen.PreBookingChat -> currentScreen.partner.name
         is Screen.Notifications -> "Notifications"
+        is Screen.VerificationCenter -> "Verification Center"
         is Screen.ServiceBookingForm -> "Booking Form"
         is Screen.Favourites -> "Favourites"
         is Screen.CustomerDashboard -> "My Dashboard"
@@ -596,6 +597,7 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
                     is Screen.PartnerOffers -> PartnerOffersScreen(viewModel)
                     is Screen.PreBookingChat -> PreBookingChatScreen(viewModel, screen.service, screen.partner)
                     is Screen.Notifications -> NotificationsScreen(viewModel)
+                    is Screen.VerificationCenter -> VerificationCenterScreen(viewModel)
                 }
                 }
                 }
@@ -8509,6 +8511,9 @@ fun PartnerDashboardScreen(viewModel: VedaDropViewModel) {
                 ) { Text("Portfolio", fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             }
 
+            // §759 — Verification Center entry point (listing/accept-jobs gate status).
+            VerificationEntryCard(viewModel)
+
             // (Rescue Board + Job Request Queue relocated to the top of the body — §731)
 
             // PRE-BOOKING CUSTOMER CHATS SECTION
@@ -10547,6 +10552,9 @@ fun CustomerProfileScreen(viewModel: VedaDropViewModel) {
                     colors = ButtonDefaults.outlinedButtonColors(contentColor = VedaDropRose),
                 ) { Text("Favourites", fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false) }
             }
+
+            // §759 — Verification Center entry point (account status + booking gate).
+            VerificationEntryCard(viewModel)
 
             // Favorite Partners section
             val favPartnersMapped = remember(favorites) {

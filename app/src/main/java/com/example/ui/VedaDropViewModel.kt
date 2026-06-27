@@ -60,6 +60,10 @@ sealed class Screen {
 
     // In-app notification inbox (shared by customer + partner)
     object Notifications : Screen()
+
+    // §759 — Verification Center: role-aware status dashboard (phone/email/KYC/
+    // subscription/location) + the booking/listing gate. Shared by customer + partner.
+    object VerificationCenter : Screen()
 }
 
 interface RouteWithParams
@@ -110,6 +114,17 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
     /** Refresh the resolved app config. Call on launch + after login/role change. */
     fun loadAppConfig() {
         viewModelScope.launch { runCatching { repository.refreshAppConfig() } }
+    }
+
+    // ── §759 Verification Center (phone/email/KYC/subscription/location gate) ─────
+    val verification = repository.verificationFlow.stateIn(
+        viewModelScope, SharingStarted.WhileSubscribed(5000), null
+    )
+
+    /** Re-fetch the Verification Center snapshot. Fire-and-forget, null-safe — called
+     *  on screen entry / pull-to-refresh and whenever a 403 phone-verify gate fires. */
+    fun loadVerification() {
+        viewModelScope.launch { runCatching { repository.fetchVerification() } }
     }
 
     /** Feature-flag / surface / policy passthroughs for the Compose screens. */
@@ -1584,8 +1599,24 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
             forceLogout(err.message)
             return err.message
         }
+        // §759 — a booking/cart/quote/accept call hit the mobile-verification gate.
+        // Surface the reason and route to the Verification Center. Centralised here
+        // because most booking/quote/accept error paths funnel through friendly().
+        if (maybeHandlePhoneGate(err.code)) return err.message
         notify(err.message, isError = true)
         return err.message
+    }
+
+    /** §759 — if [code] is the mobile-verification gate (a 403 PHONE_VERIFICATION_REQUIRED
+     *  on a booking/cart/quote/accept call), surface a message + route the user to the
+     *  Verification Center with a fresh snapshot. Returns true when it handled the code so
+     *  callers (e.g. the cart paths that parse the error body themselves) can stop. */
+    private fun maybeHandlePhoneGate(code: String?): Boolean {
+        if (code != "PHONE_VERIFICATION_REQUIRED") return false
+        notify("Please verify your mobile number to continue.", isError = true)
+        loadVerification()
+        currentScreen = Screen.VerificationCenter
+        return true
     }
 
     /** §714 — clear the session locally when the server says the account is gone. */
@@ -1700,6 +1731,7 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
             is Screen.PartnerPortfolio -> loadPortfolio()
             is Screen.PartnerKyc -> loadPartnerKyc()
             is Screen.PartnerBusinessLocation -> loadPartnerLocation()
+            is Screen.VerificationCenter -> loadVerification()
             else -> {}
         }
     }
@@ -1728,14 +1760,18 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
                 .onSuccess { notify("Added to cart"); onResult(null) }
                 .onFailure { t ->
                     val err = com.example.data.remote.ApiErrors.parse(t)
-                    if (err.code == "CART_PARTNER_CONFLICT") {
-                        // Stash the add + show the dialog; pass the (non-null) message back so
-                        // callers reset busy state but DON'T treat it as success/navigate.
-                        pendingCartConflict = PendingCartAdd(
-                            partnerId = partnerId, serviceId = serviceId, message = err.message)
-                        onResult(err.message)
-                    } else {
-                        onResult(friendly(t))
+                    when {
+                        err.code == "CART_PARTNER_CONFLICT" -> {
+                            // Stash the add + show the dialog; pass the (non-null) message back so
+                            // callers reset busy state but DON'T treat it as success/navigate.
+                            pendingCartConflict = PendingCartAdd(
+                                partnerId = partnerId, serviceId = serviceId, message = err.message)
+                            onResult(err.message)
+                        }
+                        // §759 — the mobile-verify gate. Use the already-parsed code (the error
+                        // body is consume-once, so re-parsing via friendly(t) would miss it).
+                        maybeHandlePhoneGate(err.code) -> onResult(err.message)
+                        else -> onResult(friendly(t))
                     }
                 }
         }
@@ -1805,12 +1841,15 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
                 .onSuccess { notify("Package added to cart"); onResult(null) }
                 .onFailure { t ->
                     val err = com.example.data.remote.ApiErrors.parse(t)
-                    if (err.code == "CART_PARTNER_CONFLICT") {
-                        // §747 — route to the same "Replace cart?" dialog as single-service adds.
-                        pendingCartConflict = PendingCartAdd(packageId = packageId, message = err.message)
-                        onResult(err.message)
-                    } else {
-                        onResult(friendly(t))
+                    when {
+                        err.code == "CART_PARTNER_CONFLICT" -> {
+                            // §747 — route to the same "Replace cart?" dialog as single-service adds.
+                            pendingCartConflict = PendingCartAdd(packageId = packageId, message = err.message)
+                            onResult(err.message)
+                        }
+                        // §759 — the mobile-verify gate (consume-once body → use parsed code).
+                        maybeHandlePhoneGate(err.code) -> onResult(err.message)
+                        else -> onResult(friendly(t))
                     }
                 }
         }
