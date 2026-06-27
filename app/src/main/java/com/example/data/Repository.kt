@@ -212,7 +212,7 @@ class VedaDropRepository(context: Context) {
      *  {otp_token, code}; the SIM rung {device_phone}. Completing the pair persists
      *  the session tokens. */
     suspend fun registerPhoneVerify(role: String, regToken: String, method: String,
-                                    payload: Map<String, String?>): RegisterStepResp {
+                                    payload: Map<String, @JvmSuppressWildcards Any?>): RegisterStepResp {
         val resp = api.registerPhoneVerify(RegisterPhoneVerifyReq(regToken, method, payload))
         persistIfComplete(role, resp)
         return resp

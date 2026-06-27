@@ -1,6 +1,9 @@
 @file:OptIn(ExperimentalMaterial3Api::class)
 package com.example.ui
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.IntentSenderRequest
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
@@ -27,7 +30,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.testTag
+import com.google.android.gms.auth.api.identity.GetPhoneNumberHintIntentRequest
+import com.google.android.gms.auth.api.identity.Identity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -69,6 +75,36 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
     var regPhone by remember { mutableStateOf("") }
     var emailCode by remember { mutableStateOf("") }
     var smsCode by remember { mutableStateOf("") }
+
+    // §770 — first-time, OTP-free phone verification via Google's Phone Number Hint API.
+    // It shows a one-tap chooser of the device's own SIM number(s) (no permission needed);
+    // we forward the picked number to the server's SIM rung, which confirms it matches the
+    // number being registered (proof the SIM is in THIS phone). No OTP provider required.
+    val context = LocalContext.current
+    val simHintLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.StartIntentSenderForResult()
+    ) { result ->
+        runCatching {
+            Identity.getSignInClient(context).getPhoneNumberFromIntent(result.data)
+        }.onSuccess { phone ->
+            viewModel.verifyPhoneWithSim(listOf(phone))
+        }.onFailure {
+            viewModel.onSimReadFailed()
+        }
+    }
+    fun launchSimHint() {
+        val request = GetPhoneNumberHintIntentRequest.builder().build()
+        Identity.getSignInClient(context)
+            .getPhoneNumberHintIntent(request)
+            .addOnSuccessListener { pending ->
+                runCatching {
+                    simHintLauncher.launch(
+                        IntentSenderRequest.Builder(pending.intentSender).build()
+                    )
+                }.onFailure { viewModel.onSimReadFailed() }
+            }
+            .addOnFailureListener { viewModel.onSimReadFailed() }
+    }
 
     // §763 forgot/reset fields
     var forgotId by remember { mutableStateOf("") }
@@ -156,6 +192,7 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                                     ?: "Enter the code we sent and choose a new password")
                             !isRegister -> "Welcome back" to "Sign in with your email or mobile"
                             viewModel.regStep == "email" -> "Verify your email" to "Enter the 6-digit code we emailed to $regEmail"
+                            viewModel.regStep == "phone" && viewModel.regPhoneMode == "sim" -> "Verify your mobile" to "One-tap verify using the SIM in this phone (+91 $regPhone)"
                             viewModel.regStep == "phone" -> "Verify your mobile" to "Enter the 6-digit code sent to +91 $regPhone"
                             else -> "Create your account" to "It only takes a minute"
                         }
@@ -486,7 +523,63 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                                 )
                             }
 
-                            // ===== REGISTER — STEP 2b: phone SMS OTP =====
+                            // ===== REGISTER — STEP 2b: SIM auto-verify (one-tap, no OTP) =====
+                            viewModel.regPhoneMode == "sim" -> {
+                                // §770 — explain WHY we're doing a one-time SIM check.
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(12.dp))
+                                        .background(VedaDropRose.copy(alpha = 0.10f))
+                                        .padding(14.dp)
+                                ) {
+                                    Column {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(
+                                                Icons.Filled.PhoneAndroid, contentDescription = null,
+                                                tint = DeepPlum, modifier = Modifier.size(18.dp),
+                                            )
+                                            Spacer(Modifier.width(8.dp))
+                                            Text(
+                                                text = "Verify with your SIM",
+                                                style = MaterialTheme.typography.titleSmall,
+                                                fontWeight = FontWeight.Bold,
+                                                color = DeepPlum,
+                                            )
+                                        }
+                                        Spacer(Modifier.height(6.dp))
+                                        Text(
+                                            text = "Just tap below and pick +91 $regPhone. We check that this " +
+                                                "number's SIM is in this phone — a one-time confirmation that the " +
+                                                "number is really yours. No OTP needed.",
+                                            style = MaterialTheme.typography.bodySmall,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                    }
+                                }
+                                ErrorBox(viewModel.authError)
+                                Spacer(Modifier.height(12.dp))
+                                PrimaryButton(
+                                    text = "Verify with my SIM",
+                                    busy = viewModel.authBusy,
+                                    enabled = !viewModel.authBusy,
+                                    onClick = { launchSimHint() },
+                                    testTag = "reg_sim_verify",
+                                )
+                                Spacer(Modifier.height(6.dp))
+                                TextButton(
+                                    onClick = { viewModel.switchToSmsVerify() },
+                                    enabled = !viewModel.authBusy,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) { Text("Verify by SMS instead") }
+                                TextButton(
+                                    onClick = { viewModel.cancelRegister() },
+                                    enabled = !viewModel.authBusy,
+                                    modifier = Modifier.fillMaxWidth(),
+                                ) { Text("Cancel") }
+                            }
+
+                            // ===== REGISTER — STEP 2b: phone SMS OTP (fallback) =====
                             else -> {
                                 FieldLabel("SMS Verification Code")
                                 CodeField(
@@ -526,6 +619,14 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                                     backLabel = "Cancel",
                                     busy = viewModel.authBusy,
                                 )
+                                // §770 — offer the one-tap SIM path when the server supports it.
+                                if (viewModel.simSupported) {
+                                    TextButton(
+                                        onClick = { viewModel.regPhoneMode = "sim"; viewModel.clearAuthError() },
+                                        enabled = !viewModel.authBusy,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) { Text("Use one-tap SIM verification instead") }
+                                }
                             }
                         }
 

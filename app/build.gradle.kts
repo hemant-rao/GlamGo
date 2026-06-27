@@ -117,6 +117,11 @@ dependencies {
   // pastes real ids in the Veda Drop admin. Direct coordinate (like Razorpay above) to
   // avoid a version-catalog edit; bump the version if Gradle can't resolve it.
   implementation("com.google.android.gms:play-services-ads:23.6.0")
+  // §770 — Phone Number Hint API (one-tap SIM-number chooser, NO permission). Used for
+  // first-time, OTP-free phone verification: confirms the number being registered is the
+  // SIM physically in this device. Direct coordinate (like the ads/Razorpay lines above)
+  // to avoid a version-catalog edit; bump if Gradle can't resolve it.
+  implementation("com.google.android.gms:play-services-auth:21.3.0")
   implementation(libs.maplibre.android)  // §690 — MapLibre GL engine + OpenFreeMap free vector tiles (live map; no proprietary tile SDK)
   implementation(libs.retrofit)
   // §746 — Razorpay Checkout Android SDK: the partner ₹99/mo listing subscription is

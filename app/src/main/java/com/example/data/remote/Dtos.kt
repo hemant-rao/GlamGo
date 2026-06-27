@@ -165,12 +165,13 @@ data class RegisterStepResp(
 )
 
 // Typed body for register/phone/verify — `payload` is a nested object (e.g.
-// {otp_token, code} for the SMS rung, {device_phone} for the SIM rung).
+// {otp_token, code} for the SMS rung, {device_phones:[...]} for the SIM rung).
+// §770 — payload values are Any? so the SIM rung can carry a list of SIM numbers.
 @JsonClass(generateAdapter = true)
 data class RegisterPhoneVerifyReq(
     @Json(name = "reg_token") val regToken: String,
     val method: String,
-    val payload: Map<String, String?> = emptyMap(),
+    val payload: Map<String, @JvmSuppressWildcards Any?> = emptyMap(),
 )
 
 // ── §763 Forgot / reset password (email OTP OR mobile SMS OTP) ─────────────────
