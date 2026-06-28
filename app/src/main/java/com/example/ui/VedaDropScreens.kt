@@ -10793,6 +10793,31 @@ fun CustomerProfileScreen(viewModel: VedaDropViewModel) {
                 onDismiss = { showDeleteAccount = false },
             )
         }
+
+        // §776 — quiet "part of the OdioBook family" attribution. OdioBook
+        // (odiobook.com) is the parent company behind Veda Drop, Solaris &
+        // Dig Deep. Understated (small, muted, centered) so it's present but
+        // never dominates the profile — matching the sibling apps.
+        Spacer(modifier = Modifier.height(28.dp))
+        Text(
+            text = "PART OF THE ODIOBOOK FAMILY",
+            fontSize = 10.sp,
+            fontWeight = FontWeight.Bold,
+            color = Color.Gray,
+            letterSpacing = 1.5.sp,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Spacer(modifier = Modifier.height(4.dp))
+        Text(
+            text = "Veda Drop is built by OdioBook — the company behind a family of apps including Solaris and Dig Deep.  odiobook.com",
+            fontSize = 11.sp,
+            color = Color.Gray,
+            textAlign = TextAlign.Center,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp),
+        )
         Spacer(modifier = Modifier.height(48.dp))
     }
 }
