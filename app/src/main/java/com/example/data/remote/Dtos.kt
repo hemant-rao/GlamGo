@@ -145,6 +145,9 @@ data class RegisterStartResp(
     @Json(name = "email_verification") val emailVerification: String = "skipped",
     @Json(name = "email_verified") val emailVerified: Boolean = false,
     @Json(name = "phone_methods") val phoneMethods: List<String> = emptyList(),
+    // §773 — when true the app may offer "verify later (manual)" so a failed SIM check
+    // + no OTP provider never dead-ends sign-up.
+    @Json(name = "phone_defer_allowed") val phoneDeferAllowed: Boolean = false,
     @Json(name = "expires_in") val expiresIn: Int = 0,
 )
 
@@ -156,7 +159,11 @@ data class RegisterStepResp(
     @Json(name = "phone_verified") val phoneVerified: Boolean? = null,
     val next: String? = null,
     @Json(name = "phone_methods") val phoneMethods: List<String>? = null,
+    @Json(name = "phone_defer_allowed") val phoneDeferAllowed: Boolean? = null,
     @Json(name = "email_verification") val emailVerification: String? = null,
+    // §773 — "verified" on the SIM/OTP path, "pending_manual" when the phone step was
+    // deferred (account created, awaiting an admin/future-OTP verify).
+    @Json(name = "phone_verification") val phoneVerification: String? = null,
     // completion bundle (present only when the pair is complete)
     @Json(name = "access_token") val accessToken: String? = null,
     @Json(name = "refresh_token") val refreshToken: String? = null,

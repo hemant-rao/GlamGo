@@ -218,6 +218,15 @@ class VedaDropRepository(context: Context) {
         return resp
     }
 
+    /** §773 — finish sign-up WITHOUT verifying the phone now (SIM couldn't auto-verify +
+     *  no OTP provider). Creates the account unverified and signs the user in; the number
+     *  is verified later by an admin (or a future OTP rung). Persists the token bundle. */
+    suspend fun registerPhoneDefer(role: String, regToken: String): RegisterStepResp {
+        val resp = api.registerPhoneDefer(mapOf("reg_token" to regToken))
+        persistIfComplete(role, resp)
+        return resp
+    }
+
     /** When a register step returns the completed token bundle, persist it exactly like
      *  a fresh login + best-effort hydrate. Returns true if the account is now live. */
     private suspend fun persistIfComplete(role: String, resp: RegisterStepResp): Boolean {

@@ -107,6 +107,18 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
             .addOnFailureListener { viewModel.onSimReadFailed() }
     }
 
+    // §773 — auto-present the one-tap SIM chooser the moment the user lands on the SIM
+    // step (no manual "Verify" tap). It fires once per phone-step entry; if the user
+    // dismisses it, they can re-tap "Verify with my SIM" or "Skip — verify later".
+    LaunchedEffect(viewModel.regStep, viewModel.regPhoneMode) {
+        if (viewModel.regStep == "phone" && viewModel.regPhoneMode == "sim" &&
+            !viewModel.simAutoLaunched
+        ) {
+            viewModel.simAutoLaunched = true
+            launchSimHint()
+        }
+    }
+
     // §763 forgot/reset fields
     var forgotId by remember { mutableStateOf("") }
     var resetCode by remember { mutableStateOf("") }
@@ -550,9 +562,9 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                                         }
                                         Spacer(Modifier.height(6.dp))
                                         Text(
-                                            text = "Just tap below and pick +91 $regPhone. We check that this " +
-                                                "number's SIM is in this phone — a one-time confirmation that the " +
-                                                "number is really yours. No OTP needed.",
+                                            text = "We'll pop up your SIM number — just pick +91 $regPhone. This " +
+                                                "checks the number's SIM is in this phone — a one-time confirmation " +
+                                                "the number is really yours. No OTP needed.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -567,6 +579,22 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                                     onClick = { launchSimHint() },
                                     testTag = "reg_sim_verify",
                                 )
+                                // §773 — never a dead-end: if the SIM can't auto-verify and
+                                // there's no OTP provider, finish now and verify later.
+                                if (viewModel.regPhoneDeferAllowed) {
+                                    Spacer(Modifier.height(6.dp))
+                                    OutlinedButton(
+                                        onClick = { viewModel.deferPhoneVerification() },
+                                        enabled = !viewModel.authBusy,
+                                        border = BorderStroke(1.5.dp, VedaDropRose),
+                                        shape = RoundedCornerShape(12.dp),
+                                        colors = ButtonDefaults.outlinedButtonColors(contentColor = VedaDropRose),
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .height(46.dp)
+                                            .testTag("reg_defer_phone"),
+                                    ) { Text("Skip — verify later", fontWeight = FontWeight.SemiBold) }
+                                }
                                 Spacer(Modifier.height(6.dp))
                                 TextButton(
                                     onClick = { viewModel.switchToSmsVerify() },
@@ -623,10 +651,23 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                                 // §770 — offer the one-tap SIM path when the server supports it.
                                 if (viewModel.simSupported) {
                                     TextButton(
-                                        onClick = { viewModel.regPhoneMode = "sim"; viewModel.clearAuthError() },
+                                        onClick = {
+                                            viewModel.regPhoneMode = "sim"
+                                            viewModel.simAutoLaunched = false   // §773 — re-arm auto-popup
+                                            viewModel.clearAuthError()
+                                        },
                                         enabled = !viewModel.authBusy,
                                         modifier = Modifier.fillMaxWidth(),
                                     ) { Text("Use one-tap SIM verification instead") }
+                                }
+                                // §773 — escape hatch when there's no working OTP provider:
+                                // finish now and verify the number later.
+                                if (viewModel.regPhoneDeferAllowed) {
+                                    TextButton(
+                                        onClick = { viewModel.deferPhoneVerification() },
+                                        enabled = !viewModel.authBusy,
+                                        modifier = Modifier.fillMaxWidth(),
+                                    ) { Text("Skip — verify later", fontWeight = FontWeight.SemiBold, color = VedaDropRose) }
                                 }
                             }
                         }

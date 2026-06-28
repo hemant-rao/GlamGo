@@ -1236,6 +1236,13 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
     // code). simSupported mirrors whether the server offers the "sim" rung (/config).
     var regPhoneMode by mutableStateOf("sim")      // "sim" | "sms"
     val simSupported: Boolean get() = regPhoneMethods.contains("sim")
+    // §773 — server allows finishing sign-up WITHOUT proving the phone (admin verifies
+    // later). Drives the "Skip — verify later" fallback so a failed SIM check + no OTP
+    // provider never dead-ends the user.
+    var regPhoneDeferAllowed by mutableStateOf(false); private set
+    // §773 — true once we auto-fired the SIM chooser for this phone step, so the
+    // LaunchedEffect only auto-pops it once (re-tries are user-initiated).
+    var simAutoLaunched by mutableStateOf(false)
     private var regToken: String? = null
     private var regPhoneOtpToken: String? = null
 
@@ -1431,6 +1438,7 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
             }.onSuccess { resp ->
                 regToken = resp.regToken
                 regPhoneMethods = resp.phoneMethods
+                regPhoneDeferAllowed = resp.phoneDeferAllowed
                 if (resp.emailVerified) {
                     // No email gate (e.g. provider not configured) — go straight to phone.
                     regEmailRequired = false
@@ -1457,6 +1465,7 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
                         onAuthSuccess(role)               // both halves done (unlikely here)
                     } else {
                         resp.phoneMethods?.let { regPhoneMethods = it }
+                        resp.phoneDeferAllowed?.let { regPhoneDeferAllowed = it }
                         enterPhoneStep()
                     }
                 }
@@ -1482,6 +1491,7 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
     private fun enterPhoneStep() {
         regStep = "phone"
         authError = null
+        simAutoLaunched = false                       // §773 — let the UI auto-pop the SIM chooser once
         regPhoneMode = if (regPhoneMethods.contains("sim")) "sim" else "sms"
         if (regPhoneMode == "sms") requestRegPhoneSms()
     }
@@ -1515,10 +1525,37 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
     fun clearAuthError() { authError = null }
 
     /** §770 — the Phone Number Hint chooser was dismissed or no SIM number could be
-     *  read (some carriers don't expose it). Surface a clear, non-blocking message. */
+     *  read (some carriers don't expose it). Surface a clear, non-blocking message.
+     *  §773 — there's always a way forward now: retry the SIM tap, or "verify later". */
     fun onSimReadFailed() {
         authBusy = false
-        authError = "Couldn't read your SIM number on this device. Pick your number again, or verify by SMS."
+        authError = if (regPhoneDeferAllowed)
+            "Couldn't auto-verify your SIM. Tap \"Verify with my SIM\" to try again, or \"Skip — verify later\"."
+        else
+            "Couldn't read your SIM number on this device. Pick your number again, or verify by SMS."
+    }
+
+    /** §773 — finish sign-up WITHOUT proving the phone now. Used when the one-tap SIM
+     *  check can't auto-verify (no SIM / wrong SIM / mismatch) and there's no OTP
+     *  provider, so the user isn't dead-ended: the account is created (mobile left
+     *  unverified, awaiting an admin/future-OTP verify) and the user is signed in. */
+    fun deferPhoneVerification() {
+        val token = regToken ?: run { authError = "Start registration again."; return }
+        authBusy = true; authError = null
+        val role = loginRole
+        viewModelScope.launch {
+            runCatching { repository.registerPhoneDefer(role, token) }
+                .onSuccess { resp ->
+                    if (!resp.accessToken.isNullOrBlank()) {
+                        notify("Account created. We'll verify your mobile number shortly — you can browse meanwhile.")
+                        onAuthSuccess(role)
+                    } else {
+                        authError = "Could not complete sign-up. Please try again."
+                    }
+                }
+                .onFailure { authError = friendly(it) }
+            authBusy = false
+        }
     }
 
     /** §770 — explicit fallback from SIM auto-verify to the SMS OTP rung. */
@@ -1590,6 +1627,8 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         regEmailRequired = false
         regPhoneMethods = emptyList()
         regPhoneMode = "sim"
+        regPhoneDeferAllowed = false
+        simAutoLaunched = false
         regPhoneOtpToken = null
         devOtpHint = null
     }

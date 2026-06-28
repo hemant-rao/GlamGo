@@ -34,6 +34,12 @@ interface VedaDropApi {
     @POST("auth/register/phone/verify")
     suspend fun registerPhoneVerify(@Body body: RegisterPhoneVerifyReq): RegisterStepResp
 
+    // §773 — finish sign-up WITHOUT proving the phone now (SIM couldn't auto-verify +
+    // no OTP provider). The account is created unverified; an admin (or a future OTP
+    // rung) verifies the number later. Returns the completed token bundle.
+    @POST("auth/register/phone/defer")
+    suspend fun registerPhoneDefer(@Body body: Map<String, String>): RegisterStepResp
+
     @POST("auth/login")
     suspend fun login(@Body body: Map<String, String>): OtpVerifyResp
 
