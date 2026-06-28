@@ -1496,27 +1496,33 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         if (regPhoneMode == "sms") requestRegPhoneSms()
     }
 
-    /** §770 register step 2b (SIM) — the FIRST-TIME, OTP-free check. The UI reads the
-     *  device's own SIM number(s) via the Phone Number Hint API and forwards them; the
-     *  server confirms one matches the number being registered (proof the SIM is in
-     *  THIS phone) and completes sign-up. A mismatch / no-SIM surfaces a clear error so
-     *  the user can correct the number or switch to SMS. */
-    fun verifyPhoneWithSim(devicePhones: List<String>) {
-        val token = regToken ?: run { authError = "Start registration again."; return }
+    /** §770/§774 register step 2b (SIM) — the FIRST-TIME, OTP-free check. The UI reads
+     *  the device's own SIM number(s) — silently via READ_PHONE_NUMBERS (§774) or via the
+     *  one-tap Phone Number Hint chooser (§770) — and forwards them; the server confirms
+     *  one matches the number being registered (proof the SIM is in THIS phone) and
+     *  completes sign-up.
+     *
+     *  §774 — [silent]=true is the automatic, zero-tap path: we attempted a background SIM
+     *  read, so a mismatch / empty result must NOT surface a blocking error (the UI still
+     *  shows the one-tap "Verify with my SIM" card + "Skip — verify later"). [silent]=false
+     *  is the user explicitly tapping verify, so a failure is shown so they can correct the
+     *  number or switch to SMS. */
+    fun verifyPhoneWithSim(devicePhones: List<String>, silent: Boolean = false) {
+        val token = regToken ?: run { if (!silent) authError = "Start registration again."; return }
         val nums = devicePhones.map { it.trim() }.filter { it.isNotBlank() }
         if (nums.isEmpty()) {
-            authError = "We couldn't read your SIM number. Try again, or verify by SMS."
+            if (!silent) authError = "We couldn't read your SIM number. Try again, or verify by SMS."
             return
         }
-        authBusy = true; authError = null
+        authBusy = true; if (!silent) authError = null
         val role = loginRole
         viewModelScope.launch {
             runCatching {
                 repository.registerPhoneVerify(role, token, "sim", mapOf("device_phones" to nums))
             }.onSuccess { resp ->
                 if (!resp.accessToken.isNullOrBlank()) onAuthSuccess(role)
-                else authError = "Could not complete sign-up. Please try again."
-            }.onFailure { authError = friendly(it) }
+                else if (!silent) authError = "Could not complete sign-up. Please try again."
+            }.onFailure { if (!silent) authError = friendly(it) }   // silent: stay quiet; UI keeps the manual card
             authBusy = false
         }
     }
@@ -1535,15 +1541,30 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
             "Couldn't read your SIM number on this device. Pick your number again, or verify by SMS."
     }
 
-    /** §773 — finish sign-up WITHOUT proving the phone now. Used when the one-tap SIM
-     *  check can't auto-verify (no SIM / wrong SIM / mismatch) and there's no OTP
-     *  provider, so the user isn't dead-ended: the account is created (mobile left
-     *  unverified, awaiting an admin/future-OTP verify) and the user is signed in. */
-    fun deferPhoneVerification() {
+    /** §773/§774 — "Skip — verify later". Even on skip we take one last shot at the
+     *  silent SIM-presence proof (the founder's priority: the SIM in the phone is the
+     *  proof the number is real and the user's). [simNumbers] are whatever the UI could
+     *  read silently at the moment of the tap; if any matches the registered number the
+     *  server verifies it and the account is created VERIFIED — no defer needed.
+     *
+     *  Only when there's no usable SIM proof do we fall back to deferring: the account is
+     *  created with the mobile left unverified (awaiting an admin / future-OTP verify),
+     *  so the user is never dead-ended. */
+    fun deferPhoneVerification(simNumbers: List<String> = emptyList()) {
         val token = regToken ?: run { authError = "Start registration again."; return }
+        val nums = simNumbers.map { it.trim() }.filter { it.isNotBlank() }
         authBusy = true; authError = null
         val role = loginRole
         viewModelScope.launch {
+            // §774 — prefer a real SIM proof if a silent read produced device numbers.
+            if (nums.isNotEmpty()) {
+                val verified = runCatching {
+                    repository.registerPhoneVerify(role, token, "sim", mapOf("device_phones" to nums))
+                }.getOrNull()
+                val tok = verified?.accessToken
+                if (!tok.isNullOrBlank()) { onAuthSuccess(role); authBusy = false; return@launch }
+            }
+            // No SIM proof available → create the account now, verify the number later.
             runCatching { repository.registerPhoneDefer(role, token) }
                 .onSuccess { resp ->
                     if (!resp.accessToken.isNullOrBlank()) {

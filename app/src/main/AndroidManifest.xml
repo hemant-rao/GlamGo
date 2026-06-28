@@ -18,6 +18,16 @@
     <!-- §710 P0-5 — show FCM push notifications (booking accepted, chat, new job).
          POST_NOTIFICATIONS is runtime-requested on Android 13+. -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- §774 — first-time phone verification by reading the user's OWN SIM number
+         (proof the registered number's SIM is physically in this device, so we can
+         auto-verify with no OTP). READ_PHONE_NUMBERS reads the SIM's number;
+         READ_PHONE_STATE enumerates each active SIM (dual-SIM). Both are
+         runtime-requested only on the sign-up phone step (SimNumberReader). This is
+         the Play-approved "verify the user's own phone number" use-case; the flow
+         degrades to the one-tap Phone Number Hint chooser if the permission is
+         denied or the carrier doesn't expose the number. -->
+    <uses-permission android:name="android.permission.READ_PHONE_NUMBERS" />
+    <uses-permission android:name="android.permission.READ_PHONE_STATE" />
     <!-- §725 Batch-B — urgent-job high-alert alarm. A foreground service loops an
          ALARM-stream sound + posts a full-screen-intent notification so a partner
          cannot miss a customer waiting right now. MEDIA_PLAYBACK is the FGS type

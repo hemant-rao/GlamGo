@@ -41,6 +41,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.example.data.SimNumberReader
 import com.example.ui.theme.DeepPlum
 import com.example.ui.theme.VedaDropRose
 import com.example.ui.theme.AccentBronze
@@ -76,10 +77,14 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
     var emailCode by remember { mutableStateOf("") }
     var smsCode by remember { mutableStateOf("") }
 
-    // §770 — first-time, OTP-free phone verification via Google's Phone Number Hint API.
-    // It shows a one-tap chooser of the device's own SIM number(s) (no permission needed);
-    // we forward the picked number to the server's SIM rung, which confirms it matches the
-    // number being registered (proof the SIM is in THIS phone). No OTP provider required.
+    // §770/§774 — first-time, OTP-free phone verification by proving the registered
+    // number's SIM is physically in THIS phone. Two layers, strongest-first:
+    //   1. §774 SILENT read (READ_PHONE_NUMBERS): read the device's own SIM number(s)
+    //      with no tap and auto-verify if one matches → zero-interaction verification.
+    //   2. §770 Phone Number Hint: a one-tap chooser of the SIM number(s), no permission
+    //      — the fallback when the silent read is blocked or the carrier hides the number.
+    // Both forward the number(s) to the server's SIM rung, which confirms the match. No
+    // OTP provider required; the user is never dead-ended ("Skip — verify later").
     val context = LocalContext.current
     val simHintLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.StartIntentSenderForResult()
@@ -88,7 +93,7 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
             // result.data is nullable; a null (chooser dismissed) throws → onFailure below.
             Identity.getSignInClient(context).getPhoneNumberFromIntent(result.data!!)
         }.onSuccess { phone ->
-            viewModel.verifyPhoneWithSim(listOf(phone))
+            viewModel.verifyPhoneWithSim(listOf(phone))   // explicit pick → show errors
         }.onFailure {
             viewModel.onSimReadFailed()
         }
@@ -106,16 +111,37 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
             }
             .addOnFailureListener { viewModel.onSimReadFailed() }
     }
+    // §774 — after the permission prompt, read silently and verify, else drop to Hint.
+    val simPermLauncher = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        val nums = if (granted.values.any { it }) SimNumberReader.readSimNumbers(context) else emptyList()
+        if (nums.isNotEmpty()) viewModel.verifyPhoneWithSim(nums, silent = true)
+        else launchSimHint()
+    }
+    // §774 — whatever SIM number(s) we can read silently right now (empty if the
+    // permission isn't granted or the carrier hides the number).
+    fun currentSimNumbers(): List<String> =
+        if (SimNumberReader.hasPermission(context)) SimNumberReader.readSimNumbers(context) else emptyList()
+    // §774 — try the silent SIM read first; fall back to the one-tap Hint chooser.
+    fun autoVerifySim() {
+        val nums = currentSimNumbers()
+        when {
+            nums.isNotEmpty() -> viewModel.verifyPhoneWithSim(nums, silent = true)
+            !SimNumberReader.hasPermission(context) -> simPermLauncher.launch(SimNumberReader.PERMISSIONS)
+            else -> launchSimHint()   // permission granted but carrier hides the number
+        }
+    }
 
-    // §773 — auto-present the one-tap SIM chooser the moment the user lands on the SIM
-    // step (no manual "Verify" tap). It fires once per phone-step entry; if the user
-    // dismisses it, they can re-tap "Verify with my SIM" or "Skip — verify later".
+    // §773/§774 — the moment the user lands on the SIM step, auto-run verification
+    // (silent first, Hint fallback) with no manual tap. Fires once per phone-step entry;
+    // if it can't prove the SIM, the user can re-tap "Verify with my SIM" or "Skip".
     LaunchedEffect(viewModel.regStep, viewModel.regPhoneMode) {
         if (viewModel.regStep == "phone" && viewModel.regPhoneMode == "sim" &&
             !viewModel.simAutoLaunched
         ) {
             viewModel.simAutoLaunched = true
-            launchSimHint()
+            autoVerifySim()
         }
     }
 
@@ -536,9 +562,9 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                                 )
                             }
 
-                            // ===== REGISTER — STEP 2b: SIM auto-verify (one-tap, no OTP) =====
+                            // ===== REGISTER — STEP 2b: SIM auto-verify (silent / one-tap, no OTP) =====
                             viewModel.regPhoneMode == "sim" -> {
-                                // §770 — explain WHY we're doing a one-time SIM check.
+                                // §774 — explain the one-time SIM check (runs automatically).
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()
@@ -562,9 +588,10 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                                         }
                                         Spacer(Modifier.height(6.dp))
                                         Text(
-                                            text = "We'll pop up your SIM number — just pick +91 $regPhone. This " +
-                                                "checks the number's SIM is in this phone — a one-time confirmation " +
-                                                "the number is really yours. No OTP needed.",
+                                            text = "We automatically check that the SIM for +91 $regPhone is in " +
+                                                "this phone — a one-time confirmation the number is really yours. " +
+                                                "No OTP needed. If we can't read it automatically, tap below to " +
+                                                "pick your number.",
                                             style = MaterialTheme.typography.bodySmall,
                                             color = MaterialTheme.colorScheme.onSurfaceVariant,
                                         )
@@ -576,15 +603,18 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                                     text = "Verify with my SIM",
                                     busy = viewModel.authBusy,
                                     enabled = !viewModel.authBusy,
+                                    // §774 — the silent read already ran on entry; an explicit
+                                    // tap opens the interactive picker so the result is visible.
                                     onClick = { launchSimHint() },
                                     testTag = "reg_sim_verify",
                                 )
-                                // §773 — never a dead-end: if the SIM can't auto-verify and
-                                // there's no OTP provider, finish now and verify later.
+                                // §773/§774 — never a dead-end: if the SIM can't auto-verify and
+                                // there's no OTP provider, finish now and verify later — but take
+                                // one last silent SIM shot first (pass whatever we can read now).
                                 if (viewModel.regPhoneDeferAllowed) {
                                     Spacer(Modifier.height(6.dp))
                                     OutlinedButton(
-                                        onClick = { viewModel.deferPhoneVerification() },
+                                        onClick = { viewModel.deferPhoneVerification(currentSimNumbers()) },
                                         enabled = !viewModel.authBusy,
                                         border = BorderStroke(1.5.dp, VedaDropRose),
                                         shape = RoundedCornerShape(12.dp),
@@ -660,11 +690,11 @@ fun VedaDropLoginScreen(viewModel: VedaDropViewModel) {
                                         modifier = Modifier.fillMaxWidth(),
                                     ) { Text("Use one-tap SIM verification instead") }
                                 }
-                                // §773 — escape hatch when there's no working OTP provider:
-                                // finish now and verify the number later.
+                                // §773/§774 — escape hatch when there's no working OTP provider:
+                                // finish now and verify later (after one last silent SIM shot).
                                 if (viewModel.regPhoneDeferAllowed) {
                                     TextButton(
-                                        onClick = { viewModel.deferPhoneVerification() },
+                                        onClick = { viewModel.deferPhoneVerification(currentSimNumbers()) },
                                         enabled = !viewModel.authBusy,
                                         modifier = Modifier.fillMaxWidth(),
                                     ) { Text("Skip — verify later", fontWeight = FontWeight.SemiBold, color = VedaDropRose) }
