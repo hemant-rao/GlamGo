@@ -1050,9 +1050,7 @@ fun MyBookingsScreen(viewModel: VedaDropViewModel) {
                     .padding(horizontal = 16.dp, vertical = 8.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
-                // §756 — config-driven banner ad at the top of the bookings list
-                // (renders nothing unless the admin enabled the "booking_list" placement).
-                item { com.example.ui.ads.VedaDropBannerAd("booking_list", viewModel) }
+                // §778 — Veda Drop is intentionally AD-FREE (founder directive).
                 items(scheduleRows, key = { it.second.id }) { (dayHdr, booking) ->
                     // §13 — date separator: a header before the first booking of each day.
                     if (dayHdr != null) {

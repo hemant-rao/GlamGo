@@ -1154,9 +1154,8 @@ fun CustomerHomeScreen(viewModel: VedaDropViewModel) {
                     color = vedaTextSecondary
                 )
 
-                // §756 — config-driven banner ad (shows only when the admin enabled
-                // ads for this role + the "home" placement; otherwise renders nothing).
-                com.example.ui.ads.VedaDropBannerAd("home", viewModel)
+                // §778 — Veda Drop is intentionally AD-FREE (founder directive). The
+                // ads code was removed; the OdioBook utility apps carry ads instead.
 
                 Spacer(modifier = Modifier.height(14.dp))
 
@@ -3624,8 +3623,7 @@ fun ServiceDetailScreen(viewModel: VedaDropViewModel, service: Service) {
             Text("SERVICE DESCRIPTION", fontWeight = FontWeight.Bold, color = VedaDropRose, letterSpacing = 1.sp)
             Text(service.description, fontSize = 14.sp, color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.8f))
 
-            // §756 — config-driven banner ad (only when admin enabled the "service_detail" placement).
-            com.example.ui.ads.VedaDropBannerAd("service_detail", viewModel)
+            // §778 — Veda Drop is intentionally AD-FREE (founder directive).
 
             Spacer(modifier = Modifier.height(24.dp))
 

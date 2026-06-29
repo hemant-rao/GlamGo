@@ -112,11 +112,8 @@ dependencies {
   implementation(libs.moshi.kotlin)
   implementation(libs.okhttp)
   implementation(libs.play.services.location)  // §687 — FusedLocationProviderClient (device GPS)
-  // §756 — Google AdMob (Mobile Ads SDK). Ads are admin-configured + role-gated via
-  // /config.ads and fail silently when unconfigured, so this is inert until the founder
-  // pastes real ids in the Veda Drop admin. Direct coordinate (like Razorpay above) to
-  // avoid a version-catalog edit; bump the version if Gradle can't resolve it.
-  implementation("com.google.android.gms:play-services-ads:23.6.0")
+  // §778 — AdMob removed: Veda Drop is intentionally AD-FREE (founder directive).
+  // Ads live only in the OdioBook utility apps (Early Rover / Dig Deep / Xello Mind).
   // §770 — Phone Number Hint API (one-tap SIM-number chooser, NO permission). Used for
   // first-time, OTP-free phone verification: confirms the number being registered is the
   // SIM physically in this device. Direct coordinate (like the ads/Razorpay lines above)
