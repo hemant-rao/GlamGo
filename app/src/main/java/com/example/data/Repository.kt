@@ -884,6 +884,21 @@ class VedaDropRepository(context: Context) {
     // degrade gracefully — the backend guards on lat/lon presence). Pre-§687 this
     // hardcoded a Bangalore coordinate for EVERY address (the location bug).
     suspend fun addAddress(label: String, line1: String, line2: String, city: String, pincode: String, lat: Double? = null, lon: Double? = null) {
+        if (!isAuthenticated()) {
+            val localAddr = AddressEntity(
+                id = System.currentTimeMillis(),
+                labelText = label,
+                line1 = line1,
+                line2 = line2,
+                city = city,
+                pincode = pincode,
+                lat = lat ?: 0.0,
+                lon = lon ?: 0.0,
+                isDefault = true
+            )
+            _addresses.value = listOf(localAddr)
+            return
+        }
         api.addAddress(AddressCreateReq(label, line1, line2.ifBlank { null }, city, pincode, lat, lon, _addresses.value.isEmpty()))
         refreshAddresses()
     }
@@ -895,6 +910,21 @@ class VedaDropRepository(context: Context) {
      *  is_default=true, then PATCH is_default again so the backend clears any
      *  sibling default. */
     suspend fun addAndSelectAddress(label: String, line1: String, line2: String, city: String, pincode: String, lat: Double? = null, lon: Double? = null) {
+        if (!isAuthenticated()) {
+            val localAddr = AddressEntity(
+                id = System.currentTimeMillis(),
+                labelText = label,
+                line1 = line1,
+                line2 = line2,
+                city = city,
+                pincode = pincode,
+                lat = lat ?: 0.0,
+                lon = lon ?: 0.0,
+                isDefault = true
+            )
+            _addresses.value = listOf(localAddr)
+            return
+        }
         val created = api.addAddress(AddressCreateReq(label, line1, line2.ifBlank { null }, city, pincode, lat, lon, true))
         val cid = created.id
         if (cid != null) {
@@ -1436,7 +1466,7 @@ class VedaDropRepository(context: Context) {
     suspend fun loadPartnerExperts(partnerId: String): List<Expert> {
         val pid = partnerId.toIntOrNull() ?: return emptyList()
         return runCatching { api.partnerExperts(pid).items.map { Mappers.expert(it) } }
-            .getOrDefault(emptyList())
+            .getOrDefault(emptyList<Expert>())
     }
 
     /** §743 — chat-after-booking gate: may this customer chat with this partner? */

@@ -895,6 +895,10 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
             runCatching { repository.addAndSelectAddress(label, line1, line2, city, pincode, lat, lon) }
                 .onSuccess {
                     notify("Location set"); onDone()
+                    if (lat != null && lon != null) {
+                        _deviceLocation.value = lat to lon
+                        runCatching { repository.hydrateCatalog(lat, lon) }
+                    }
                     // §731 — remember the chosen location so the picker can offer it again next time.
                     if (lat != null && lon != null) {
                         rememberRecentLocation(PickedLocation(
@@ -1291,6 +1295,9 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
             // §702 — populate the partner KYC rejection reason (Mapper never sets it).
             if (role == "partner") loadPartnerKyc()
             loadNotifications()
+        } else {
+            // Guest mode initialization: load catalog anyway so they can browse!
+            viewModelScope.launch { runCatching { repository.hydrateCatalog() } }
         }
         // §731 — load the saved recent-location history for the picker.
         loadRecentLocations()
@@ -1921,24 +1928,47 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
     /** §708 — pull-to-refresh dispatcher: re-fetch whatever the given screen shows.
      *  Always refreshes the profile too (cheap, keeps kyc/name in sync). */
     fun refreshForScreen(screen: Screen) {
-        refreshProfile()
+        if (isLoggedIn) {
+            refreshProfile()
+        }
         when (screen) {
-            is Screen.CustomerHome -> { loadAppConfig(); refreshActiveBookings(); viewModelScope.launch { repository.refreshFavorites() } }
-            is Screen.MyBookings -> refreshActiveBookings()
-            is Screen.BookingDetail -> loadBookingDetail(screen.bookingId)
-            is Screen.Notifications -> loadNotifications()
-            is Screen.Favourites -> viewModelScope.launch { repository.refreshFavorites() }
-            is Screen.Cart -> viewModelScope.launch { repository.refreshCart() }
-            is Screen.ComplaintsList -> refreshComplaints()
-            is Screen.PartnerDashboard -> { loadOffers(); loadNotifications(); refreshActiveBookings() }
-            is Screen.PartnerOffers -> loadOffers()
-            is Screen.PartnerServices -> viewModelScope.launch { repository.loadPartnerCatalog(); repository.refreshPartnerServices() }
-            is Screen.PartnerEarnings -> loadEarnings()
-            is Screen.PartnerAnalytics -> loadAnalytics()
-            is Screen.PartnerPortfolio -> loadPortfolio()
-            is Screen.PartnerKyc -> loadPartnerKyc()
-            is Screen.PartnerBusinessLocation -> loadPartnerLocation()
-            is Screen.VerificationCenter -> loadVerification()
+            is Screen.CustomerHome -> {
+                loadAppConfig()
+                if (isLoggedIn) {
+                    refreshActiveBookings()
+                    viewModelScope.launch { runCatching { repository.refreshFavorites() } }
+                } else {
+                    viewModelScope.launch {
+                        val loc = _deviceLocation.value
+                        runCatching { repository.hydrateCatalog(loc?.first, loc?.second) }
+                    }
+                }
+            }
+            is Screen.MyBookings -> if (isLoggedIn) refreshActiveBookings()
+            is Screen.BookingDetail -> if (isLoggedIn) loadBookingDetail(screen.bookingId)
+            is Screen.Notifications -> if (isLoggedIn) loadNotifications()
+            is Screen.Favourites -> if (isLoggedIn) viewModelScope.launch { runCatching { repository.refreshFavorites() } }
+            is Screen.Cart -> if (isLoggedIn) viewModelScope.launch { runCatching { repository.refreshCart() } }
+            is Screen.ComplaintsList -> if (isLoggedIn) refreshComplaints()
+            is Screen.PartnerDashboard -> {
+                if (isLoggedIn) {
+                    loadOffers()
+                    loadNotifications()
+                    refreshActiveBookings()
+                }
+            }
+            is Screen.PartnerOffers -> if (isLoggedIn) loadOffers()
+            is Screen.PartnerServices -> {
+                if (isLoggedIn) {
+                    viewModelScope.launch { repository.loadPartnerCatalog(); repository.refreshPartnerServices() }
+                }
+            }
+            is Screen.PartnerEarnings -> if (isLoggedIn) loadEarnings()
+            is Screen.PartnerAnalytics -> if (isLoggedIn) loadAnalytics()
+            is Screen.PartnerPortfolio -> if (isLoggedIn) loadPortfolio()
+            is Screen.PartnerKyc -> if (isLoggedIn) loadPartnerKyc()
+            is Screen.PartnerBusinessLocation -> if (isLoggedIn) loadPartnerLocation()
+            is Screen.VerificationCenter -> if (isLoggedIn) loadVerification()
             else -> {}
         }
     }

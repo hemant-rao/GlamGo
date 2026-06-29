@@ -5,6 +5,7 @@ import com.example.data.BookingEntity
 import com.example.data.Category
 import com.example.data.ChatMessageEntity
 import com.example.data.ComplaintEntity
+import com.example.data.Expert
 import com.example.data.Partner
 import com.example.data.Service
 import com.example.data.UserEntity
