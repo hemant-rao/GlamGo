@@ -61,6 +61,12 @@ object ApiErrors {
                 return "This professional doesn't serve your area. Try another expert, or update your location."
             "LOCATION_REQUIRED" ->
                 return "Please set your location first so we can match you with nearby professionals."
+            // §801 — partner business-location lock while bookings are active.
+            "LOCATION_LOCKED" ->
+                return "Complete your active bookings before changing your location."
+            // §801 — one-shot rating: a duplicate review/rate-customer submit.
+            "ALREADY_RATED" ->
+                return "You have already rated this booking."
         }
 
         // Otherwise prefer the server's own message.

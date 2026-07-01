@@ -444,6 +444,14 @@ data class PartnerLocationDto(
     @Json(name = "radius_km") val radiusKm: Double? = null,
     @Json(name = "radius_max_km") val radiusMaxKm: Double = 10.0,
     @Json(name = "has_location") val hasLocation: Boolean = false,
+    // §801 — nearest-landmark label resolved server-side ("Near <landmark>" line),
+    // plus the location LOCK: while the partner has active bookings the backend
+    // refuses a location change (PUT → 409 LOCATION_LOCKED) so a booked customer's
+    // distance/geofence math can't be invalidated mid-job. Defaults keep older
+    // payloads parsing unchanged.
+    val landmark: String? = null,
+    val locked: Boolean = false,
+    @Json(name = "active_bookings") val activeBookings: Int = 0,
 )
 
 @JsonClass(generateAdapter = true)
@@ -747,6 +755,11 @@ data class BookingDto(
     // §722 req-2 — distance (km) from the partner's base location to the customer's
     // service location, computed server-side for the partner/admin viewer.
     @Json(name = "distance_km") val distanceKm: Double? = null,
+    // §801 — one-shot rating flags (server-authoritative): customer_reviewed mirrors
+    // `reviewed` and partner_rated_customer mirrors `customer_rated` on newer backends;
+    // both nullable so an older payload falls back to the legacy flags cleanly.
+    @Json(name = "customer_reviewed") val customerReviewed: Boolean? = null,
+    @Json(name = "partner_rated_customer") val partnerRatedCustomer: Boolean? = null,
     // §723 dual rating — the partner's rating OF the customer (detail view): hides the
     // "rate customer" prompt after submit + shows the customer the rating she received.
     @Json(name = "customer_rated") val customerRated: Boolean = false,
@@ -955,6 +968,40 @@ data class ReviewDto(
 
 @JsonClass(generateAdapter = true)
 data class ReviewsResp(val items: List<ReviewDto> = emptyList())
+
+// ── §801 Partner "My Reviews & Ratings" (GET partner/reviews) ─────────────────
+// summary = the aggregate the partner-profile header shows (avg + count + a
+// per-star distribution for the histogram); reviews = the full list, newest first.
+@JsonClass(generateAdapter = true)
+data class RatingBucketDto(
+    val stars: Double = 0.0,
+    val count: Int = 0,
+)
+
+@JsonClass(generateAdapter = true)
+data class PartnerReviewsSummaryDto(
+    @Json(name = "rating_avg") val ratingAvg: Double = 0.0,
+    @Json(name = "rating_count") val ratingCount: Int = 0,
+    val distribution: List<RatingBucketDto> = emptyList(),
+)
+
+@JsonClass(generateAdapter = true)
+data class PartnerMyReviewDto(
+    val id: Int,
+    val rating: Double = 0.0,
+    val comment: String? = null,
+    @Json(name = "reviewer_name") val reviewerName: String? = null,
+    @Json(name = "service_names") val serviceNames: List<String>? = null,
+    @Json(name = "created_at") val createdAt: String? = null,
+    // §747 — optional structured per-axis ratings (skill/hygiene/products).
+    val axes: ReviewAxesDto? = null,
+)
+
+@JsonClass(generateAdapter = true)
+data class PartnerMyReviewsResp(
+    val summary: PartnerReviewsSummaryDto? = null,
+    val reviews: List<PartnerMyReviewDto> = emptyList(),
+)
 
 @JsonClass(generateAdapter = true)
 data class ComplaintReq(

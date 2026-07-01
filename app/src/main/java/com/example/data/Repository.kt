@@ -553,6 +553,11 @@ class VedaDropRepository(context: Context) {
             runCatching { api.partnerReviews(partnerId.toInt()).items }.getOrDefault(emptyList())
     }
 
+    /** §801 — the signed-in partner's OWN reviews & ratings (summary + list).
+     *  Null on failure; the screen shows a "couldn't load" empty state. */
+    suspend fun getMyReviews(): com.example.data.remote.PartnerMyReviewsResp? =
+        runCatching { api.partnerMyReviews() }.getOrNull()
+
     /** §714 cust-catalog-1 — full service detail (inclusions/faqs the catalog list omits). */
     suspend fun fetchServiceDetail(id: Int): Service? =
         runCatching { Mappers.service(api.service(id)) }.getOrNull()

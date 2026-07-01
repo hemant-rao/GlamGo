@@ -98,6 +98,10 @@ data class BookingEntity(
     // §723 dual rating — has the partner rated this customer yet, and the rating given.
     val customerRated: Boolean = false,
     val customerRating: Int = 0,
+    // §801 — one-shot rating flags (server-authoritative; newer backends). Once true
+    // the corresponding rating form is never composed again for this booking.
+    val customerReviewed: Boolean = false,
+    val partnerRatedCustomer: Boolean = false,
     // §728 (parity C1) — TRANSPARENCY. The server-built lifecycle timeline encoded as
     // one "status|iso8601" line per entry ("" = that state not yet reached); decoded by
     // the booking-detail vertical stepper. Stored as a plain String so Room needs no

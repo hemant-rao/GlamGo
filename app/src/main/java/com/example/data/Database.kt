@@ -21,7 +21,7 @@ import kotlinx.coroutines.launch
         ComplaintEntity::class,
         FavoritePartnerEntity::class
     ],
-    version = 16, // §747 — PartnerServiceEntity gained hygieneNote/productHygiene (destructive-migrated; cache only)
+    version = 17, // §801 — BookingEntity gained customerReviewed/partnerRatedCustomer (destructive-migrated; cache only)
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {

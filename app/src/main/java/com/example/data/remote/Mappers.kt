@@ -218,6 +218,10 @@ object Mappers {
         // §723 dual rating — the partner's rating of the customer.
         customerRated = d.customerRated,
         customerRating = d.customerRating ?: 0,
+        // §801 — one-shot rating flags; fall back to the legacy flags (reviewed /
+        // customer_rated) when an older backend omits the new fields.
+        customerReviewed = d.customerReviewed ?: d.reviewed,
+        partnerRatedCustomer = d.partnerRatedCustomer ?: d.customerRated,
         // §728 (parity C1) — encode the server timeline as "status|iso8601" lines for
         // the vertical stepper. `at` may be null (state not reached) → empty after the
         // pipe. A "\n" separator can't collide with a status name or an ISO instant.

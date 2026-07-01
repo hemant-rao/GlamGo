@@ -1184,7 +1184,9 @@ fun MyBookingsScreen(viewModel: VedaDropViewModel) {
                                     horizontalArrangement = Arrangement.spacedBy(8.dp)
                                 ) {
                                     // Submit verified star review direct prompt (Customer, completed, unreviewed)
-                                    if (!isPartner && booking.status == "completed" && booking.reviewRating == 0) {
+                                    // §801 — one-shot: the server customer_reviewed flag also hides it.
+                                    if (!isPartner && booking.status == "completed" &&
+                                        booking.reviewRating == 0 && !booking.customerReviewed) {
                                         Button(
                                             onClick = {
                                                 selectedBookingId = booking.id
@@ -1368,7 +1370,11 @@ fun PartnerProfileScreen(viewModel: VedaDropViewModel) {
                 }
                 Text(
                     "Rating ${activeUser?.averageRating ?: 0f}  ·  ${activeUser?.completedJobs ?: 0} jobs done",
-                    color = VedaDropRose, fontSize = 13.sp
+                    color = VedaDropRose, fontSize = 13.sp,
+                    // §801 — the rating is a live entry point into "My Reviews & Ratings".
+                    modifier = Modifier
+                        .clickable { viewModel.currentScreen = Screen.PartnerMyReviews }
+                        .testTag("partner_rating_link")
                 )
                 Spacer(modifier = Modifier.height(8.dp))
                 // §707 — make the role explicit + show this partner's bookable ID
@@ -1481,6 +1487,15 @@ fun PartnerProfileScreen(viewModel: VedaDropViewModel) {
                             // KYC-verified location, with a Verified marker once approved.
                             val addr = (loc.address ?: "").ifBlank { "Saved location" }
                             Text(addr, fontSize = 12.sp, color = Color.Gray, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            // §801 — nearest landmark, resolved server-side.
+                            val landmark = loc.landmark ?: ""
+                            if (landmark.isNotBlank()) {
+                                Text(
+                                    "📍 Near $landmark",
+                                    fontSize = 11.sp, color = VedaDropRose, fontWeight = FontWeight.Medium,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                             Row(verticalAlignment = Alignment.CenterVertically) {
                                 if (kycApproved) {
                                     Icon(Icons.Default.Verified, contentDescription = null, tint = SuccessGreen, modifier = Modifier.size(12.dp))
@@ -1554,6 +1569,25 @@ fun PartnerProfileScreen(viewModel: VedaDropViewModel) {
                         Text("Ratings, accept rate & booking funnel", fontSize = 12.sp, color = Color.Gray)
                     }
                     TextButton(onClick = { viewModel.currentScreen = Screen.PartnerAnalytics }) {
+                        Text("View", color = VedaDropRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                    }
+                }
+            }
+
+            // §801 — the partner's own "My Reviews & Ratings" page (summary +
+            // histogram + every customer review), off the Business hub.
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                modifier = Modifier.clickable { viewModel.currentScreen = Screen.PartnerMyReviews },
+            ) {
+                Row(modifier = Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropRose)
+                    Spacer(modifier = Modifier.width(12.dp))
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Reviews & ratings", fontWeight = FontWeight.Bold)
+                        Text("What your clients say about you", fontSize = 12.sp, color = Color.Gray)
+                    }
+                    TextButton(onClick = { viewModel.currentScreen = Screen.PartnerMyReviews }) {
                         Text("View", color = VedaDropRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
                     }
                 }
@@ -2079,6 +2113,178 @@ fun NotificationsScreen(viewModel: VedaDropViewModel) {
                                         notificationTimeShort(createdAt),
                                         fontSize = 11.sp,
                                         color = vedaTextSecondary.copy(alpha = 0.55f)
+                                    )
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
+// ---------------- §801 PARTNER "MY REVIEWS & RATINGS" ----------------
+
+/** The partner's OWN reviews page: a summary card (big average + star row +
+ *  count), a market-standard per-star distribution histogram, then every review
+ *  (reviewer, stars, date, comment, service chips). Compact density matching the
+ *  bookings-list cards. Data: GET partner/reviews via [VedaDropViewModel.myReviews]. */
+@Composable
+fun PartnerMyReviewsScreen(viewModel: VedaDropViewModel) {
+    val data by viewModel.myReviews.collectAsState()
+    LaunchedEffect(Unit) { viewModel.loadMyReviews() }
+
+    if (data == null) {
+        Column(
+            modifier = Modifier.fillMaxSize().padding(32.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.Center
+        ) {
+            if (viewModel.myReviewsLoading) {
+                CircularProgressIndicator(color = VedaDropRose)
+            } else {
+                Icon(Icons.Default.Star, contentDescription = null, modifier = Modifier.size(64.dp), tint = Color.Gray)
+                Spacer(modifier = Modifier.height(12.dp))
+                Text("Couldn't load your reviews", fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
+                TextButton(onClick = { viewModel.loadMyReviews() }) {
+                    Text("Retry", color = VedaDropRose, maxLines = 1, overflow = TextOverflow.Ellipsis, softWrap = false)
+                }
+            }
+        }
+        return
+    }
+
+    val summary = data?.summary
+    val reviews = data?.reviews ?: emptyList()
+    val avg = summary?.ratingAvg ?: 0.0
+    val count = summary?.ratingCount ?: reviews.size
+
+    LazyColumn(
+        modifier = Modifier.fillMaxSize().padding(horizontal = 16.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        item {
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, VedaDropRose.copy(alpha = 0.25f)),
+            ) {
+                Row(modifier = Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    // Big average + star row + count.
+                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                        Text(
+                            "%.1f".format(avg),
+                            fontSize = 34.sp, fontWeight = FontWeight.Bold, color = vedaTextPrimary,
+                        )
+                        Row {
+                            repeat(5) { i ->
+                                Icon(
+                                    Icons.Default.Star, contentDescription = null,
+                                    tint = if (i < kotlin.math.round(avg).toInt()) VedaDropGold else Color.Gray.copy(alpha = 0.35f),
+                                    modifier = Modifier.size(15.dp)
+                                )
+                            }
+                        }
+                        Text(
+                            "$count review${if (count == 1) "" else "s"}",
+                            fontSize = 12.sp, color = Color.Gray,
+                        )
+                    }
+                    Spacer(modifier = Modifier.width(16.dp))
+                    // Distribution histogram, one row per star bucket, high → low.
+                    val buckets = (summary?.distribution ?: emptyList())
+                        .sortedByDescending { it.stars }
+                    val maxCount = buckets.maxOfOrNull { it.count } ?: 0
+                    Column(modifier = Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        buckets.forEach { b ->
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    "${b.stars.toInt()}★",
+                                    fontSize = 11.sp, color = Color.Gray, fontWeight = FontWeight.Medium,
+                                    modifier = Modifier.width(26.dp),
+                                )
+                                LinearProgressIndicator(
+                                    progress = { if (maxCount > 0) b.count / maxCount.toFloat() else 0f },
+                                    color = VedaDropGold,
+                                    trackColor = Color.Gray.copy(alpha = 0.18f),
+                                    modifier = Modifier.weight(1f).height(6.dp),
+                                )
+                                Text(
+                                    "${b.count}",
+                                    fontSize = 11.sp, color = Color.Gray,
+                                    modifier = Modifier.padding(start = 6.dp).width(28.dp),
+                                )
+                            }
+                        }
+                        if (buckets.isEmpty()) {
+                            Text("No ratings yet", fontSize = 12.sp, color = Color.Gray)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (reviews.isEmpty()) {
+            item {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(vertical = 40.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally
+                ) {
+                    Icon(Icons.Default.StarBorder, contentDescription = null, modifier = Modifier.size(56.dp), tint = Color.Gray)
+                    Spacer(modifier = Modifier.height(10.dp))
+                    Text("No reviews yet", fontWeight = FontWeight.Bold)
+                    Text(
+                        "Complete jobs and your client reviews will appear here.",
+                        fontSize = 12.sp, color = Color.Gray, textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        }
+
+        items(reviews, key = { it.id }) { r ->
+            Card(
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                border = BorderStroke(1.dp, Color.Gray.copy(alpha = 0.12f)),
+            ) {
+                Column(modifier = Modifier.padding(13.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(
+                            (r.reviewerName ?: "").ifBlank { "Customer" },
+                            fontWeight = FontWeight.SemiBold, fontSize = 14.sp,
+                            maxLines = 1, overflow = TextOverflow.Ellipsis,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text((r.createdAt ?: "").take(10), fontSize = 11.sp, color = Color.Gray)
+                    }
+                    Row {
+                        val full = kotlin.math.round(r.rating).toInt()
+                        repeat(5) { i ->
+                            Icon(
+                                Icons.Default.Star, contentDescription = null,
+                                tint = if (i < full) VedaDropGold else Color.Gray.copy(alpha = 0.35f),
+                                modifier = Modifier.size(14.dp)
+                            )
+                        }
+                    }
+                    if (!r.comment.isNullOrBlank()) {
+                        Text(r.comment ?: "", fontSize = 13.sp, color = vedaTextPrimary)
+                    }
+                    val services = r.serviceNames ?: emptyList()
+                    if (services.isNotEmpty()) {
+                        Row(
+                            modifier = Modifier.horizontalScroll(rememberScrollState()),
+                            horizontalArrangement = Arrangement.spacedBy(6.dp),
+                        ) {
+                            services.forEach { s ->
+                                Surface(
+                                    color = VedaDropRose.copy(alpha = 0.10f),
+                                    shape = RoundedCornerShape(10.dp),
+                                ) {
+                                    Text(
+                                        s, fontSize = 11.sp, color = VedaDropRose, fontWeight = FontWeight.Medium,
+                                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 3.dp),
+                                        maxLines = 1,
                                     )
                                 }
                             }

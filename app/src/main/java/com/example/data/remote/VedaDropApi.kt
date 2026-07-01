@@ -324,8 +324,14 @@ interface VedaDropApi {
     @PATCH("partner/profile")
     suspend fun updatePartnerProfile(@Body body: Map<String, @JvmSuppressWildcards Any?>): PartnerDto
 
+    // §801 — the partner's OWN reviews & ratings page (summary + full list).
+    @GET("partner/reviews")
+    suspend fun partnerMyReviews(): PartnerMyReviewsResp
+
     // §713 — partner business location (service-area geofence). The PUT body's
     // radius_km is clamped server-side to ≤ radius_max_km (10km).
+    // §801 — the response also carries landmark/locked/active_bookings; a PUT while
+    // bookings are active returns 409 LOCATION_LOCKED.
     @GET("partner/location")
     suspend fun getPartnerLocation(): PartnerLocationDto
 

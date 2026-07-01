@@ -58,6 +58,10 @@ sealed class Screen {
     // Business hub). Keeps the job page focused on the job loop.
     object PartnerTeam : Screen()
     object PartnerOffers : Screen()   // §691 Rescue Board (claim reassigned jobs)
+    // §801 — the partner's OWN "My Reviews & Ratings" page (summary + histogram +
+    // review list). Distinct from PartnerReviews, the customer-side browse of a
+    // partner's reviews.
+    object PartnerMyReviews : Screen()
 
     // Pre-booking messaging
     data class PreBookingChat(val service: Service, val partner: Partner) : Screen()
@@ -575,6 +579,22 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { runCatching { repository.loadPartnerReviews(partnerId) } }
     }
 
+    // ── §801 Partner "My Reviews & Ratings" (the partner's OWN reviews page) ────
+    private val _myReviews =
+        MutableStateFlow<com.example.data.remote.PartnerMyReviewsResp?>(null)
+    val myReviews: StateFlow<com.example.data.remote.PartnerMyReviewsResp?> =
+        _myReviews.asStateFlow()
+    var myReviewsLoading by mutableStateOf(false)
+        private set
+
+    fun loadMyReviews() {
+        viewModelScope.launch {
+            myReviewsLoading = true
+            _myReviews.value = repository.getMyReviews()
+            myReviewsLoading = false
+        }
+    }
+
     /** §714 cust-catalog-1 — fetch the full service detail (inclusions the list omits)
      *  and hand it back to the detail screen. No-op on a bad id / network failure. */
     fun loadServiceDetail(id: String, onLoaded: (com.example.data.Service) -> Unit) {
@@ -812,7 +832,9 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
             _deviceLocation.value = loc
             runCatching { repository.setPartnerLocation(loc.first, loc.second) }
                 .onSuccess { notify("Business location saved.") }
-                .onFailure { notify("Could not save location. Please try again.", isError = true) }
+                // §801 — friendly() so a 409 LOCATION_LOCKED shows the real reason,
+                // not a generic "could not save".
+                .onFailure { friendly(it) }
         }
     }
 
@@ -1972,6 +1994,7 @@ class VedaDropViewModel(application: Application) : AndroidViewModel(application
             is Screen.PartnerPortfolio -> if (isLoggedIn) loadPortfolio()
             is Screen.PartnerKyc -> if (isLoggedIn) loadPartnerKyc()
             is Screen.PartnerBusinessLocation -> if (isLoggedIn) loadPartnerLocation()
+            is Screen.PartnerMyReviews -> if (isLoggedIn) loadMyReviews()
             is Screen.PartnerTeam -> if (isLoggedIn) loadMyExperts()
             is Screen.VerificationCenter -> if (isLoggedIn) loadVerification()
             else -> {}

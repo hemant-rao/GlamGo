@@ -115,6 +115,7 @@ fun VedaDropTopHeader(
         is Screen.ComplaintsList -> "Help & Complaints"
         is Screen.ComplaintDetail -> "Complaint"
         is Screen.PartnerReviews -> "Reviews"
+        is Screen.PartnerMyReviews -> "My Reviews & Ratings"
         is Screen.PartnerKyc -> "KYC Verification"
         is Screen.PartnerServices -> "Service Management"
         is Screen.PartnerSubscription -> "Premium Membership"
@@ -597,6 +598,7 @@ fun VedaDropMainShell(viewModel: VedaDropViewModel) {
                     is Screen.PartnerAnalytics -> PartnerAnalyticsScreen(viewModel)
                     is Screen.PartnerPortfolio -> PartnerPortfolioScreen(viewModel)
                     is Screen.PartnerTeam -> PartnerTeamScreen(viewModel)
+                    is Screen.PartnerMyReviews -> PartnerMyReviewsScreen(viewModel)
                     is Screen.PartnerOffers -> PartnerOffersScreen(viewModel)
                     is Screen.PreBookingChat -> PreBookingChatScreen(viewModel, screen.service, screen.partner)
                     is Screen.Notifications -> NotificationsScreen(viewModel)
@@ -3211,6 +3213,15 @@ fun PartnerBusinessLocationScreen(viewModel: VedaDropViewModel) {
                                 fontWeight = FontWeight.Medium, fontSize = 14.sp,
                                 maxLines = 2, overflow = TextOverflow.Ellipsis
                             )
+                            // §801 — nearest landmark, resolved server-side.
+                            val landmark = saved?.landmark ?: ""
+                            if (landmark.isNotBlank()) {
+                                Text(
+                                    "📍 Near $landmark",
+                                    fontSize = 12.sp, color = VedaDropRose, fontWeight = FontWeight.Medium,
+                                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                                )
+                            }
                         } else {
                             Text("Not set yet", fontWeight = FontWeight.Medium, fontSize = 14.sp, color = OrderOrange)
                         }
@@ -3221,11 +3232,33 @@ fun PartnerBusinessLocationScreen(viewModel: VedaDropViewModel) {
                 }
             }
 
+            // §801 — LOCATION LOCK: while the partner has active bookings the backend
+            // refuses a location change (409 LOCATION_LOCKED), so disable the entry
+            // point and explain why. The radius slider below stays usable.
+            val locationLocked = saved?.locked == true
+            if (locationLocked) {
+                val n = (saved?.activeBookings ?: 0).coerceAtLeast(1)
+                Card(
+                    colors = CardDefaults.cardColors(containerColor = OrderOrange.copy(alpha = 0.10f)),
+                    border = BorderStroke(1.dp, OrderOrange.copy(alpha = 0.4f)),
+                ) {
+                    Row(modifier = Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Warning, contentDescription = null, tint = OrderOrange, modifier = Modifier.size(18.dp))
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text(
+                            "You have $n active booking${if (n == 1) "" else "s"}. Complete them to change your location.",
+                            fontSize = 12.sp, color = vedaTextPrimary,
+                        )
+                    }
+                }
+            }
+
             // §725 — open the ONE shared ride-app location picker (full-screen, input
             // pinned to the top, "use current location" + search-as-you-type). On pick
             // it saves the business location with the current radius.
             Button(
                 onClick = { showPicker = true },
+                enabled = !locationLocked,   // §801 — locked while bookings are active
                 modifier = Modifier.fillMaxWidth().testTag("partner_set_location_btn"),
                 colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
             ) {
@@ -5147,7 +5180,10 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
     val trackPartner by viewModel.trackPartner.collectAsState()
     val trackRoute by viewModel.trackRoute.collectAsState()
     val trackEta by viewModel.trackEta.collectAsState()
-    val trackableStates = remember { setOf("accepted", "assigned", "partner_on_the_way", "arrived", "started") }
+    // §801 — navigation/tracking ends the moment the job STARTS: the partner is
+    // already with the customer, so the live map + navigate affordances are
+    // pointless (founder directive). "started" is intentionally NOT trackable.
+    val trackableStates = remember { setOf("accepted", "assigned", "partner_on_the_way", "arrived") }
     val isTrackable = booking?.status in trackableStates
     // Open the tracking socket only while the job is in a trackable state; close on
     // leaving the screen or the state changing.
@@ -5204,6 +5240,9 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
     var hygieneRating by remember { mutableStateOf(5) }
     var skillRating by remember { mutableStateOf(5) }
     var authenticityRating by remember { mutableStateOf(5) }
+    // §801 — one-shot review: hide the customer review form the INSTANT it is
+    // submitted (optimistic), before the server `customer_reviewed` flag round-trips.
+    var reviewSubmittedLocal by remember(bookingId) { mutableStateOf(false) }
 
     if (booking == null) {
         // §709 — a deep-link (notification tap) may land here before the booking
@@ -5447,7 +5486,11 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                                 Text("${"%.1f".format(d)} km from you", fontSize = 12.sp, color = VedaDropRose, fontWeight = FontWeight.Medium)
                             }
                         }
-                        if (addressRevealed && booking.addressLat != null && booking.addressLon != null) {
+                        // §801 — "Navigate" only while she still has somewhere to GO
+                        // (accepted → arrived). Once the job is started/completed/
+                        // cancelled the partner is (or was) already there — hide it.
+                        if (addressRevealed && booking.status in trackableStates &&
+                            booking.addressLat != null && booking.addressLon != null) {
                             val navCtx = LocalContext.current
                             Spacer(modifier = Modifier.height(8.dp))
                             OutlinedButton(
@@ -6081,15 +6124,26 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                         // booking refresh, and clear the typed note so the same feedback
                         // can't be re-submitted. Falls back to the live server flag.
                         var custSubmitted by remember(booking.id) { mutableStateOf(false) }
-                        if (booking.customerRated || custSubmitted) {
-                            val shownStars = if (booking.customerRated) booking.customerRating else custRating
+                        // §801 — one-shot: the server's partner_rated_customer flag also
+                        // suppresses the form (older backends fall back to customerRated).
+                        if (booking.customerRated || booking.partnerRatedCustomer || custSubmitted) {
+                            // §801 — only claim a star value we actually know: the server
+                            // rating, or the one just picked in this session. A flag-only
+                            // payload (partner_rated_customer with no rating) shows no stars.
+                            val shownStars = when {
+                                booking.customerRating > 0 -> booking.customerRating
+                                custSubmitted -> custRating
+                                else -> 0
+                            }
                             Card {
                                 Column(modifier = Modifier.padding(16.dp)) {
                                     Text("You rated this customer", fontWeight = FontWeight.Bold, color = VedaDropRose)
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropGold)
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text("$shownStars/5 Stars", fontWeight = FontWeight.Bold)
+                                    if (shownStars > 0) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropGold)
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Text("$shownStars/5 Stars", fontWeight = FontWeight.Bold)
+                                        }
                                     }
                                 }
                             }
@@ -6134,7 +6188,10 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                     }
 
                     // REVENUE REVIEWS BOX (customer rates the partner — customer view only)
-                    if (!isPartnerView && booking.status == "completed" && booking.reviewRating == 0) {
+                    // §801 — one-shot: never compose the form once the server says
+                    // customer_reviewed (or right after a local submit, optimistically).
+                    if (!isPartnerView && booking.status == "completed" && booking.reviewRating == 0 &&
+                        !booking.customerReviewed && !reviewSubmittedLocal) {
                         Spacer(modifier = Modifier.height(24.dp))
                         Card(
                             modifier = Modifier.fillMaxWidth(),
@@ -6236,6 +6293,7 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                                             booking.id, roundedAverage, reviewCommentText.trim(),
                                             skill = skillRating, hygiene = hygieneRating, products = authenticityRating,
                                         )
+                                        reviewSubmittedLocal = true   // §801 — hide the form now
                                     },
                                     enabled = reviewCommentText.trim().isNotEmpty(),
                                     colors = ButtonDefaults.buttonColors(containerColor = VedaDropRose),
@@ -6257,6 +6315,17 @@ fun BookingDetailScreen(viewModel: VedaDropViewModel, bookingId: String) {
                                 }
                                 Text(booking.reviewComment, fontSize = 13.sp, color = Color.Gray)
                             }
+                        }
+                    } else if (!isPartnerView && booking.status == "completed" &&
+                        (booking.customerReviewed || reviewSubmittedLocal)) {
+                        // §801 — reviewed, but the rating data isn't in this payload
+                        // (flag-only backend response / optimistic local submit): a
+                        // small confirmation line instead of the form.
+                        Spacer(modifier = Modifier.height(16.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Default.Star, contentDescription = null, tint = VedaDropGold, modifier = Modifier.size(16.dp))
+                            Spacer(modifier = Modifier.width(6.dp))
+                            Text("You rated this visit", fontSize = 13.sp, color = Color.Gray, fontWeight = FontWeight.Medium)
                         }
                     }
                     
